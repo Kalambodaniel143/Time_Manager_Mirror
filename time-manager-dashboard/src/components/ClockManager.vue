@@ -185,16 +185,18 @@ export default {
 
         if (!this.isCurrentRequest(version, userId)) return
 
-        // Le serveur a accepté le pointage : on prévient le parent et on relit la liste.
+        // Une sortie crée aussi sa période côté serveur. Le parent recharge les totaux.
         this.$emit('changed')
         await this.refresh()
-      } catch {
+      } catch (error) {
         if (!this.isCurrentRequest(version, userId)) return
 
         // Une coupure peut masquer un enregistrement réussi. Il faut relire l'état
         // avant de réessayer, pour éviter d'envoyer deux fois le même pointage.
         this.ready = false
-        this.error = 'Pointage non confirmé. Rafraîchis avant de réessayer.'
+        this.error = error.status === 422
+          ? `${error.message}. Rafraîchis avant de réessayer.`
+          : 'Pointage non confirmé. Rafraîchis avant de réessayer.'
       } finally {
         // La tentative d'enregistrement est terminée, même en cas d'erreur.
         this.saving = false
