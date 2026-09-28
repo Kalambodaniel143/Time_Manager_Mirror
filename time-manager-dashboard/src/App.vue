@@ -86,7 +86,7 @@
           </section>
 
           <div class="grid">
-            <ClockManager :user-id="userId" @changed="loadStats" />
+            <ClockManager :user-id="userId" @changed="onPeriodsChanged" />
             <ChartManager :user-id="userId" />
           </div>
 
@@ -182,12 +182,14 @@ export default {
     },
 
     routeListeners() {
+      if (this.$route.name === 'clock') return { onChanged: this.onPeriodsChanged }
+
       if (this.$route.name === 'workingTimes') return { onChanged: this.loadStats }
 
       if (OVERLAY_ROUTES.includes(this.$route.name)) {
         return {
-          onSaved: this.onRoutedChange,
-          onDeleted: this.onRoutedChange,
+          onSaved: this.onPeriodsChanged,
+          onDeleted: this.onPeriodsChanged,
           onClose: this.closeOverlay,
         }
       }
@@ -266,7 +268,7 @@ export default {
         },
         {
           label: 'Plus longue journée',
-          value: longest ? formatDuration(durationInHours(longest.start, longest.end)) : '0h00',
+          value: formatDuration(longest ? durationInHours(longest.start, longest.end) : 0),
           hint: longest ? `le ${formatLongDate(longest.start)}` : '—',
         },
         {
@@ -353,9 +355,11 @@ export default {
       this.currentUser = user
     },
 
-    async onRoutedChange() {
+    async onPeriodsChanged() {
+      // Une sortie crée sa période côté serveur : relire les totaux et la liste.
+      // La liste garde ses filtres actuels.
       await this.loadStats()
-      if (this.$refs.list) this.$refs.list.getWorkingTimes()
+      if (this.$refs.list) await this.$refs.list.getWorkingTimes()
     },
 
     closeOverlay() {
@@ -551,7 +555,7 @@ export default {
 }
 
 .kpi-value {
-  font-size: 32px;
+  font-size: 26px;
   line-height: 1.15;
   letter-spacing: -0.02em;
 }
@@ -682,7 +686,7 @@ export default {
   }
 
   .kpi-value {
-    font-size: 26px;
+    font-size: 22px;
   }
 
   .footer {
