@@ -406,7 +406,7 @@ export default {
 .scale,
 .row {
   display: grid;
-  grid-template-columns: 76px minmax(0, 1fr) 118px 62px 20px;
+  grid-template-columns: 76px minmax(0, 1fr) 170px 125px 20px;
   align-items: center;
   gap: 16px;
 }
@@ -566,6 +566,21 @@ export default {
   .input-compact {
     width: 100%;
     min-width: 0;
+  }
+}
+@media (max-width: 560px) {
+  .row {
+    grid-template-columns: 64px minmax(0, 1fr);
+    gap: 4px 12px;
+  }
+
+  .row-day {
+    grid-row: span 2;
+  }
+
+  .row-duration {
+    grid-column: 2;
+    text-align: left;
   }
 }
 </style>
