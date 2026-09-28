@@ -2,10 +2,11 @@ import Config
 
 # Configure your database
 config :time_manager, TimeManager.Repo,
-  username: System.get_env("DB_USER", "postgres"),
-  password: System.get_env("DB_PASSWORD", "postgres"),
-  hostname: "localhost",
-  database: "time_manager_dev",
+  username: System.get_env("PGUSER", "postgres"),
+  password: System.get_env("PGPASSWORD", "postgres"),
+  hostname: System.get_env("PGHOST", "localhost"),
+  database: System.get_env("PGDATABASE", "time_manager_dev"),
+  port: String.to_integer(System.get_env("PGPORT", "5432")),
   stacktrace: true,
   show_sensitive_data_on_connection_error: true,
   pool_size: 10
@@ -13,9 +14,9 @@ config :time_manager, TimeManager.Repo,
 # For development, we disable any cache and enable
 # debugging and code reloading.
 config :time_manager, TimeManagerWeb.Endpoint,
-  # Binding to loopback ipv4 address prevents access from other machines.
-  # Change to `ip: {0, 0, 0, 0}` to allow access from other machines.
-  http: [ip: {127, 0, 0, 1}],
+  # Bound to all interfaces so the server is reachable from outside a
+  # Docker container (and from other machines on the network).
+  http: [ip: {0, 0, 0, 0}, port: String.to_integer(System.get_env("PORT", "4000"))],
   check_origin: false,
   code_reloader: true,
   debug_errors: true,

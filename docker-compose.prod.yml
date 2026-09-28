@@ -24,6 +24,7 @@ services:
     env_file: ./.env
     environment:
       PGHOST: db
+      PGPORT: "5432"
     volumes:
       - ./.env:/app/.env:ro
     ports:
