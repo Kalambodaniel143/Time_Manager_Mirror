@@ -30,6 +30,8 @@ defmodule TimeManagerWeb.ClockController do
 
   operation(:create,
     summary: "Record a clock-in or clock-out for a user",
+    description:
+      "A departure closes the last arrival and creates its working period atomically. Repeated statuses and invalid dates are rejected.",
     parameters: [
       userID: [in: :path, type: :integer, description: "User ID", example: 1]
     ],
