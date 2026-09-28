@@ -1,3 +1,5 @@
+import { formatClockDate } from './clockDate'
+
 const API_PATTERN = /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?/
 
 function pad(value) {
@@ -57,18 +59,24 @@ export function nowFormatted() {
 }
 
 export function durationInHours(start, end) {
-  const from = parseDateTime(start)
-  const to = parseDateTime(end)
-  if (!from || !to) return 0
-
-  return (to.getTime() - from.getTime()) / 3600000
+  // Les dates de l'API sont en UTC : un changement d'heure local ne doit
+  // pas ajouter ou enlever une heure au total travaillé.
+  try {
+    const from = Date.parse(`${formatClockDate(start).replace(' ', 'T')}Z`)
+    const to = Date.parse(`${formatClockDate(end).replace(' ', 'T')}Z`)
+    return (to - from) / 3600000
+  } catch {
+    return 0
+  }
 }
 
 export function formatDuration(hours) {
-  if (!hours || hours <= 0) return '0h00'
-
-  const totalMinutes = Math.round(hours * 60)
-  return `${Math.floor(totalMinutes / 60)}h${pad(totalMinutes % 60)}`
+  // Arrondir à la seconde pour garder les pointages courts visibles.
+  const totalSeconds = Number.isFinite(hours) && hours > 0 ? Math.round(hours * 3600) : 0
+  const wholeHours = Math.floor(totalSeconds / 3600)
+  const minutes = Math.floor((totalSeconds % 3600) / 60)
+  const seconds = totalSeconds % 60
+  return `${wholeHours}h ${pad(minutes)}m ${pad(seconds)}s`
 }
 
 export function formatDayLabel(value) {
@@ -82,15 +90,11 @@ export function formatTimeLabel(value) {
   const date = parseDateTime(value)
   if (!date) return ''
 
-  return `${pad(date.getHours())}:${pad(date.getMinutes())}`
+  return `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`
 }
 
 export function formatHumanTime(value) {
-  const date = parseDateTime(value)
-  if (!date) return ''
-
-  const minutes = date.getMinutes()
-  return minutes ? `${date.getHours()}h${pad(minutes)}` : `${date.getHours()}h`
+  return formatTimeLabel(value)
 }
 
 export function formatLongDate(value) {
@@ -126,16 +130,16 @@ export function toTimeInput(value) {
   const date = parseDateTime(value)
   if (!date) return ''
 
-  return `${pad(date.getHours())}:${pad(date.getMinutes())}`
+  return `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`
 }
 
 export function combineDateTime(day, time, dayOffset = 0) {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(day || '') || !/^\d{2}:\d{2}/.test(time || '')) return ''
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day || '') || !/^\d{2}:\d{2}(?::\d{2})?$/.test(time || '')) return ''
 
   const [year, month, date] = day.split('-').map(Number)
-  const [hours, minutes] = time.split(':').map(Number)
+  const [hours, minutes, seconds = 0] = time.split(':').map(Number)
 
-  return formatDateTime(new Date(year, month - 1, date + dayOffset, hours, minutes, 0))
+  return formatDateTime(new Date(year, month - 1, date + dayOffset, hours, minutes, seconds))
 }
 
 export function todayInput() {
