@@ -1,0 +1,36 @@
+language: minimal
+
+services:
+  - docker
+
+# Set these as encrypted environment variables in the Travis CI repo settings
+# (never commit real values):
+#   DOCKER_USERNAME    Docker Hub username
+#   DOCKER_PASSWORD    Docker Hub access token
+#   SSH_HOST           deploy server address
+#   SSH_USER           deploy server user
+#   SSH_PRIVATE_KEY    base64 of a private key authorized on the server
+#                       (generate with: base64 -w0 ~/.ssh/id_deploy)
+
+jobs:
+  include:
+    - stage: "Build & Push Image"
+      script:
+        - echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin
+        - docker build -t "$DOCKER_USERNAME/time-manager-backend:latest" ./time_manager
+        - docker build -t "$DOCKER_USERNAME/time-manager-frontend:latest" ./time-manager-dashboard
+        - docker push "$DOCKER_USERNAME/time-manager-backend:latest"
+        - docker push "$DOCKER_USERNAME/time-manager-frontend:latest"
+
+    - stage: Deploy
+      script:
+        - echo "$SSH_PRIVATE_KEY" | base64 -d > /tmp/deploy_key
+        - chmod 600 /tmp/deploy_key
+        - scp -i /tmp/deploy_key -o StrictHostKeyChecking=no docker-compose.prod.yml "$SSH_USER@$SSH_HOST:~/docker-compose.yml"
+        - scp -i /tmp/deploy_key -o StrictHostKeyChecking=no .env "$SSH_USER@$SSH_HOST:~/.env"
+        - |
+          ssh -i /tmp/deploy_key -o StrictHostKeyChecking=no "$SSH_USER@$SSH_HOST" '
+            echo "DOCKER_USERNAME='"$DOCKER_USERNAME"'" >> ~/.env &&
+            docker compose pull &&
+            docker compose up -d
+          '

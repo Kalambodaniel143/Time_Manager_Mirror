@@ -1,0 +1,41 @@
+version: "3.8"
+
+# Used on the deploy server: pulls pre-built images from the registry instead
+# of building from source (the server only needs this file + .env).
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${PGUSER}
+      POSTGRES_PASSWORD: ${PGPASSWORD}
+      POSTGRES_DB: ${PGDATABASE}
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    ports:
+      - "${PGPORT}:5432"
+
+  phoenix:
+    image: ${DOCKER_USERNAME}/time-manager-backend:latest
+    restart: unless-stopped
+    depends_on:
+      - db
+    env_file: ./.env
+    environment:
+      PGHOST: db
+    volumes:
+      - ./.env:/app/.env:ro
+    ports:
+      - "4000:4000"
+
+  dashboard:
+    image: ${DOCKER_USERNAME}/time-manager-frontend:latest
+    restart: unless-stopped
+    depends_on:
+      - phoenix
+    ports:
+      - "8080:80"
+
+volumes:
+  db_data:

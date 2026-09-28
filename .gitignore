@@ -1,0 +1,13 @@
+# Elixir / Phoenix (time_manager)
+time_manager/_build/
+time_manager/deps/
+time_manager/*.ez
+time_manager/erl_crash.dump
+time_manager/time_manager-*.tar
+
+# Node / Vite (time-manager-dashboard)
+time-manager-dashboard/node_modules/
+time-manager-dashboard/dist/
+
+# Env secrets (kept as .env.example for reference)
+*.env.local
