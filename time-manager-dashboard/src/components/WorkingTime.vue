@@ -50,6 +50,7 @@
                 class="input num"
                 :class="{ 'has-error': showErrors && errors.start }"
                 type="time"
+                step="1"
               />
             </div>
             <span class="time-arrow" aria-hidden="true">→</span>
@@ -61,6 +62,7 @@
                 class="input num"
                 :class="{ 'has-error': showErrors && errors.end }"
                 type="time"
+                step="1"
               />
             </div>
           </div>
@@ -135,10 +137,10 @@ import {
 import { notify } from '../utils/toast'
 
 const PRESETS = [
-  { label: 'Matinée', hint: '8h–12h', start: '08:00', end: '12:00' },
-  { label: 'Journée', hint: '9h–17h', start: '09:00', end: '17:00' },
-  { label: 'Après-midi', hint: '13h30–18h', start: '13:30', end: '18:00' },
-  { label: 'Longue journée', hint: '8h–19h', start: '08:00', end: '19:00' },
+  { label: 'Matinée', hint: '8h–12h', start: '08:00:00', end: '12:00:00' },
+  { label: 'Journée', hint: '9h–17h', start: '09:00:00', end: '17:00:00' },
+  { label: 'Après-midi', hint: '13h30–18h', start: '13:30:00', end: '18:00:00' },
+  { label: 'Longue journée', hint: '8h–19h', start: '08:00:00', end: '19:00:00' },
 ]
 
 export default {
@@ -267,7 +269,7 @@ export default {
         }
       } else {
         this.form = { id: null, start: '', end: '' }
-        this.fields = { day: todayInput(), startTime: '09:00', endTime: '17:00', nextDay: false }
+        this.fields = { day: todayInput(), startTime: '09:00:00', endTime: '17:00:00', nextDay: false }
       }
     },
 
@@ -393,9 +395,13 @@ export default {
 
 .time-row {
   display: grid;
-  grid-template-columns: 1fr auto 1fr;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   align-items: end;
   gap: 10px;
+}
+
+.time-row .input {
+  min-width: 0;
 }
 
 .time-arrow {
@@ -490,6 +496,7 @@ export default {
 
 .summary {
   display: flex;
+  flex-wrap: wrap;
   align-items: flex-end;
   justify-content: space-between;
   gap: 16px;
