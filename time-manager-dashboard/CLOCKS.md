@@ -10,6 +10,12 @@ pointages à l'ouverture et au changement d'utilisateur.
   `{ "clock": { "time": "YYYY-MM-DD hh:mm:ss", "status": true } }`.
   Le statut vaut `true` pour l'arrivée et `false` pour la sortie.
 - `startDateTime` vaut `null` hors période active ; `clockIn` est un booléen.
+- Un chronomètre `Temps écoulé : HH:mm:ss` apparaît pendant un service connu.
+  `currentTime` est actualisé chaque seconde par `startTimer()` ; `elapsedTime`
+  calcule sa différence avec `startDateTime` en UTC. Aucune requête API par seconde.
+  Après rechargement, l'arrivée enregistrée permet de retrouver la durée.
+  `stopTimer()` arrête la minuterie à la sortie, au changement d'utilisateur,
+  lors d'une lecture/écriture incertaine et lorsqu'on quitte le composant.
 - Les dates de pointage utilisent UTC, comme le champ Ecto `:utc_datetime`.
   Les réponses ISO de Phoenix sont normalisées par `utils/clockDate.js`.
 - Les heures affichent les secondes (`09:15:42`), et les durées aussi
@@ -41,8 +47,9 @@ Le projet réutilise son service HTTP basé sur fetch ; Axios n'est pas ajouté.
 ## Vérifications
 
 - `npm run build`
-- `npm run test:clocks` : 15 tests de logique du composant, de contrat HTTP,
-  d'erreurs, de requêtes concurrentes, de dates et du simulateur.
+- `npm run test:clocks` : 22 tests de logique du composant, de contrat HTTP,
+  d'erreurs, de requêtes concurrentes, de dates, du simulateur et du chronomètre.
+  L'horloge contrôlée vérifie les reprises, les arrêts et les retards de minuterie.
   Les appels HTTP de ces tests sont simulés, sans PostgreSQL.
 - Vérification réalisée dans le navigateur avec le backend Phoenix du projet,
   une base de test séparée et des utilisateurs en transaction : arrivée, sortie,
