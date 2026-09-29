@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { after, before, beforeEach, test } from 'node:test'
+import { after, afterEach, before, beforeEach, test } from 'node:test'
 import { createServer } from 'vite'
 
 let server
@@ -11,6 +11,7 @@ let formatClockDate
 let mockListClocks
 let mockCreateClock
 const originalFetch = globalThis.fetch
+const instances = []
 
 function response(data, status = 200) {
   return { ok: status < 400, status, json: async () => ({ data }) }
@@ -25,7 +26,10 @@ function deferred() {
 function component(userId = '1') {
   const vm = { ...ClockManager.data(), userId, events: [] }
   vm.$emit = (event) => vm.events.push(event)
-  Object.defineProperty(vm, 'loading', { get: () => ClockManager.computed.loading.call(vm) })
+  for (const [name, getter] of Object.entries(ClockManager.computed)) {
+    Object.defineProperty(vm, name, { get: () => getter.call(vm) })
+  }
+  instances.push(vm)
   for (const [name, method] of Object.entries(ClockManager.methods)) vm[name] = method.bind(vm)
   return vm
 }
@@ -42,6 +46,10 @@ before(async () => {
 
 beforeEach(() => {
   globalThis.fetch = async () => { throw new Error('Unexpected HTTP request') }
+})
+
+afterEach(() => {
+  for (const vm of instances.splice(0)) ClockManager.beforeUnmount.call(vm)
 })
 
 after(async () => {
@@ -255,4 +263,140 @@ test('server validation errors are displayed and block another clock until refre
   assert.match(vm.error, /must alternate/)
   assert.equal(vm.ready, false)
   assert.deepEqual(vm.events, [])
+})
+
+
+test('active timer restores the arrival, ticks locally, and catches up after a delayed tick', async (t) => {
+  const start = Date.parse('2026-09-29T09:00:00Z')
+  t.mock.timers.enable({ apis: ['Date', 'setInterval'], now: start + 310000 })
+  let reads = 0
+  globalThis.fetch = async () => {
+    reads += 1
+    return response([{ status: true, time: '2026-09-29T09:00:00Z' }])
+  }
+  const vm = component()
+  await vm.refresh()
+  assert.equal(vm.elapsedTime, '00:05:10')
+  t.mock.timers.tick(1000)
+  assert.equal(vm.elapsedTime, '00:05:11')
+  t.mock.timers.setTime(start + 3600000)
+  t.mock.timers.tick(1000)
+  assert.equal(vm.elapsedTime, '01:00:01')
+  assert.equal(reads, 1)
+})
+
+test('arrival starts the timer and successful departure stops and resets it', async (t) => {
+  t.mock.timers.enable({ apis: ['Date', 'setInterval'], now: Date.parse('2026-09-29T09:00:00Z') })
+  const entries = []
+  globalThis.fetch = async (_url, options) => {
+    if (options.method === 'POST') {
+      const { clock } = JSON.parse(options.body)
+      entries.push(clock)
+      return response(clock, 201)
+    }
+    return response(entries)
+  }
+  const vm = component()
+  await vm.refresh()
+  assert.equal(vm.timerId, null)
+  await vm.clock()
+  t.mock.timers.tick(2100)
+  assert.equal(vm.elapsedTime, '00:00:02')
+  await vm.clock()
+  assert.equal(vm.clockIn, false)
+  assert.equal(vm.startDateTime, null)
+  assert.equal(vm.elapsedTime, '00:00:00')
+  assert.equal(vm.timerId, null)
+  const stoppedAt = vm.currentTime
+  t.mock.timers.tick(5000)
+  assert.equal(vm.currentTime, stoppedAt)
+})
+
+test('refresh replaces the timer and switching user ignores a late active response', async (t) => {
+  t.mock.timers.enable({ apis: ['Date', 'setInterval'], now: Date.parse('2026-09-29T09:05:10Z') })
+  const arrival = [{ status: true, time: '2026-09-29T09:00:00Z' }]
+  globalThis.fetch = async () => response(arrival)
+  const vm = component()
+  await vm.refresh()
+  const oldId = vm.timerId
+  await vm.refresh()
+  assert.notEqual(vm.timerId, oldId)
+  assert.equal(vm.elapsedTime, '00:05:10')
+  const pending = deferred()
+  globalThis.fetch = () => pending.promise
+  const oldRefresh = vm.refresh()
+  assert.equal(vm.timerId, null)
+  assert.equal(vm.ready, false)
+  vm.userId = '2'
+  globalThis.fetch = async () => response([])
+  await vm.refresh()
+  pending.resolve(response(arrival))
+  await oldRefresh
+  assert.equal(vm.clockIn, false)
+  assert.equal(vm.elapsedTime, '00:00:00')
+  assert.equal(vm.timerId, null)
+  const stoppedAt = vm.currentTime
+  t.mock.timers.tick(5000)
+  assert.equal(vm.currentTime, stoppedAt)
+})
+
+test('a failed refresh stops the timer while the clock state is unknown', async (t) => {
+  t.mock.timers.enable({ apis: ['Date', 'setInterval'], now: Date.parse('2026-09-29T09:05:10Z') })
+  globalThis.fetch = async () => response([{ status: true, time: '2026-09-29T09:00:00Z' }])
+  const vm = component()
+  await vm.refresh()
+  globalThis.fetch = async () => { throw new Error('Network down') }
+  await vm.refresh()
+  assert.equal(vm.ready, false)
+  assert.equal(vm.elapsedTime, '00:00:00')
+  assert.equal(vm.timerId, null)
+  const stoppedAt = vm.currentTime
+  t.mock.timers.tick(5000)
+  assert.equal(vm.currentTime, stoppedAt)
+})
+
+test('a failed departure stops the timer until the state is confirmed again', async (t) => {
+  t.mock.timers.enable({ apis: ['Date', 'setInterval'], now: Date.parse('2026-09-29T09:05:10Z') })
+  globalThis.fetch = async (_url, options) => {
+    if (options.method === 'POST') throw new Error('Network down')
+    return response([{ status: true, time: '2026-09-29T09:00:00Z' }])
+  }
+  const vm = component()
+  await vm.refresh()
+  await vm.clock()
+  assert.equal(vm.ready, false)
+  assert.equal(vm.elapsedTime, '00:00:00')
+  assert.equal(vm.timerId, null)
+  await vm.refresh()
+  t.mock.timers.tick(1000)
+  assert.equal(vm.elapsedTime, '00:05:11')
+})
+
+test('unmount stops the interval so the abandoned component no longer updates', async (t) => {
+  t.mock.timers.enable({ apis: ['Date', 'setInterval'], now: Date.parse('2026-09-29T09:05:10Z') })
+  globalThis.fetch = async () => response([{ status: true, time: '2026-09-29T09:00:00Z' }])
+  const vm = component()
+  await vm.refresh()
+  ClockManager.beforeUnmount.call(vm)
+  assert.equal(vm.timerId, null)
+  const stoppedAt = vm.currentTime
+  t.mock.timers.tick(5000)
+  assert.equal(vm.currentTime, stoppedAt)
+})
+
+test('elapsed time pads each part, handles rollovers and keeps hours beyond one day', () => {
+  const vm = component()
+  vm.ready = true
+  vm.clockIn = true
+  vm.startDateTime = '2026-09-29 09:00:00'
+  const start = Date.parse('2026-09-29T09:00:00Z')
+  for (const [seconds, label] of [
+    [-1, '00:00:00'], [59, '00:00:59'], [60, '00:01:00'],
+    [3599, '00:59:59'], [3600, '01:00:00'], [90061, '25:01:01'],
+  ]) {
+    vm.currentTime = start + seconds * 1000
+    assert.equal(vm.elapsedTime, label)
+  }
+  vm.startDateTime = 'invalid'
+  assert.equal(vm.elapsedTime, '00:00:00')
 })
