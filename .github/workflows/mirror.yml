@@ -1,0 +1,38 @@
+name: Mirror
+
+on:
+  push:
+    branches: ['**']
+    tags: ['**']
+  delete:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mirror
+  cancel-in-progress: false
+
+jobs:
+  mirror:
+    # The workflow file is mirrored too: never run inside the mirror itself.
+    if: github.repository == 'Epitech2026-2027/I-DEV-700-INT-7-1-timemanager-18'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clone all branches and tags
+        run: git clone --bare "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" repo.git
+
+      - name: Push to mirror
+        env:
+          MIRROR_SSH_KEY: ${{ secrets.MIRROR_SSH_KEY }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$MIRROR_SSH_KEY" > ~/.ssh/mirror_key
+          chmod 600 ~/.ssh/mirror_key
+          ssh-keyscan -t ed25519 github.com >> ~/.ssh/known_hosts
+          export GIT_SSH_COMMAND="ssh -i ~/.ssh/mirror_key -o IdentitiesOnly=yes"
+          cd repo.git
+          # Branches and tags only: GitHub rejects pushes to refs/pull/*.
+          git push --prune git@github.com:Kalambodaniel143/Time_Manager_Mirror.git \
+            '+refs/heads/*:refs/heads/*' '+refs/tags/*:refs/tags/*'
