@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:demo": "VITE_USE_MOCK=true vite",
     "build": "vite build",
     "preview": "vite preview",
     "lint": "run-s \"lint:*\"",
