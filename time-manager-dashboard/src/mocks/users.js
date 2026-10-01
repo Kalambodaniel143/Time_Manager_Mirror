@@ -1,9 +1,12 @@
 const users = [
-  { id: 1, username: 'bruce.wayne', email: 'bruce.wayne@gotham.gov' },
-  { id: 2, username: 'selina.kyle', email: 'selina.kyle@gotham.gov' },
-  { id: 3, username: 'lucius.fox', email: 'lucius.fox@gotham.gov' },
-  { id: 4, username: 'barbara.gordon', email: 'barbara.gordon@gotham.gov' },
-  { id: 5, username: 'alfred.pennyworth', email: 'alfred.pennyworth@gotham.gov' },
+  { id: 1, username: 'marie.dubois', email: 'marie.dubois@gotham.gov' },
+  { id: 2, username: 'lucie.ferreira', email: 'lucie.ferreira@gotham.gov' },
+  { id: 3, username: 'albert.r', email: 'albert.r@gotham.gov' },
+  { id: 4, username: 'karim.benali', email: 'karim.benali@gotham.gov' },
+  { id: 5, username: 'sara.ortiz', email: 'sara.ortiz@gotham.gov' },
+  { id: 6, username: 'john.doe', email: 'john.doe@gotham.gov' },
+  { id: 7, username: 'hugo.lin', email: 'hugo.lin@gotham.gov' },
+  { id: 8, username: 'paula.ibanez', email: 'paula.ibanez@gotham.gov' },
 ]
 
 function copy(user) {

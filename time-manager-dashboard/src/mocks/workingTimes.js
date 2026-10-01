@@ -1,43 +1,58 @@
-import { formatDateTime } from '../utils/date'
+import { formatDateTime, startOfWeek } from '../utils/date'
 
-const SHIFTS = [
-  { startHour: 8, startMinute: 0, hours: 8.5 },
-  { startHour: 9, startMinute: 0, hours: 7.75 },
-  { startHour: 8, startMinute: 30, hours: 9 },
-  { startHour: 10, startMinute: 0, hours: 6.5 },
-  { startHour: 9, startMinute: 30, hours: 8 },
-]
+const WEEK_PATTERNS = {
+  1: [
+    [0, '05:00', 7],
+    [1, '22:00', 8],
+    [2, '22:00', 8],
+    [5, '02:10', 2, 'oncall'],
+    [6, '05:00', 7],
+  ],
+  4: [
+    [0, '22:00', 8],
+    [1, '22:00', 8],
+    [2, '22:00', 8],
+    [4, '08:00', 8],
+  ],
+  5: [0, 1, 2, 3, 4].map((day) => [day, '07:00', 7]),
+  6: [
+    [0, '09:00', 3],
+    [1, '22:00', 5],
+    [3, '23:00', 4],
+  ],
+  7: [0, 1, 2, 3, 4].map((day) => [day, '08:00', 8.5]),
+  8: [
+    ...[0, 1, 2, 3].map((day) => [day, '08:00', 7.25]),
+    [5, '22:00', 8, 'oncall'],
+  ],
+}
+
+const WEEKS_BACK = [1, 2]
 
 function buildEntries(userId) {
+  const pattern = WEEK_PATTERNS[userId] || []
+  const thisMonday = startOfWeek(new Date())
   const entries = []
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
+  let id = userId * 1000
 
-  let id = userId * 100
+  WEEKS_BACK.forEach((weeksBack) => {
+    pattern.forEach(([day, time, hours, kind]) => {
+      const [hh, mm] = time.split(':').map(Number)
+      const start = new Date(thisMonday)
+      start.setDate(start.getDate() - weeksBack * 7 + day)
+      start.setHours(hh, mm, 0, 0)
+      const end = new Date(start.getTime() + hours * 3600000)
 
-  for (let dayOffset = 20; dayOffset >= 0; dayOffset -= 1) {
-    const day = new Date(today)
-    day.setDate(day.getDate() - dayOffset)
-
-    const weekday = day.getDay()
-    if (weekday === 0 || weekday === 6) continue
-    if ((dayOffset + userId) % 7 === 3) continue
-
-    const shift = SHIFTS[(dayOffset + userId) % SHIFTS.length]
-
-    const start = new Date(day)
-    start.setHours(shift.startHour, shift.startMinute, 0, 0)
-
-    const end = new Date(start.getTime() + shift.hours * 3600000)
-
-    id += 1
-    entries.push({
-      id,
-      start: formatDateTime(start),
-      end: formatDateTime(end),
-      user_id: userId,
+      id += 1
+      entries.push({
+        id,
+        start: formatDateTime(start),
+        end: formatDateTime(end),
+        user_id: userId,
+        ...(kind ? { kind } : {}),
+      })
     })
-  }
+  })
 
   return entries
 }
@@ -65,7 +80,7 @@ export function mockGetWorkingTime(userId, id) {
 export function mockCreateWorkingTime(userId, attrs) {
   const entries = entriesFor(userId)
   const created = {
-    id: Math.max(0, ...entries.map((entry) => entry.id)) + 1,
+    id: Math.max(userId * 1000 + 500, ...entries.map((entry) => entry.id)) + 1,
     start: attrs.start,
     end: attrs.end,
     user_id: userId,
