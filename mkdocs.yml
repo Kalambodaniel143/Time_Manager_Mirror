@@ -1,0 +1,11 @@
+site_name: Time Manager
+site_description: Documentation du projet Time Manager
+
+nav:
+  - Accueil: index.md
+  - DevOps: DEVOPS.md
+
+markdown_extensions:
+  - admonition
+  - toc:
+      permalink: true
