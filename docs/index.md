@@ -283,7 +283,7 @@ Le Dockerfile du frontend, dans `time-manager-dashboard/`, n'est pas détaillé 
 
 ```bash
 #!/usr/bin/env bash
-# Executed on the deploy server by Travis (see .travis.yml, "Deploy" stage).
+# Executed on the deploy server by Travis (see .travis.yml, "*Oct 2, 2026 · @KALAMBO DANIEL*Deploy" stage).
 # Expects ~/docker-compose.yml and ~/.env to have been copied beforehand.
 set -e
 cd ~

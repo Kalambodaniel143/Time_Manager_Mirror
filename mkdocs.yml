@@ -4,6 +4,7 @@ site_description: Documentation du projet Time Manager
 nav:
   - Accueil: index.md
   - DevOps: DEVOPS.md
+  - API: API.md
 
 markdown_extensions:
   - admonition
