@@ -1,0 +1,30 @@
+language: minimal
+
+services:
+  - docker
+
+jobs:
+  include:
+    - stage: "Build & Push Image"
+      script:
+        - echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin
+        - docker build -t "$DOCKER_USERNAME/time-manager-backend:latest" ./time_manager
+        - docker build -t "$DOCKER_USERNAME/time-manager-frontend:latest" ./time-manager-dashboard
+        - docker push "$DOCKER_USERNAME/time-manager-backend:latest"
+        - docker push "$DOCKER_USERNAME/time-manager-frontend:latest"
+
+    - stage: "Deploy"
+      before_script:
+        - eval "$(ssh-agent -s)"
+        - echo "$SSH_KEY" | base64 --decode | tr -d '\r' | ssh-add -
+        - mkdir -p ~/.ssh
+        - chmod 700 ~/.ssh
+        - ssh-keyscan -H $SERVER_IP >> ~/.ssh/known_hosts
+
+      script:
+        - scp -v docker-compose.prod.yml $SERVER_USER@$SERVER_IP:~/docker-compose.yml
+        # Build the server .env from the Travis environment variables
+        - printf 'PGUSER=%s\nPGPASSWORD=%s\nPGDATABASE=%s\nPGPORT=%s\nDOCKER_USERNAME=%s\n' "$PGUSER" "$PGPASSWORD" "$PGDATABASE" "$PGPORT" "$DOCKER_USERNAME" > .env.deploy
+        - scp .env.deploy $SERVER_USER@$SERVER_IP:~/.env
+        - scp deploy.sh $SERVER_USER@$SERVER_IP:~/deploy.sh
+        - ssh $SERVER_USER@$SERVER_IP "bash ~/deploy.sh"
