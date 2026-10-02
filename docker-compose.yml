@@ -1,0 +1,37 @@
+version: "3.8"
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${PGUSER}
+      POSTGRES_PASSWORD: ${PGPASSWORD}
+      POSTGRES_DB: ${PGDATABASE}
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    ports:
+      - "${PGPORT}:5432"
+
+  phoenix:
+    build: ./time_manager
+    depends_on:
+      - db
+    env_file: ./.env
+    environment:
+      PGHOST: db
+      PGPORT: "5432"
+    volumes:
+      - ./.env:/app/.env:ro
+    ports:
+      - "4000:4000"
+
+  dashboard:
+    build: ./time-manager-dashboard
+    depends_on:
+      - phoenix
+    ports:
+      - "8080:80"
+
+volumes:
+  db_data:
