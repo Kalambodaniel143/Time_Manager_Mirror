@@ -13,3 +13,5 @@ time-manager-dashboard/dist/
 *.env.local
 .env
 .env.example
+# MkDocs build output
+site/
