@@ -13,6 +13,7 @@ concurrency:
 
 jobs:
   mirror:
+    if: github.repository == 'MscProgramm/Theme_5_authentification_security'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout full history
@@ -25,9 +26,10 @@ jobs:
           SSH_PRIVATE_KEY: ${{ secrets.MIRROR_SSH_PRIVATE_KEY }}
         run: |
           mkdir -p ~/.ssh
-          echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_mirror
+          printf '%s\n' "$SSH_PRIVATE_KEY" | tr -d '\r' > ~/.ssh/id_mirror
           chmod 600 ~/.ssh/id_mirror
-          ssh-keyscan github.com >> ~/.ssh/known_hosts
+          ssh-keygen -y -f ~/.ssh/id_mirror > /dev/null || { echo "::error::MIRROR_SSH_PRIVATE_KEY is not a valid private key"; exit 1; }
+          ssh-keyscan github.com >> ~/.ssh/known_hosts 2>/dev/null
 
       - name: Push mirror
         env:
