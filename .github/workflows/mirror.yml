@@ -1,0 +1,40 @@
+name: Mirror repository
+
+on:
+  push:
+    branches: ['**']
+    tags: ['**']
+  delete:
+  workflow_dispatch:
+
+concurrency:
+  group: mirror
+  cancel-in-progress: false
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout full history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup SSH key
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.MIRROR_SSH_PRIVATE_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_mirror
+          chmod 600 ~/.ssh/id_mirror
+          ssh-keyscan github.com >> ~/.ssh/known_hosts
+
+      - name: Push mirror
+        env:
+          MIRROR_URL: ${{ vars.MIRROR_REPO_URL }}
+          GIT_SSH_COMMAND: ssh -i ~/.ssh/id_mirror -o IdentitiesOnly=yes
+        run: |
+          git remote add mirror "$MIRROR_URL"
+          git fetch --prune origin '+refs/heads/*:refs/remotes/origin/*' '+refs/tags/*:refs/tags/*'
+          git remote set-head origin --delete || true
+          git push --force --prune mirror '+refs/remotes/origin/*:refs/heads/*' '+refs/tags/*:refs/tags/*'
