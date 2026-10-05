@@ -14,11 +14,12 @@
         <template v-for="day in rows" :key="day.key">
           <tr v-if="day.entries.length === 0">
             <th scope="row">{{ day.label }}</th>
+            <td class="num">{{ day.key === pendingDay ? clock(missingDeparture.arrival.time) : '—' }}</td>
             <td>—</td>
-            <td>—</td>
-            <td class="muted">Repos</td>
+            <td class="muted">{{ day.key === pendingDay ? 'À compléter' : 'Repos' }}</td>
             <td>
-              <button v-if="day.editable" class="btn btn-quiet btn-sm" type="button" @click="$emit('create', day.key)">Ajouter</button>
+              <span v-if="day.key === pendingDay">Départ non pointé</span>
+              <button v-else-if="day.editable" class="btn btn-quiet btn-sm" type="button" @click="$emit('create', day.key)">Ajouter</button>
             </td>
           </tr>
           <tr v-for="(entry, index) in day.entries" :key="entry.id || `${day.key}-${index}`">
@@ -34,11 +35,7 @@
             </td>
           </tr>
         </template>
-        <tr>
-          <td colspan="5" class="marker-cell">
-            <JonasMarker title="Ligne « Départ non pointé »" inline>Heure de départ à saisir + « Confirmer », depuis les pointages.</JonasMarker>
-          </td>
-        </tr>
+        <MissingDeparture v-if="userId" :user-id="userId" :now="now" :week-start="monday" table-row @detected="missingDeparture = $event" @completed="$emit('completed')" @refreshed="$emit('completed')" />
       </tbody>
     </table>
   </div>
@@ -47,26 +44,35 @@
 <script>
 import AppIcon from '../ui/AppIcon.vue'
 import HourTag from '../ui/HourTag.vue'
-import JonasMarker from '../ui/JonasMarker.vue'
+import MissingDeparture from '../MissingDeparture.vue'
+import { formatClockDate } from '../../utils/clockDate'
 import { parseDateTime, toDateInput } from '../../utils/date'
-import { addDays, classifyEntry, entriesByDay, entryHours, formatClock, weekdayShort } from '../../utils/hours'
+import { addDays, classifyEntry, entriesByDay, entryHours, weekdayShort } from '../../utils/hours'
 
 const EDIT_WINDOW_MS = 7 * 86400000
 
 export default {
   name: 'WeekTable',
 
-  components: { AppIcon, HourTag, JonasMarker },
+  components: { AppIcon, HourTag, MissingDeparture },
 
   props: {
     monday: { type: Date, required: true },
     entries: { type: Array, required: true },
     now: { type: Date, required: true },
+    userId: { type: [Number, String], default: null },
   },
 
-  emits: ['edit', 'create'],
+  emits: ['edit', 'create', 'completed'],
+
+  data() {
+    return { missingDeparture: null }
+  },
 
   computed: {
+    pendingDay() {
+      return this.missingDeparture ? formatClockDate(this.missingDeparture.arrival.time).slice(0, 10) : null
+    },
     rows() {
       return entriesByDay(this.entries, this.monday).map((entries, index) => {
         const date = addDays(this.monday, index)
@@ -94,7 +100,10 @@ export default {
     },
 
     clock(value) {
-      return formatClock(value)
+      const date = parseDateTime(value)
+      if (!date) return ''
+      return [date.getHours(), date.getMinutes(), date.getSeconds()]
+        .map((part) => String(part).padStart(2, '0')).join(':')
     },
   },
 }
@@ -121,7 +130,4 @@ export default {
   gap: 6px;
 }
 
-.marker-cell {
-  padding-top: 14px;
-}
 </style>

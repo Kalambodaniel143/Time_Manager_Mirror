@@ -9,16 +9,17 @@
 
     <div class="layout">
       <div class="column">
-        <section class="clock card">
-          <JonasMarker title="Grand rond de pointage">
-            « Pointer mon arrivée / mon départ », heure d’arrivée pointée et durée en cours, bouton « Prendre une pause ».
-            <RouterLink v-if="userId" class="link" :to="{ name: 'clock', params: { userid: userId } }">Pointage actuel</RouterLink>
-          </JonasMarker>
+        <div class="clock-panel">
+          <!-- Attendre l'utilisateur avant de charger ses pointages. -->
+          <ClockManager v-if="userId" ref="clockManager" :user-id="userId" @changed="onClockChanged" />
+          <p v-else class="card clock-waiting" role="status">
+            Le pointage sera disponible une fois votre profil chargé.
+          </p>
           <p class="clock-privacy">
             <AppIcon name="shield" />
-            Seules vos heures d’arrivée et de départ sont enregistrées.
+            Seules vos heures d’arrivée, de pause, de reprise et de départ sont enregistrées.
           </p>
-        </section>
+        </div>
 
         <InfoNote title="Vos heures vous appartiennent">
           Vous voyez tout ce que voit votre manager, et vous pouvez corriger une journée pendant 7 jours.
@@ -26,9 +27,7 @@
       </div>
 
       <div class="column">
-        <JonasMarker title="Alerte « Votre départ de vendredi n’est pas pointé »" inline>
-          Bandeau jaune + bouton « Compléter », calculé depuis les pointages.
-        </JonasMarker>
+        <MissingDeparture v-if="userId" ref="missingDeparture" :user-id="userId" :now="now" @completed="onDepartureCompleted" @refreshed="onDepartureCompleted" />
 
         <LastWeekCard :title="`Semaine dernière · ${lastWeekRange}`" :buckets="buckets" :target="target" :loading="loading" />
 
@@ -42,10 +41,10 @@
 </template>
 
 <script>
-import { RouterLink } from 'vue-router'
+import ClockManager from '../components/ClockManager.vue'
 import AppIcon from '../components/ui/AppIcon.vue'
 import InfoNote from '../components/ui/InfoNote.vue'
-import JonasMarker from '../components/ui/JonasMarker.vue'
+import MissingDeparture from '../components/MissingDeparture.vue'
 import PageHeader from '../components/ui/PageHeader.vue'
 import LastWeekCard from '../components/employee/LastWeekCard.vue'
 import NextShifts from '../components/employee/NextShifts.vue'
@@ -58,7 +57,7 @@ import { greeting } from '../utils/people'
 export default {
   name: 'EmployeeToday',
 
-  components: { AppIcon, InfoNote, JonasMarker, LastWeekCard, NextShifts, PageHeader, RouterLink, TransparencyPanel },
+  components: { AppIcon, ClockManager, InfoNote, MissingDeparture, LastWeekCard, NextShifts, PageHeader, TransparencyPanel },
 
   props: {
     persona: { type: Object, required: true },
@@ -68,7 +67,19 @@ export default {
     now: { type: Date, required: true },
   },
 
-  emits: ['tour'],
+  // Relayer le pointage à App.vue pour recharger les heures enregistrées.
+  emits: ['tour', 'changed'],
+
+  methods: {
+    onClockChanged() {
+      this.$refs.missingDeparture?.refresh()
+      this.$emit('changed')
+    },
+    onDepartureCompleted() {
+      this.$refs.clockManager?.refresh()
+      this.$emit('changed')
+    },
+  },
 
   computed: {
     dateLabel() {
@@ -126,10 +137,13 @@ export default {
   align-items: start;
 }
 
-.clock {
+.clock-panel {
   display: flex;
   flex-direction: column;
   gap: 18px;
+}
+
+.clock-waiting {
   padding: 24px;
 }
 

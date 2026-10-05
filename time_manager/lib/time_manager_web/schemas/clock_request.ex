@@ -4,7 +4,7 @@ defmodule TimeManagerWeb.Schemas.ClockRequest do
 
   OpenApiSpex.schema(%{
     title: "ClockRequest",
-    description: "Request body to record a clock-in or clock-out for a user",
+    description: "Request body to record an arrival, departure, pause or resume",
     type: :object,
     properties: %{
       clock: %Schema{
@@ -18,8 +18,15 @@ defmodule TimeManagerWeb.Schemas.ClockRequest do
           },
           status: %Schema{
             type: :boolean,
-            description: "true = clock-in, false = clock-out",
+            description: "true = arrival/resume, false = pause/departure",
             example: true
+          },
+          kind: %Schema{
+            type: :string,
+            enum: ["arrival", "departure", "pause", "resume"],
+            description:
+              "Optional. Without kind, status true means arrival and false means departure.",
+            example: "arrival"
           }
         },
         required: [:time, :status]

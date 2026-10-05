@@ -105,4 +105,97 @@ defmodule TimeManager.ClocksTest do
     assert errors_on(changeset).time != []
     assert Clocks.list_clocks(user) == []
   end
+
+  test "a half-hour pause leaves two and a half hours of work between 9 and 12", %{user: user} do
+    for {time, status, kind} <- [
+          {~U[2026-09-28 09:00:00Z], true, "arrival"},
+          {~U[2026-09-28 10:00:00Z], false, "pause"},
+          {~U[2026-09-28 10:30:00Z], true, "resume"},
+          {~U[2026-09-28 12:00:00Z], false, "departure"}
+        ] do
+      assert {:ok, _} = Clocks.create_clock(user, %{time: time, status: status, kind: kind})
+    end
+
+    assert {:ok, [first, second]} = WorkingTimes.list_working_times(user.id)
+    assert first.end == ~U[2026-09-28 10:00:00Z]
+    assert second.start == ~U[2026-09-28 10:30:00Z]
+    assert DateTime.diff(first.end, first.start) + DateTime.diff(second.end, second.start) == 9000
+
+    assert Enum.map(Clocks.list_clocks(user), & &1.kind) == [
+             :arrival,
+             :pause,
+             :resume,
+             :departure
+           ]
+  end
+
+  test "leaving during a pause adds no period and closes the service", %{user: user} do
+    assert {:ok, arrival} = Clocks.create_clock(user, %{time: @arrival, status: true})
+    assert arrival.kind == :arrival
+
+    assert {:ok, _} =
+             Clocks.create_clock(user, %{
+               time: DateTime.add(@arrival, 3600),
+               status: false,
+               kind: :pause
+             })
+
+    assert {:ok, departure} = Clocks.create_clock(user, %{time: @departure, status: false})
+    assert departure.kind == :departure
+    assert {:ok, [period]} = WorkingTimes.list_working_times(user.id)
+    assert DateTime.diff(period.end, period.start) == 3600
+
+    assert {:error, _} =
+             Clocks.create_clock(user, %{time: @departure, status: true, kind: :resume})
+
+    assert {:ok, _} = Clocks.create_clock(user, %{time: @departure, status: true})
+  end
+
+  test "pause and resume must follow the service state", %{user: user} do
+    assert {:error, _} = Clocks.create_clock(user, %{time: @arrival, status: false, kind: :pause})
+    assert {:error, _} = Clocks.create_clock(user, %{time: @arrival, status: true, kind: :resume})
+    assert {:ok, _} = Clocks.create_clock(user, %{time: @arrival, status: true})
+
+    assert {:error, _} =
+             Clocks.create_clock(user, %{time: @departure, status: true, kind: :resume})
+
+    pause_time = DateTime.add(@arrival, 3600)
+    assert {:ok, _} = Clocks.create_clock(user, %{time: pause_time, status: false, kind: :pause})
+
+    assert {:error, _} =
+             Clocks.create_clock(user, %{time: pause_time, status: false, kind: :pause})
+
+    assert {:error, _} =
+             Clocks.create_clock(user, %{time: pause_time, status: true, kind: :arrival})
+
+    assert {:error, changeset} =
+             Clocks.create_clock(user, %{time: @arrival, status: true, kind: :resume})
+
+    assert errors_on(changeset).time != []
+    assert {:ok, _} = Clocks.create_clock(user, %{time: pause_time, status: true, kind: :resume})
+
+    assert {:error, _} =
+             Clocks.create_clock(user, %{time: pause_time, status: true, kind: :resume})
+
+    assert length(Clocks.list_clocks(user)) == 3
+  end
+
+  test "an invalid pause rolls back without closing the work segment", %{user: user} do
+    assert {:ok, _} = Clocks.create_clock(user, %{time: @arrival, status: true})
+    assert {:error, _} = Clocks.create_clock(user, %{time: @arrival, status: false, kind: :pause})
+    assert [%Clock{kind: :arrival}] = Clocks.list_clocks(user)
+    assert {:ok, []} = WorkingTimes.list_working_times(user.id)
+  end
+
+  test "unknown kinds and inconsistent statuses are rejected", %{user: user} do
+    for attrs <- [
+          %{time: @arrival, status: true, kind: "unknown"},
+          %{time: @arrival, status: false, kind: "arrival"},
+          %{time: @arrival, status: true, kind: "pause"}
+        ] do
+      assert {:error, _} = Clocks.create_clock(user, attrs)
+    end
+
+    assert Clocks.list_clocks(user) == []
+  end
 end
