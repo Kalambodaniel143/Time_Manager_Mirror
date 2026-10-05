@@ -4,7 +4,7 @@ defmodule TimeManagerWeb.Schemas.Clock do
 
   OpenApiSpex.schema(%{
     title: "Clock",
-    description: "A clock-in or clock-out event for a user",
+    description: "An arrival, departure, pause or resume event for a user",
     type: :object,
     properties: %{
       id: %Schema{type: :integer, description: "Clock ID", example: 1},
@@ -16,11 +16,17 @@ defmodule TimeManagerWeb.Schemas.Clock do
       },
       status: %Schema{
         type: :boolean,
-        description: "true = clock-in (arrival), false = clock-out (departure)",
+        description: "true = working (arrival/resume), false = not working (pause/departure)",
         example: true
+      },
+      kind: %Schema{
+        type: :string,
+        enum: ["arrival", "departure", "pause", "resume"],
+        description: "The action recorded by this event",
+        example: "arrival"
       },
       user_id: %Schema{type: :integer, description: "Owning user's ID", example: 1}
     },
-    required: [:id, :time, :status, :user_id]
+    required: [:id, :time, :status, :kind, :user_id]
   })
 end

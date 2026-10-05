@@ -92,7 +92,7 @@ export default {
         return { persona: this.persona, userId: this.userId, workingTimes: this.workingTimes, loading: this.loadingStats, now: this.now }
       }
       if (name === 'workingTimes') return { week: this.week, username: this.persona.username }
-      if (name === 'planning' || name === 'payroll') return { now: this.now }
+      if (name === 'planning' || name === 'payroll' || name === 'team') return { now: this.now }
 
       return {}
     },
@@ -110,7 +110,8 @@ export default {
         }
       }
 
-      if (this.$route.name === 'overview' || this.$route.name === 'planning') return { onTour: this.openTour }
+      if (this.$route.name === 'overview') return { onChanged: this.onPeriodsChanged, onTour: this.openTour }
+      if (this.$route.name === 'planning') return { onTour: this.openTour }
 
       return {}
     },
