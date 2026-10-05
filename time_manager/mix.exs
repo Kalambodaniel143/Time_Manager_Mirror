@@ -52,7 +52,9 @@ defmodule TimeManager.MixProject do
       {:jason, "~> 1.2"},
       {:dns_cluster, "~> 0.2.0"},
       {:bandit, "~> 1.5"},
-      {:open_api_spex, "~> 3.21"}
+      {:open_api_spex, "~> 3.21"},
+      {:joken, "~> 2.6"},
+      {:bcrypt_elixir, "~> 3.3"}
     ]
   end
 

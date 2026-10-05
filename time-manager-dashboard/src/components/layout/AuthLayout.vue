@@ -21,19 +21,8 @@
     </section>
 
     <section class="panel">
-      <form class="form" novalidate @submit.prevent="$emit('login', 'employee')">
-        <h2 class="page-title">Connexion</h2>
-        <p class="lede">Première connexion ? Votre identifiant agent est inscrit au dos de votre badge.</p>
-
-        <label class="field">
-          <span class="field-label">Identifiant agent</span>
-          <input v-model.trim="agent" class="input" placeholder="Ex. 40-1187" autocomplete="username" />
-        </label>
-
-        <label class="field">
-          <span class="field-label">Mot de passe</span>
-          <input v-model="password" class="input" type="password" autocomplete="current-password" />
-        </label>
+      <div class="form">
+        <slot />
 
         <fieldset class="themes">
           <legend class="field-label">Choisissez votre affichage</legend>
@@ -45,7 +34,7 @@
               :class="{ 'is-active': option.value === theme }"
               type="button"
               :aria-pressed="option.value === theme"
-              @click="$emit('update:theme', option.value)"
+              @click="setTheme(option.value)"
             >
               <span class="swatch" aria-hidden="true">
                 <span v-for="color in option.colors" :key="color" :style="{ background: color }"></span>
@@ -57,32 +46,19 @@
           <p class="field-hint">Modifiable à tout moment, depuis n’importe quel écran.</p>
         </fieldset>
 
-        <div>
-          <button class="btn btn-primary btn-login" type="submit">
-            <AppIcon name="login" />
-            Se connecter
-          </button>
-        </div>
-
         <InfoNote icon="phone" title="Pas d’ordinateur ?">
           Pointez depuis votre téléphone, avec votre badge à l’entrepôt, ou auprès de votre chef d’équipe. Formation sur
           place : mardi et jeudi, 7 h – 8 h.
         </InfoNote>
-
-        <p class="demo">
-          Démo : entrer comme
-          <button class="link" type="button" @click="$emit('login', 'employee')">Employée</button>
-          <button class="link" type="button" @click="$emit('login', 'manager')">Manager</button>
-          <button class="link" type="button" @click="$emit('login', 'admin')">Administrateur</button>
-        </p>
-      </form>
+      </div>
     </section>
   </div>
 </template>
 
 <script>
-import AppIcon from '../components/ui/AppIcon.vue'
-import InfoNote from '../components/ui/InfoNote.vue'
+import AppIcon from '../ui/AppIcon.vue'
+import InfoNote from '../ui/InfoNote.vue'
+import { applyTheme, readTheme, writeTheme } from '../../utils/session'
 
 const POINTS = [
   { icon: 'login', text: 'Un geste pour pointer, sur ordinateur, téléphone ou badge.' },
@@ -98,25 +74,28 @@ const THEMES = [
 
 const PIXELS = 'llllddllllllolllddllo'.split('').map((code) => ({ l: 'light', d: 'dark', o: 'orange' })[code])
 
+// Shared layout of the public pages (login, registration): presentation on the
+// left, the page's form in the default slot, then the display settings.
 export default {
-  name: 'LoginScreen',
+  name: 'AuthLayout',
 
   components: { AppIcon, InfoNote },
 
-  props: {
-    theme: { type: String, required: true },
-  },
-
-  emits: ['login', 'update:theme'],
-
   data() {
     return {
-      agent: '',
-      password: '',
+      theme: readTheme(),
       points: POINTS,
       themes: THEMES,
       pixels: PIXELS,
     }
+  },
+
+  methods: {
+    setTheme(theme) {
+      this.theme = theme
+      applyTheme(theme)
+      writeTheme(theme)
+    },
   },
 }
 </script>
@@ -247,19 +226,37 @@ export default {
   margin-left: clamp(0px, 10%, 146px);
 }
 
-.lede {
+:slotted(.lede) {
   margin-top: -2px;
   font-size: 16px;
   line-height: 1.6;
   color: var(--text-muted);
 }
 
-.form .field-label {
+:slotted(.auth-form) {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+:slotted(.btn-login) {
+  padding: 16px 36px;
+  font-size: 17px;
+}
+
+:slotted(.switch) {
+  padding-top: 18px;
+  border-top: 1px solid var(--border);
+  font-size: 15px;
+  color: var(--text-muted);
+}
+
+.form :deep(.field-label) {
   font-size: 16px;
   font-weight: 700;
 }
 
-.form .input {
+.form :deep(.input) {
   padding: 13px 16px;
   font-size: 16px;
 }
@@ -312,22 +309,6 @@ export default {
 .theme-text {
   font-size: 14px;
   line-height: 1.5;
-  color: var(--text-muted);
-}
-
-.btn-login {
-  padding: 16px 36px;
-  font-size: 17px;
-}
-
-.demo {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 16px;
-  padding-top: 18px;
-  border-top: 1px solid var(--border);
-  font-size: 14.5px;
   color: var(--text-muted);
 }
 

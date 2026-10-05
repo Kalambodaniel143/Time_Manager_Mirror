@@ -67,7 +67,7 @@ Rien ne circule entre les deux VM Travis : les images passent par Docker Hub, et
 | Fichier envoyé | Nom sur le serveur | Contenu |
 |---|---|---|
 | `docker-compose.prod.yml` | `~/docker-compose.yml` | Les conteneurs à faire tourner et leur configuration |
-| `.env.deploy`, généré pendant le job | `~/.env` | Les variables secrètes : base de données, compte Docker Hub |
+| `.env.deploy`, généré pendant le job | `~/.env` | Les variables secrètes : base de données, compte Docker Hub, clé de signature des JWT, premier administrateur |
 | `deploy.sh` | `~/deploy.sh` | Le script qui installe Docker si besoin et relance l'application |
 
 **Sur le serveur.** `deploy.sh` installe Docker s'il est absent, télécharge les nouvelles images (`docker compose pull`), puis recrée les conteneurs dont l'image a changé (`docker compose up -d`). Postgres démarre ; le conteneur `phoenix` attend qu'il soit prêt, applique les migrations et lance l'API. Le `dashboard` sert le frontend.
@@ -113,6 +113,8 @@ Pour qu'une suite de commandes s'arrête à la première erreur, il faut les enc
 | `SERVER_USER` | Stage 2 | Utilisateur Linux du serveur, autorisé à `sudo` sans mot de passe |
 | `PGUSER`, `PGPASSWORD`, `PGDATABASE` | Stage 2, via `.env` | Utilisateur, mot de passe et nom de la base Postgres |
 | `PGPORT` | Stage 2, via `.env` | Port de Postgres publié sur le serveur (côté hôte) |
+| `JWT_SECRET` | Stage 2, via `.env` | Clé de signature des JWT de session, au moins 32 caractères (`mix phx.gen.secret`). La changer déconnecte tout le monde. |
+| `ADMIN_EMAIL`, `ADMIN_PASSWORD` | Stage 2, via `.env` | Premier administrateur, créé par le seed s'il n'existe pas encore |
 
 Trois pièges à connaître :
 
@@ -204,7 +206,7 @@ jobs:
       script:
         - scp -v docker-compose.prod.yml $SERVER_USER@$SERVER_IP:~/docker-compose.yml
         # Build the server .env from the Travis environment variables
-        - printf 'PGUSER=%s\nPGPASSWORD=%s\nPGDATABASE=%s\nPGPORT=%s\nDOCKER_USERNAME=%s\n' "$PGUSER" "$PGPASSWORD" "$PGDATABASE" "$PGPORT" "$DOCKER_USERNAME" > .env.deploy
+        - printf 'PGUSER=%s\nPGPASSWORD=%s\nPGDATABASE=%s\nPGPORT=%s\nDOCKER_USERNAME=%s\nJWT_SECRET=%s\nADMIN_EMAIL=%s\nADMIN_PASSWORD=%s\n' "$PGUSER" "$PGPASSWORD" "$PGDATABASE" "$PGPORT" "$DOCKER_USERNAME" "$JWT_SECRET" "$ADMIN_EMAIL" "$ADMIN_PASSWORD" > .env.deploy
         - scp .env.deploy $SERVER_USER@$SERVER_IP:~/.env
         - scp deploy.sh $SERVER_USER@$SERVER_IP:~/deploy.sh
         - ssh $SERVER_USER@$SERVER_IP "bash ~/deploy.sh"
@@ -283,7 +285,7 @@ Le Dockerfile du frontend, dans `time-manager-dashboard/`, n'est pas détaillé 
 
 ```bash
 #!/usr/bin/env bash
-# Executed on the deploy server by Travis (see .travis.yml, "*Oct 2, 2026 · @KALAMBO DANIEL*Deploy" stage).
+# Executed on the deploy server by Travis (see .travis.yml, "Deploy" stage).
 # Expects ~/docker-compose.yml and ~/.env to have been copied beforehand.
 set -e
 cd ~
@@ -385,6 +387,8 @@ echo "entrypoint: database is up"
 
 mix ecto.create
 mix ecto.migrate
+# Roles and the first administrator (ADMIN_EMAIL / ADMIN_PASSWORD); idempotent.
+mix run priv/repo/seeds.exs
 
 echo "entrypoint: starting Phoenix"
 exec mix phx.server
@@ -396,7 +400,7 @@ Ce script s'exécute à chaque démarrage du conteneur `phoenix` : après un dé
 
 **Attendre la base.** `depends_on` démarre `db` avant `phoenix`, mais n'attend pas que Postgres accepte les connexions. La boucle interroge la base chaque seconde avec `pg_isready`, jusqu'à une réponse positive.
 
-**Préparer la base.** `mix ecto.create` crée la base si elle n'existe pas, et ne fait rien sinon. `mix ecto.migrate` applique les nouvelles migrations : chaque déploiement met le schéma à jour automatiquement.
+**Préparer la base.** `mix ecto.create` crée la base si elle n'existe pas, et ne fait rien sinon. `mix ecto.migrate` applique les nouvelles migrations : chaque déploiement met le schéma à jour automatiquement. `seeds.exs` insère ensuite les trois rôles et, si `ADMIN_EMAIL` et `ADMIN_PASSWORD` sont définis, le premier administrateur. Il est idempotent : relancé à chaque démarrage, il ne crée aucun doublon et ne modifie pas un administrateur existant.
 
 **Lancer Phoenix.** `exec` remplace le script par le serveur Phoenix, qui devient le processus principal du conteneur et reçoit directement le signal d'arrêt (voir [3.2](#32-docker-et-docker-compose)).
 
@@ -424,8 +428,8 @@ Le principe : construire et valider chaque brique à la main avant de l'automati
     - `ssh -i travis_deploy utilisateur@IP "echo ok"` teste la connexion.
     - `base64 -w 0 travis_deploy` (sur macOS : `base64 -i travis_deploy`) produit la valeur de `SSH_KEY`, sur une seule ligne.
     - *Validation* : le test affiche `ok` sans demander de mot de passe.
-8. **Configurer Travis.** Activer le dépôt sur travis-ci.com, puis saisir les neuf variables du tableau de la [partie 3.1](#31-travis-ci), affichage dans les logs désactivé.
-    - *Validation* : les neuf variables apparaissent dans *Settings*, valeurs masquées.
+8. **Configurer Travis.** Activer le dépôt sur travis-ci.com, puis saisir les douze variables du tableau de la [partie 3.1](#31-travis-ci), affichage dans les logs désactivé.
+    - *Validation* : les douze variables apparaissent dans *Settings*, valeurs masquées.
 9. **Automatiser le build.** Écrire `.travis.yml` avec le seul stage « Build & Push Image », puis pousser.
     - *Validation* : le build est vert, et la date du dernier push des images change sur Docker Hub.
 10. **Automatiser le déploiement.** Ajouter le stage « Deploy », puis pousser une modification visible.

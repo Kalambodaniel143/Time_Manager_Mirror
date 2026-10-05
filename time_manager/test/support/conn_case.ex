@@ -35,4 +35,17 @@ defmodule TimeManagerWeb.ConnCase do
     TimeManager.DataCase.setup_sandbox(tags)
     {:ok, conn: Phoenix.ConnTest.build_conn()}
   end
+
+  @doc """
+  Logs `user` in, as the front-end would: puts the session JWT in the `jwt`
+  cookie and the matching CSRF token in the `X-CSRF-Token` header.
+  """
+  def log_in(conn, user) do
+    csrf_token = TimeManager.Token.generate_csrf_token()
+    {:ok, jwt, _claims} = TimeManager.Token.sign(user, csrf_token)
+
+    conn
+    |> Phoenix.ConnTest.put_req_cookie("jwt", jwt)
+    |> Plug.Conn.put_req_header("x-csrf-token", csrf_token)
+  end
 end

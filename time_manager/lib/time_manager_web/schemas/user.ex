@@ -15,14 +15,19 @@ defmodule TimeManagerWeb.Schemas.User do
         description: "Email address",
         example: "alice@example.com"
       },
+      role: %Schema{
+        type: :string,
+        enum: ["employee", "manager", "administrator"],
+        example: "employee"
+      },
       inserted_at: %Schema{
         type: :string,
         format: :"date-time",
-        description: "Creation timestamp. Only present on show/index/update responses.",
+        description: "Creation timestamp",
         example: "2026-09-22T08:15:25Z",
-        nullable: true
+        nullable: false
       }
     },
-    required: [:id, :username, :email]
+    required: [:id, :username, :email, :role]
   })
 end

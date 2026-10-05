@@ -1,6 +1,6 @@
 <template>
   <div class="hours">
-    <PageHeader :eyebrow="`Semaine ${weekNumber} · ${rangeLabel}`" title="Mes heures">
+    <PageHeader :eyebrow="`Semaine ${weekNumber} · ${rangeLabel}`" :title="isSelf ? 'Mes heures' : `Heures de l’agent n° ${userID}`">
       <button class="btn btn-outline" type="button" @click="$emit('tour')">
         <AppIcon name="help" />
         Revoir la prise en main
@@ -21,12 +21,15 @@
               </button>
             </span>
           </div>
-          <p class="card-subtitle">Chaque journée se corrige pendant 7 jours.</p>
+          <p class="card-subtitle">
+            {{ canEdit ? 'Chaque journée se corrige pendant 7 jours.' : 'Une erreur ? Demandez la correction à votre manager : elle sera tracée et visible ici.' }}
+          </p>
         </header>
 
         <p v-if="error" class="field-error" role="alert">Impossible de charger vos heures : {{ error }}</p>
         <div v-else-if="loading && workingTimes.length === 0" class="skeleton table-skeleton"></div>
-        <WeekTable v-else :monday="monday" :entries="workingTimes" :now="now" :user-id="userId" @edit="openEdit" @create="openCreate" @completed="onDepartureCompleted" />
+        <!-- Seul l'agent lui-même peut compléter son départ : l'API refuse les autres. -->
+        <WeekTable v-else :monday="monday" :entries="workingTimes" :now="now" :user-id="isSelf ? userId : null" :can-edit="canEdit" @edit="openEdit" @create="openCreate" @completed="onDepartureCompleted" />
       </section>
 
       <aside class="side">
@@ -45,6 +48,7 @@ import ManagerNote from './hours/ManagerNote.vue'
 import WeekTable from './hours/WeekTable.vue'
 import { lastWeekMonday, org } from '../services/orgService'
 import { getWorkingTimes } from '../services/workingTimeService'
+import { canEditHours, isSelf } from '../stores/auth'
 import { toDateInput } from '../utils/date'
 import { addDays, formatRange, isoWeek, mondayOf, weekBuckets, weekFilters } from '../utils/hours'
 
@@ -72,6 +76,14 @@ export default {
   },
 
   computed: {
+    isSelf() {
+      return isSelf(this.userID)
+    },
+
+    canEdit() {
+      return canEditHours(this.userID)
+    },
+
     monday() {
       return this.week ? mondayOf(new Date(`${this.week}T00:00:00`)) : lastWeekMonday()
     },

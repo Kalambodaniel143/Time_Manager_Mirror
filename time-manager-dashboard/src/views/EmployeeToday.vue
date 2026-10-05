@@ -22,7 +22,7 @@
         </div>
 
         <InfoNote title="Vos heures vous appartiennent">
-          Vous voyez tout ce que voit votre manager, et vous pouvez corriger une journée pendant 7 jours.
+          Vous voyez tout ce que voit votre manager. Une erreur ? Votre manager la corrige, et la correction reste visible ici.
         </InfoNote>
       </div>
 

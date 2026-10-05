@@ -19,22 +19,41 @@ export class ApiError extends Error {
       if (details) return details
     }
 
+    if (status === 403) return 'Accès refusé'
     if (errors && errors.detail) return errors.detail
 
     return `Erreur ${status}`
   }
 }
 
+// Set by the auth store / router: where the CSRF token comes from, and what to
+// do when the session is no longer valid. Kept as hooks to avoid import cycles.
+let csrfTokenProvider = () => null
+let unauthorizedHandler = () => {}
+
+export function configureHttp({ csrfToken, onUnauthorized }) {
+  if (csrfToken) csrfTokenProvider = csrfToken
+  if (onUnauthorized) unauthorizedHandler = onUnauthorized
+}
+
 export async function request(path, options = {}) {
+  const headers = { 'Content-Type': 'application/json', ...options.headers }
+  const csrfToken = csrfTokenProvider()
+  if (csrfToken) headers['X-CSRF-Token'] = csrfToken
+
   const response = await fetch(`${API_URL}${path}`, {
-    headers: { 'Content-Type': 'application/json' },
     ...options,
+    headers,
+    // Sends the HttpOnly jwt cookie. The API is served under the same origin
+    // (/api, through the Nginx or Vite proxy), so no CORS setup is needed.
+    credentials: 'same-origin',
   })
 
   if (response.status === 204) return null
 
   const payload = await response.json().catch(() => null)
 
+  if (response.status === 401 && !options.skipUnauthorizedHandler) unauthorizedHandler()
   if (!response.ok) throw new ApiError(response.status, payload)
 
   return payload ? payload.data : null

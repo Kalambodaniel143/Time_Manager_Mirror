@@ -35,3 +35,6 @@ config :phoenix, :plug_init_mode, :runtime
 # Sort query params output of verified routes for robust url comparisons
 config :phoenix,
   sort_verified_routes_query_params: true
+
+# Hashing passwords on purpose takes time; keep the test suite fast.
+config :bcrypt_elixir, :log_rounds, 1

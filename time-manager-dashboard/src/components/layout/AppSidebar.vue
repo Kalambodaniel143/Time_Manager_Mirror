@@ -35,9 +35,6 @@
         <p class="settings-label">Affichage</p>
         <SegmentedControl :model-value="theme" :options="themeOptions" label="Affichage" @update:model-value="$emit('update:theme', $event)" />
 
-        <p class="settings-label">Démo · voir en tant que</p>
-        <SegmentedControl :model-value="role" :options="roleOptions" label="Voir en tant que" @update:model-value="$emit('update:role', $event)" />
-
         <slot />
       </div>
     </aside>
@@ -55,12 +52,6 @@ const THEME_OPTIONS = [
   { value: 'contrast', label: 'Contraste' },
 ]
 
-const ROLE_OPTIONS = [
-  { value: 'employee', label: 'Employé' },
-  { value: 'manager', label: 'Manager' },
-  { value: 'admin', label: 'Admin' },
-]
-
 export default {
   name: 'AppSidebar',
 
@@ -73,13 +64,12 @@ export default {
     userId: { type: [Number, String], default: null },
   },
 
-  emits: ['update:theme', 'update:role'],
+  emits: ['update:theme'],
 
   data() {
     return {
       open: false,
       themeOptions: THEME_OPTIONS,
-      roleOptions: ROLE_OPTIONS,
     }
   },
 
@@ -89,13 +79,18 @@ export default {
         return [
           { label: 'Mon équipe', icon: 'users', to: { name: 'team' } },
           { label: 'Planning d’équipe', icon: 'calendar', to: { name: 'teamPlanning' } },
+          { label: 'Mes équipes', icon: 'users', to: { name: 'adminTeams' } },
+          ...this.ownLinks,
         ]
       }
 
-      if (this.role === 'admin') {
+      if (this.role === 'administrator') {
         return [
           { label: 'Paie du mois', icon: 'check-circle', to: { name: 'payroll' } },
-          { label: 'Équipes et droits', icon: 'shield', to: { name: 'rights' } },
+          { label: 'Utilisateurs et rôles', icon: 'shield', to: { name: 'adminUsers' } },
+          { label: 'Équipes', icon: 'users', to: { name: 'adminTeams' } },
+          { label: 'Règles et journal', icon: 'wrench', to: { name: 'rights' } },
+          ...this.ownLinks,
         ]
       }
 
@@ -104,6 +99,16 @@ export default {
         { label: 'Aujourd’hui', icon: 'sun', to: { name: 'overview' } },
         { label: 'Mes heures', icon: 'clock', to: hours },
         { label: 'Mon planning', icon: 'calendar', to: { name: 'planning' } },
+      ]
+    },
+
+    // A manager or an administrator also clocks in and has their own hours.
+    ownLinks() {
+      if (!this.userId) return []
+
+      return [
+        { label: 'Mon pointage', icon: 'clock', to: { name: 'clock', params: { userid: this.userId } } },
+        { label: 'Mes heures', icon: 'calendar', to: { name: 'workingTimes', params: { userID: this.userId } } },
       ]
     },
 

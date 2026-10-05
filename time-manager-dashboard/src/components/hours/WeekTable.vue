@@ -61,6 +61,8 @@ export default {
     entries: { type: Array, required: true },
     now: { type: Date, required: true },
     userId: { type: [Number, String], default: null },
+    // Whether the viewer may add or correct periods at all (role and scope).
+    canEdit: { type: Boolean, default: false },
   },
 
   emits: ['edit', 'create', 'completed'],
@@ -79,14 +81,14 @@ export default {
         return {
           key: toDateInput(date),
           label: `${weekdayShort(date)} ${date.getDate()}`,
-          editable: date <= this.now && this.isEditable(addDays(date, 1)),
+          editable: this.canEdit && date <= this.now && this.isEditable(addDays(date, 1)),
           entries: [...entries]
             .sort((a, b) => a.start.localeCompare(b.start))
             .map((entry) => ({
               ...entry,
               kind: classifyEntry(entry),
               hours: entryHours(entry),
-              editable: this.isEditable(parseDateTime(entry.end)),
+              editable: this.canEdit && this.isEditable(parseDateTime(entry.end)),
             })),
         }
       })
