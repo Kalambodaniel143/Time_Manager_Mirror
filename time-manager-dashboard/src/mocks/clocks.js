@@ -43,6 +43,7 @@ export function mockCreateClock(userId, attrs) {
     id: Math.max(0, ...entries.map((entry) => entry.id)) + 1,
     time: formatClockDate(attrs.time),
     status: attrs.status,
+    kind: attrs.kind || (attrs.status ? 'arrival' : 'departure'),
     user_id: userId,
   }
 

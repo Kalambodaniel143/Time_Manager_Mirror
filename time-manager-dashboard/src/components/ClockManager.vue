@@ -7,7 +7,7 @@
           Pointage
           <!-- On affiche l'état seulement après l'avoir récupéré auprès de l'API. -->
           <span v-if="ready" class="badge" :class="clockIn ? 'badge-success' : 'badge-muted'">
-            {{ clockIn ? 'En cours' : 'Hors service' }}
+            {{ stateLabel }}
           </span>
         </h3>
         <p class="card-subtitle">Déclarez le début et la fin de votre journée</p>
@@ -18,8 +18,13 @@
       <div class="clock-status" :class="{ active: ready && clockIn }">
         <span class="clock-pulse" aria-hidden="true"></span>
         <div>
-          <p class="clock-state serif">{{ ready ? (clockIn ? 'En service' : 'Hors service') : 'État inconnu' }}</p>
+          <p class="clock-state serif">{{ stateLabel }}</p>
           <p class="clock-since num">{{ startDateLabel }}</p>
+          <!-- En pause, le temps travaillé reste affiché mais n'avance plus. -->
+          <p v-if="ready && (clockIn || onBreak)" class="clock-elapsed">
+            Temps travaillé :
+            <span class="num" role="timer" aria-live="off">{{ elapsedTime }}</span>
+          </p>
         </div>
       </div>
 
@@ -29,14 +34,24 @@
         :class="clockIn ? 'btn-ghost' : 'btn-primary'"
         type="button"
         :disabled="loading || !ready"
-        @click="clock"
+        @click="clock()"
       >
         <svg viewBox="0 0 16 16" aria-hidden="true">
           <circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-width="1.5" />
           <path d="M8 5v3.2l2 1.3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
         </svg>
-        {{ clockIn ? 'Terminer ma journée' : 'Commencer ma journée' }}
+        <span>{{ clockButtonLabel }}</span>
       </button>
+
+      <button v-if="ready && clockIn" class="btn btn-outline" type="button" :disabled="loading" @click="clock('pause')">
+        Prendre une pause
+      </button>
+      <template v-if="ready && onBreak">
+        <p class="clock-break-note">Les pauses ne sont pas comptées dans les heures travaillées.</p>
+        <button class="btn btn-outline" type="button" :disabled="loading" @click="clock('departure')">
+          Pointer mon départ
+        </button>
+      </template>
 
       <button class="btn btn-quiet btn-sm refresh" type="button" :disabled="loading" @click="refresh">
         {{ loading ? 'Actualisation…' : 'Actualiser le statut' }}
@@ -69,8 +84,14 @@ export default {
   data() {
     return {
       // Les deux données demandées dans le sujet Epitech.
-      clockIn: false,       // true : travail en cours ; false : hors service.
+      clockIn: false,       // true : travail en cours ; false : pause ou hors service.
       startDateTime: null, // Date de début ; null si aucune période n'est en cours.
+      onBreak: false,      // Permet de distinguer une pause d'un départ.
+      workedSeconds: 0,   // Travail déjà effectué avant les pauses de ce service.
+
+      // L'heure actuelle change chaque seconde ; timerId permet d'arrêter la minuterie.
+      currentTime: Date.now(),
+      timerId: null,
 
       // Les états de communication avec l'API.
       fetching: false, // Lecture des pointages en cours.
@@ -90,8 +111,40 @@ export default {
       return this.fetching || this.saving
     },
 
+    stateLabel() {
+      if (!this.ready) return 'État inconnu'
+      if (this.onBreak) return 'En pause'
+      return this.clockIn ? 'En service' : 'Hors service'
+    },
+
+    clockButtonLabel() {
+      if (this.onBreak) return 'Reprendre'
+      return this.clockIn ? 'Pointer mon départ' : 'Pointer mon arrivée'
+    },
+
+    // Total du service : les périodes déjà travaillées + la période en cours.
+    elapsedTime() {
+      if (!this.ready || (!this.clockIn && !this.onBreak)) return '00:00:00'
+
+      let totalSeconds = this.workedSeconds
+      if (this.clockIn && this.startDateTime) {
+        // Z indique UTC. 1 000 millisecondes = 1 seconde.
+        const start = Date.parse(`${this.startDateTime.replace(' ', 'T')}Z`)
+        if (!Number.isFinite(start)) return '00:00:00'
+        totalSeconds += Math.max(0, Math.floor((this.currentTime - start) / 1000))
+      }
+
+      const hours = Math.floor(totalSeconds / 3600)
+      const minutes = Math.floor((totalSeconds % 3600) / 60)
+      const seconds = totalSeconds % 60
+
+      // padStart ajoute un zéro devant les chiffres seuls : 5 devient "05".
+      return [hours, minutes, seconds].map((value) => String(value).padStart(2, '0')).join(':')
+    },
+
     startDateLabel() {
       if (this.ready) {
+        if (this.onBreak) return 'Le compteur reprendra à votre retour.'
         return this.clockIn ? `Depuis ${this.startDateTime}` : 'Aucune période en cours'
       }
       if (this.loading) {
@@ -111,12 +164,30 @@ export default {
     },
   },
 
-  // Quand on quitte le composant, les réponses encore en attente deviennent anciennes.
+  // En quittant le composant, arrêter la minuterie et ignorer les réponses en attente.
   beforeUnmount() {
+    this.stopTimer()
     this.requestVersion += 1
   },
 
   methods: {
+    // Mettre l'heure à jour immédiatement, puis chaque seconde, sans requête API.
+    startTimer() {
+      this.stopTimer() // Évite de lancer deux minuteries après une actualisation.
+      this.currentTime = Date.now()
+      this.timerId = setInterval(() => {
+        // Reprendre l'heure réelle évite de prendre du retard si l'onglet a dormi.
+        this.currentTime = Date.now()
+      }, 1000)
+    },
+
+    stopTimer() {
+      if (this.timerId !== null) {
+        clearInterval(this.timerId)
+        this.timerId = null
+      }
+    },
+
     // async permet d'utiliser await. await attend le résultat de l'appel avant de
     // continuer cette fonction ; le reste de la page peut continuer à fonctionner.
 
@@ -126,11 +197,14 @@ export default {
       const version = ++this.requestVersion
 
       // 1. On commence une lecture : l'ancien état ne doit plus être présenté comme fiable.
+      this.stopTimer()
       this.fetching = true
       this.ready = false
       this.error = ''
       this.clockIn = false
       this.startDateTime = null
+      this.onBreak = false
+      this.workedSeconds = 0
 
       try {
         // 2. Attend la liste renvoyée par GET /api/clocks/:userID.
@@ -140,16 +214,12 @@ export default {
           throw new Error('Réponse de pointage invalide')
         }
 
-        // 3. Phoenix classe les pointages du plus ancien au plus récent.
-        // S'il n'y en a aucun, ?. évite une erreur et isWorking vaut false.
-        const lastClock = clocks[clocks.length - 1]
-        const isWorking = lastClock?.status === true
-        const start = isWorking ? formatClockDate(lastClock.time) : null
+        // 3. Relire les événements permet aussi de retrouver les pauses après un rechargement.
+        this.restoreClockState(clocks)
 
         // 4. L'état est connu : Vue peut l'afficher et autoriser un nouveau pointage.
-        this.clockIn = isWorking
-        this.startDateTime = start
         this.ready = true
+        if (this.clockIn) this.startTimer()
       } catch (error) {
         // Une lecture échouée laisse ready à false : on ne devine pas le statut.
         if (!this.isCurrentRequest(version, userId)) return
@@ -165,8 +235,41 @@ export default {
       }
     },
 
-    // CLOCK : enregistre une arrivée ou une sortie, puis relit l'état enregistré.
-    async clock() {
+    // Phoenix renvoie les événements dans l'ordre, du plus ancien au plus récent.
+    restoreClockState(clocks) {
+      for (const entry of clocks) {
+        // Les anciennes réponses sans kind restent lisibles.
+        const kind = entry.kind || (entry.status ? 'arrival' : 'departure')
+        const time = formatClockDate(entry.time)
+
+        if (kind === 'arrival') this.workedSeconds = 0
+
+        if (kind === 'arrival' || kind === 'resume') {
+          this.clockIn = true
+          this.onBreak = false
+          this.startDateTime = time
+        } else if (kind === 'pause') {
+          if (this.startDateTime) {
+            const start = Date.parse(`${this.startDateTime.replace(' ', 'T')}Z`)
+            const end = Date.parse(`${time.replace(' ', 'T')}Z`)
+            this.workedSeconds += Math.max(0, (end - start) / 1000)
+          }
+          this.clockIn = false
+          this.onBreak = true
+          this.startDateTime = null
+        } else if (kind === 'departure') {
+          this.clockIn = false
+          this.onBreak = false
+          this.startDateTime = null
+          this.workedSeconds = 0
+        } else {
+          throw new Error('Type de pointage inconnu')
+        }
+      }
+    },
+
+    // Une seule méthode envoie les quatre actions à la même route API.
+    async clock(kind = this.onBreak ? 'resume' : this.clockIn ? 'departure' : 'arrival') {
       // Sans état fiable, ou si un appel est en cours, on ne fait rien.
       if (this.loading || !this.ready) return
 
@@ -176,16 +279,17 @@ export default {
       this.error = ''
 
       try {
-        // ! inverse le booléen : au repos -> arrivée (true), au travail -> sortie (false).
+        // Arrivée et reprise : travail actif. Pause et départ : travail arrêté.
         // La date est envoyée en UTC au format "YYYY-MM-DD hh:mm:ss".
         await createClock(userId, {
           time: formatClockDate(new Date()),
-          status: !this.clockIn,
+          status: kind === 'arrival' || kind === 'resume',
+          kind,
         })
 
         if (!this.isCurrentRequest(version, userId)) return
 
-        // Une sortie crée aussi sa période côté serveur. Le parent recharge les totaux.
+        // Une pause ou une sortie enregistre le travail terminé. Recharger les totaux.
         this.$emit('changed')
         await this.refresh()
       } catch (error) {
@@ -194,6 +298,7 @@ export default {
         // Une coupure peut masquer un enregistrement réussi. Il faut relire l'état
         // avant de réessayer, pour éviter d'envoyer deux fois le même pointage.
         this.ready = false
+        this.stopTimer()
         this.error = error.status === 422
           ? `${error.message}. Rafraîchis avant de réessayer.`
           : 'Pointage non confirmé. Rafraîchis avant de réessayer.'
@@ -270,13 +375,49 @@ export default {
   color: var(--text-muted);
 }
 
+.clock-elapsed {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 10px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.clock-elapsed .num {
+  font-size: 28px;
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--accent);
+}
+
 .clock-btn {
-  padding: 13px 18px;
-  font-size: 14.5px;
+  align-self: center;
+  flex-direction: column;
+  width: min(100%, 220px);
+  aspect-ratio: 1;
+  gap: 12px;
+  padding: 24px;
+  border-radius: 50%;
+  font-size: 19px;
+  line-height: 1.3;
+  text-align: center;
+  white-space: normal;
+}
+
+.clock-btn svg {
+  width: 32px;
+  height: 32px;
 }
 
 .refresh {
   align-self: center;
+}
+
+.clock-break-note {
+  font-size: 13px;
+  color: var(--text-muted);
+  text-align: center;
 }
 
 @keyframes pulse {

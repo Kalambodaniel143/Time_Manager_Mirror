@@ -4,7 +4,7 @@
       class="check"
       type="checkbox"
       :checked="selected"
-      :disabled="row.validated"
+      :disabled="row.validated || row.departureInWeek || !!row.clockError"
       :aria-label="`Sélectionner ${row.name}`"
       @change="$emit('toggle', row.username)"
     />
@@ -17,7 +17,9 @@
     </div>
     <p class="total serif num">{{ total }}</p>
     <p class="status">
-      <span v-if="row.nightRun > maxNights" class="pill pill-danger"><AppIcon name="alert" />{{ row.nightRun }} nuits d’affilée</span>
+      <span v-if="row.clockError" class="pill pill-todo"><AppIcon name="alert" />Pointages non vérifiés</span>
+      <span v-else-if="row.departureInWeek" class="pill pill-todo"><AppIcon name="clock" />Départ à compléter</span>
+      <span v-else-if="row.nightRun > maxNights" class="pill pill-danger"><AppIcon name="alert" />{{ row.nightRun }} nuits d’affilée</span>
       <span v-else-if="row.validated" class="pill pill-ok"><AppIcon name="check" />Validée</span>
       <span v-else class="pill pill-todo"><AppIcon name="clock" />À valider</span>
     </p>
