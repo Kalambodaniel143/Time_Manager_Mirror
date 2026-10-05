@@ -26,7 +26,7 @@
 
         <p v-if="error" class="field-error" role="alert">Impossible de charger vos heures : {{ error }}</p>
         <div v-else-if="loading && workingTimes.length === 0" class="skeleton table-skeleton"></div>
-        <WeekTable v-else :monday="monday" :entries="workingTimes" :now="now" @edit="openEdit" @create="openCreate" />
+        <WeekTable v-else :monday="monday" :entries="workingTimes" :now="now" :user-id="userId" @edit="openEdit" @create="openCreate" @completed="onDepartureCompleted" />
       </section>
 
       <aside class="side">
@@ -122,7 +122,19 @@ export default {
     },
   },
 
+  mounted() {
+    this.minuteTimer = setInterval(() => { this.now = new Date() }, 60000)
+  },
+
+  beforeUnmount() {
+    clearInterval(this.minuteTimer)
+  },
+
   methods: {
+    async onDepartureCompleted() {
+      await this.getWorkingTimes()
+      this.$emit('changed')
+    },
     async getWorkingTimes() {
       this.loading = true
       this.error = ''

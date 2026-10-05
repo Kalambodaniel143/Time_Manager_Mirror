@@ -1,0 +1,95 @@
+  <!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <title>Questions de soutenance Vue.js</title>
+  <style>
+    @page { size: A4; margin: 16mm 15mm; }
+    * { box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif; color: #20252b; font-size: 10.5pt; line-height: 1.38; }
+    h1 { color: #163b4d; font-size: 25pt; margin: 0 0 5px; }
+    h2 { color: #176b75; font-size: 15pt; border-bottom: 1px solid #b8d4d5; padding-bottom: 3px; margin: 18px 0 9px; page-break-after: avoid; }
+    h3 { color: #163b4d; font-size: 11.5pt; margin: 11px 0 2px; page-break-after: avoid; }
+    p { margin: 3px 0 7px; }
+    .subtitle { color: #53636b; font-size: 12pt; margin-bottom: 18px; }
+    .intro { background: #edf6f4; border-left: 4px solid #176b75; padding: 9px 12px; margin-bottom: 14px; }
+    code { font-family: "SFMono-Regular", Consolas, monospace; background: #f1f3f4; padding: 1px 3px; font-size: 9pt; }
+    pre { background: #f3f6f7; border: 1px solid #d6e0e1; padding: 7px 9px; overflow-wrap: anywhere; font-size: 8.5pt; line-height: 1.3; page-break-inside: avoid; }
+    .answer { margin-left: 12px; }
+    .answer strong { color: #176b75; }
+    .page-break { page-break-before: always; }
+    .final { background: #fff5df; border-left: 4px solid #d18a2d; padding: 9px 12px; margin-top: 14px; }
+    ul { margin-top: 3px; }
+  </style>
+</head>
+<body>
+  <h1>Questions de soutenance Vue.js</h1>
+  <p class="subtitle">Fiche de révision - Options API, Composition API et projet Time Manager</p>
+  <div class="intro"><strong>Conseil :</strong> réponds d'abord avec tes propres mots, puis utilise la réponse courte pour vérifier les points importants.</div>
+
+  <h2>1. Bases de Vue.js</h2>
+  <h3>1. Qu'est-ce que Vue.js ?</h3><p class="answer"><strong>Réponse :</strong> Vue.js est un framework JavaScript progressif qui permet de créer des interfaces réactives et organisées en composants.</p>
+  <h3>2. Qu'est-ce qu'un composant ?</h3><p class="answer"><strong>Réponse :</strong> C'est une partie autonome de l'interface avec son affichage, ses données et sa logique. Exemple : <code>ClockManager.vue</code>.</p>
+  <h3>3. Quelles sont les parties d'un fichier <code>.vue</code> ?</h3><p class="answer"><strong>Réponse :</strong> <code>&lt;template&gt;</code> pour l'affichage, <code>&lt;script&gt;</code> pour la logique et <code>&lt;style&gt;</code> pour le CSS.</p>
+  <h3>4. Comment utiliser un composant dans un autre ?</h3><p class="answer"><strong>Réponse :</strong> On l'importe, on le déclare si nécessaire, puis on l'utilise comme une balise.</p><pre>import ClockManager from './components/ClockManager.vue'</pre>
+  <h3>5. Qu'est-ce que la réactivité ?</h3><p class="answer"><strong>Réponse :</strong> Quand une donnée réactive change, Vue met automatiquement à jour les éléments de l'interface qui en dépendent.</p>
+  <h3>6. À quoi sert le template ?</h3><p class="answer"><strong>Réponse :</strong> Il décrit ce que l'utilisateur voit et les interactions possibles.</p>
+  <h3>7. À quoi sert <code>v-if</code> ?</h3><p class="answer"><strong>Réponse :</strong> Il affiche un élément uniquement lorsque sa condition est vraie. L'élément est créé ou supprimé du DOM.</p>
+  <h3>8. À quoi sert <code>v-for</code> ?</h3><p class="answer"><strong>Réponse :</strong> Il parcourt une liste pour générer plusieurs éléments.</p>
+  <h3>9. Pourquoi utiliser <code>:key</code> avec <code>v-for</code> ?</h3><p class="answer"><strong>Réponse :</strong> Pour donner une identité stable à chaque élément et permettre à Vue de mettre à jour la liste correctement.</p>
+  <h3>10. Quelle est la différence entre interpolation et liaison dynamique ?</h3><p class="answer"><strong>Réponse :</strong> <code>{{ variable }}</code> affiche une valeur ; <code>:class</code>, <code>:disabled</code> ou <code>:to</code> lient dynamiquement une propriété HTML ou Vue.</p>
+
+  <h2>2. Options API et Composition API</h2>
+  <h3>11. Qu'est-ce que l'Options API ?</h3><p class="answer"><strong>Réponse :</strong> Elle organise un composant par catégories : <code>data</code>, <code>computed</code>, <code>methods</code>, <code>watch</code>, props et hooks.</p>
+  <h3>12. Comment déclarer une donnée avec l'Options API ?</h3><pre>data() {
+  return { count: 0 }
+}</pre>
+  <h3>13. Pourquoi utiliser <code>this</code> avec l'Options API ?</h3><p class="answer"><strong>Réponse :</strong> <code>this</code> représente l'instance du composant et permet d'accéder à ses données et méthodes.</p>
+  <h3>14. Qu'est-ce que la Composition API ?</h3><p class="answer"><strong>Réponse :</strong> Elle regroupe la logique par fonctionnalité avec <code>ref</code>, <code>computed</code>, <code>watch</code> et les hooks de cycle de vie.</p>
+  <h3>15. Comment créer un composant avec <code>&lt;script setup&gt;</code> ?</h3><pre>&lt;script setup&gt;
+import { ref } from 'vue'
+const count = ref(0)
+function increment() { count.value++ }
+&lt;/script&gt;</pre>
+  <h3>16. Quelle est la différence entre <code>ref</code> et <code>reactive</code> ?</h3><p class="answer"><strong>Réponse :</strong> <code>ref</code> convient à une valeur ou une référence ; <code>reactive</code> rend un objet réactif. Dans le script, un <code>ref</code> utilise <code>.value</code>.</p>
+  <h3>17. Quelle API utilise <code>ClockManager.vue</code> ?</h3><p class="answer"><strong>Réponse :</strong> L'Options API, car le composant utilise <code>data</code>, <code>computed</code>, <code>watch</code>, <code>methods</code> et <code>beforeUnmount</code>.</p>
+  <h3>18. Quelle API est la meilleure ?</h3><p class="answer"><strong>Réponse :</strong> Les deux sont supportées par Vue 3. L'Options API est claire pour débuter ; la Composition API facilite la réutilisation de logique dans les composants complexes.</p>
+  <h3>19. Peut-on mélanger les deux API ?</h3><p class="answer"><strong>Réponse :</strong> Oui, mais il vaut mieux rester cohérent dans un composant pour conserver un code lisible.</p>
+  <h3>20. Qu'est-ce qu'un composable ?</h3><p class="answer"><strong>Réponse :</strong> C'est une fonction basée sur la Composition API qui réutilise une logique, par exemple <code>useClock()</code> pour gérer un pointage.</p>
+
+  <h2>3. Données et communication entre composants</h2>
+  <h3>21. Quelle est la différence entre <code>data</code>, <code>computed</code> et <code>methods</code> ?</h3><p class="answer"><strong>Réponse :</strong> <code>data</code> contient l'état, <code>computed</code> calcule des valeurs mémorisées, et <code>methods</code> contient des actions appelées explicitement.</p>
+  <h3>22. Qu'est-ce qu'une prop ?</h3><p class="answer"><strong>Réponse :</strong> C'est une donnée envoyée du parent vers l'enfant.</p><pre>props: {
+  userId: { type: [Number, String], required: true }
+}</pre>
+  <h3>23. Pourquoi <code>ClockManager</code> reçoit-il <code>userId</code> ?</h3><p class="answer"><strong>Réponse :</strong> Pour savoir quel utilisateur rechercher et pour quel utilisateur créer un pointage.</p>
+  <h3>24. Peut-on modifier directement une prop ?</h3><p class="answer"><strong>Réponse :</strong> Non. Les props sont en lecture seule dans l'enfant. L'enfant doit émettre un événement pour demander au parent de modifier sa donnée.</p>
+  <h3>25. À quoi sert <code>$emit</code> ?</h3><p class="answer"><strong>Réponse :</strong> Il permet à l'enfant d'envoyer un événement au parent.</p><pre>this.$emit('changed')</pre>
+  <h3>26. Que signifie cette utilisation ?</h3><pre>&lt;ClockManager :user-id="userId" @changed="onPeriodsChanged" /&gt;</pre><p class="answer"><strong>Réponse :</strong> Le parent transmet <code>userId</code> et écoute l'événement <code>changed</code>.</p>
+  <h3>27. Pourquoi déclarer <code>emits: ['changed']</code> ?</h3><p class="answer"><strong>Réponse :</strong> Pour déclarer les événements que le composant peut émettre et rendre son contrat plus clair.</p>
+  <h3>28. Qu'est-ce que le two-way binding ?</h3><p class="answer"><strong>Réponse :</strong> C'est une liaison dans les deux sens, souvent réalisée avec <code>v-model</code>. La donnée est envoyée au composant et sa modification remonte au parent.</p>
+
+  <h2>4. Cycle de vie, watch et computed</h2>
+  <h3>29. Qu'est-ce que le cycle de vie d'un composant ?</h3><p class="answer"><strong>Réponse :</strong> Ce sont les étapes de création, montage, mise à jour et destruction du composant.</p>
+  <h3>30. À quoi sert <code>mounted</code> ou <code>onMounted</code> ?</h3><p class="answer"><strong>Réponse :</strong> À exécuter du code lorsque le composant est inséré dans la page.</p>
+  <h3>31. À quoi sert <code>beforeUnmount</code> ?</h3><p class="answer"><strong>Réponse :</strong> À nettoyer les ressources avant la destruction, par exemple arrêter le <code>setInterval</code> du timer.</p>
+  <h3>32. À quoi sert <code>watch</code> ?</h3><p class="answer"><strong>Réponse :</strong> À observer une donnée et exécuter une action lorsqu'elle change. Ici, le changement de <code>userId</code> déclenche <code>refresh()</code>.</p>
+  <h3>33. Que signifie <code>immediate: true</code> ?</h3><p class="answer"><strong>Réponse :</strong> Le watcher est exécuté immédiatement au démarrage, sans attendre un premier changement.</p>
+  <h3>34. Quand utiliser <code>computed</code> plutôt qu'une méthode ?</h3><p class="answer"><strong>Réponse :</strong> Pour une valeur dérivée de données réactives. Vue la recalcule seulement lorsque ses dépendances changent.</p>
+  <h3>35. Que fait le computed <code>loading</code> dans <code>ClockManager</code> ?</h3><p class="answer"><strong>Réponse :</strong> Il vaut <code>true</code> si une lecture ou une sauvegarde est en cours : <code>fetching || saving</code>.</p>
+
+  <h2>5. API, erreurs et logique de ClockManager</h2>
+  <h3>36. Pourquoi utiliser <code>async</code> et <code>await</code> ?</h3><p class="answer"><strong>Réponse :</strong> Les requêtes API sont asynchrones. <code>await</code> attend leur résultat avant de poursuivre la fonction.</p>
+  <h3>37. Quel est le rôle de <code>try/catch/finally</code> ?</h3><p class="answer"><strong>Réponse :</strong> <code>try</code> tente l'opération, <code>catch</code> traite l'erreur et <code>finally</code> s'exécute dans tous les cas.</p>
+  <h3>38. Que fait <code>refresh()</code> ?</h3><p class="answer"><strong>Réponse :</strong> Elle récupère les pointages, examine le dernier, met à jour <code>clockIn</code> et <code>startDateTime</code>, puis démarre le timer si nécessaire.</p>
+  <h3>39. Pourquoi utiliser <code>ready</code> ?</h3><p class="answer"><strong>Réponse :</strong> Pour distinguer un état connu d'un état encore incertain. Le bouton est bloqué tant que l'état réel n'est pas récupéré.</p>
+  <h3>40. Quelle est la différence entre <code>fetching</code>, <code>saving</code> et <code>ready</code> ?</h3><p class="answer"><strong>Réponse :</strong> <code>fetching</code> indique une lecture API, <code>saving</code> une sauvegarde, et <code>ready</code> indique que l'état obtenu est fiable.</p>
+  <h3>41. Que fait <code>status: !this.clockIn</code> ?</h3><p class="answer"><strong>Réponse :</strong> Le <code>!</code> inverse le booléen : hors service devient arrivée (<code>true</code>) et en service devient sortie (<code>false</code>).</p>
+  <h3>42. Pourquoi utiliser <code>requestVersion</code> ?</h3><p class="answer"><strong>Réponse :</strong> Pour ignorer une ancienne réponse API qui arriverait après une requête plus récente.</p>
+  <h3>43. Pourquoi vérifier l'utilisateur dans <code>isCurrentRequest</code> ?</h3><p class="answer"><strong>Réponse :</strong> Pour ne pas appliquer à l'utilisateur actuel une réponse qui concerne l'ancien utilisateur.</p>
+  <h3>44. Pourquoi ne pas recharger toute la page après un pointage ?</h3><p class="answer"><strong>Réponse :</strong> On rafraîchit seulement les données nécessaires, ce qui est plus rapide et conserve l'état de l'application.</p>
+  <h3>45. Que faire après une erreur de sauvegarde ?</h3><p class="answer"><strong>Réponse :</strong> Mettre l'état en doute avec <code>ready = false</code>, afficher une erreur et demander un rafraîchissement avant de réessayer, car l'enregistrement a peut-être réussi malgré l'erreur réseau.</p>
+
+  <div class="final"><strong>Réponse globale à retenir :</strong><br>Vue permet de construire une interface réactive avec des composants. Dans ce projet, <code>App.vue</code> coordonne l'application et <code>ClockManager.vue</code> gère le pointage, les appels API, les états de chargement et la communication avec le parent.</div>
+</body>
+</html>
