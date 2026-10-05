@@ -1,16 +1,16 @@
 <template>
-  <LoginScreen v-if="!session" :theme="theme" @update:theme="setTheme" @login="login" />
+  <RouterView v-if="!user || $route.meta.public" />
 
   <div v-else class="shell">
-    <AppSidebar :role="session.role" :theme="theme" :space="persona.space" :user-id="userId" @update:theme="setTheme" @update:role="switchRole">
-      <User :key="session.role" :persona="persona" :user-id="userId" @update:user-id="setUser" @loaded="onUserLoaded" @logout="logout" />
+    <AppSidebar :role="user.role" :theme="theme" :space="persona.space" :user-id="userId" @update:theme="setTheme">
+      <User :user="user" @logout="logout" />
     </AppSidebar>
 
     <main class="main">
       <WorkingTimes
-        v-if="isOverlay && userId"
+        v-if="isOverlay && overlayUserId"
         ref="list"
-        :userID="userId"
+        :userID="overlayUserId"
         :week="week"
         :username="persona.username"
         @changed="loadStats"
@@ -36,9 +36,9 @@ import AppSidebar from './components/layout/AppSidebar.vue'
 import OnboardingTour from './components/ui/OnboardingTour.vue'
 import { personaFor } from './services/orgService'
 import { getWorkingTimes } from './services/workingTimeService'
+import { auth, logout } from './stores/auth'
 import { durationInHours } from './utils/date'
-import { applyTheme, homeFor, readSession, readStorage, readTheme, writeSession, writeStorage, writeTheme } from './utils/session'
-import LoginScreen from './views/LoginScreen.vue'
+import { applyTheme, readStorage, readTheme, writeStorage, writeTheme } from './utils/session'
 
 const OVERLAY_ROUTES = ['workingTimeCreate', 'workingTimeEdit']
 const TOUR_KEY = 'tm-tour-seen'
@@ -46,20 +46,17 @@ const TOUR_KEY = 'tm-tour-seen'
 const TOUR_STEPS = [
   { title: 'Pointer, c’est un seul geste', text: 'Touchez le grand rond en arrivant, puis en partant. Le reste se calcule tout seul.' },
   { title: 'Chaque heure a sa couleur', text: 'Jour, nuit ×1,5, astreinte, heures sup. ×2 : la même couleur du planning à la fiche de paie.' },
-  { title: 'Une erreur ? Corrigez-la', text: 'Chaque journée se corrige pendant 7 jours depuis « Mes heures ». Votre manager voit la correction et sa raison.' },
+  { title: 'Une erreur ? Signalez-la', text: 'Votre manager corrige la journée concernée. Vous voyez la correction dans « Mes heures », avec son auteur.' },
 ]
 
 export default {
   name: 'App',
 
-  components: { AppSidebar, LoginScreen, OnboardingTour, RouterView, ToastStack, User, WorkingTimes },
+  components: { AppSidebar, OnboardingTour, RouterView, ToastStack, User, WorkingTimes },
 
   data() {
     return {
-      session: null,
       theme: 'light',
-      userId: null,
-      currentUser: null,
       workingTimes: [],
       loadingStats: false,
       tourOpen: false,
@@ -69,8 +66,26 @@ export default {
   },
 
   computed: {
+    // The logged-in user, from GET /api/auth/me or the login response.
+    user() {
+      return auth.user
+    },
+
+    userId() {
+      return this.user ? this.user.id : null
+    },
+
+    // Demo content (planning, payroll...) still comes from the mocks; the
+    // identity is the real user's.
     persona() {
-      return personaFor(this.session && this.session.role)
+      const mock = personaFor(this.user && this.user.role === 'administrator' ? 'admin' : this.user && this.user.role)
+      if (!this.user) return mock
+
+      return { ...mock, username: this.user.username, email: this.user.email, name: this.user.username }
+    },
+
+    overlayUserId() {
+      return this.$route.params.userid || this.userId
     },
 
     isOverlay() {
@@ -126,15 +141,15 @@ export default {
   },
 
   watch: {
-    userId() {
-      this.loadStats()
+    userId: {
+      immediate: true,
+      handler(id) {
+        this.loadStats()
+        // The theme may have been picked on the login page.
+        this.setTheme(readTheme())
+        this.tourOpen = Boolean(id) && this.user.role === 'employee' && !readStorage(TOUR_KEY)
+      },
     },
-  },
-
-  created() {
-    this.session = readSession()
-    this.setTheme(readTheme())
-    if (this.session && this.session.role === 'employee' && !readStorage(TOUR_KEY)) this.tourOpen = true
   },
 
   mounted() {
@@ -174,42 +189,16 @@ export default {
       if (this.$refs.list) await this.$refs.list.getWorkingTimes()
     },
 
-    setUser(id) {
-      this.userId = id
-    },
-
-    onUserLoaded(user) {
-      this.currentUser = user
-    },
-
     setTheme(theme) {
       this.theme = theme
       applyTheme(theme)
       writeTheme(theme)
     },
 
-    login(role) {
-      this.session = { role }
-      writeSession(this.session)
-      this.$router.push(homeFor(role))
-      if (role === 'employee' && !readStorage(TOUR_KEY)) this.tourOpen = true
-    },
-
-    logout() {
-      this.session = null
-      this.userId = null
+    async logout() {
       this.tourOpen = false
-      writeSession(null)
+      await logout()
       this.$router.push({ name: 'login' })
-    },
-
-    switchRole(role) {
-      if (role === this.session.role) return
-
-      this.userId = null
-      this.session = { role }
-      writeSession(this.session)
-      this.$router.push(homeFor(role))
     },
 
     openTour() {

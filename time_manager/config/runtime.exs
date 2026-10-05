@@ -23,6 +23,27 @@ end
 config :time_manager, TimeManagerWeb.Endpoint,
   http: [port: String.to_integer(System.get_env("PORT", "4000"))]
 
+# Key used to sign the session JWTs (HS256). It must be secret, long and random:
+# generate one with `mix phx.gen.secret`. Development and tests fall back to a
+# fixed key, so that they work without any setup; never deploy without JWT_SECRET.
+jwt_secret =
+  case {System.get_env("JWT_SECRET"), config_env()} do
+    {secret, _env} when is_binary(secret) and byte_size(secret) >= 32 ->
+      secret
+
+    {_missing, env} when env in [:dev, :test] ->
+      "dev-only-jwt-secret-do-not-use-in-production-0000"
+
+    _ ->
+      raise "environment variable JWT_SECRET is missing or shorter than 32 characters"
+  end
+
+config :joken, default_signer: jwt_secret
+
+# The session cookie only travels over HTTPS when COOKIE_SECURE=true. Enable it
+# as soon as the site is served in HTTPS: browsers drop Secure cookies over HTTP.
+config :time_manager, :auth_cookie_secure, System.get_env("COOKIE_SECURE") in ~w(true 1)
+
 if config_env() == :prod do
   database_url =
     System.get_env("DATABASE_URL") ||

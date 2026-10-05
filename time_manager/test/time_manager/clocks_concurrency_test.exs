@@ -13,7 +13,13 @@ defmodule TimeManager.ClocksConcurrencyTest do
   setup do
     user =
       Sandbox.unboxed_run(Repo, fn ->
-        Repo.insert!(%User{username: "clock_concurrency", email: "concurrency@example.test"})
+        role = TimeManager.Accounts.get_role_by_name("employee")
+
+        Repo.insert!(%User{
+          username: "clock_concurrency",
+          email: "concurrency@example.test",
+          role_id: role.id
+        })
       end)
 
     on_exit(fn ->

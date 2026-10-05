@@ -47,3 +47,6 @@ export function greeting(date = new Date()) {
 }
 
 export const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
+// Same rule as the API (TimeManager.Accounts.User).
+export const PASSWORD_MIN_LENGTH = 8

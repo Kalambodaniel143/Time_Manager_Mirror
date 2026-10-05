@@ -23,6 +23,28 @@ defmodule TimeManagerWeb.FallbackController do
     |> render(:"404")
   end
 
+  # Not authenticated: missing or invalid session.
+  def call(conn, {:error, :unauthorized}) do
+    conn
+    |> put_status(:unauthorized)
+    |> put_view(json: TimeManagerWeb.ErrorJSON)
+    |> render(:"401")
+  end
+
+  # Authenticated, but outside the user's permissions.
+  def call(conn, {:error, :forbidden}) do
+    conn
+    |> put_status(:forbidden)
+    |> put_view(json: TimeManagerWeb.ErrorJSON)
+    |> render(:"403")
+  end
+
+  def call(conn, {:error, :last_administrator}) do
+    conn
+    |> put_status(:conflict)
+    |> json(%{errors: %{detail: "The last administrator cannot be demoted or deleted"}})
+  end
+
   def call(conn, {:error, :bad_request}) do
     conn
     |> put_status(:bad_request)

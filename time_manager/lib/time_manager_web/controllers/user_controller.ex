@@ -2,10 +2,13 @@ defmodule TimeManagerWeb.UserController do
   use TimeManagerWeb, :controller
   use OpenApiSpex.ControllerSpecs
 
+  import TimeManagerWeb.Authz
+
   alias TimeManager.Accounts
   alias TimeManager.Accounts.User
-  alias TimeManagerWeb.Schemas.{ErrorResponse, UserRequest, UserResponse, UsersResponse}
-  alias TimeManagerWeb.Schemas.ValidationErrorResponse
+  alias TimeManager.Authorization
+  alias TimeManagerWeb.Schemas.{ErrorResponse, RoleRequest, UserRequest, UserResponse}
+  alias TimeManagerWeb.Schemas.{UsersResponse, ValidationErrorResponse}
 
   action_fallback TimeManagerWeb.FallbackController
 
@@ -13,6 +16,9 @@ defmodule TimeManagerWeb.UserController do
 
   operation(:index,
     summary: "List users",
+    description:
+      "Administrators see everyone, managers see the members of the teams they manage " <>
+        "(and themselves). Employees get 403.",
     parameters: [
       email: [in: :query, type: :string, required: false, description: "Filter by exact email"],
       username: [
@@ -23,32 +29,43 @@ defmodule TimeManagerWeb.UserController do
       ]
     ],
     responses: [
-      ok: {"Users list", "application/json", UsersResponse}
+      ok: {"Users list", "application/json", UsersResponse},
+      forbidden: {"Not allowed", "application/json", ErrorResponse}
     ]
   )
 
   def index(conn, params) do
-    users = Accounts.list_users(params)
-    json(conn, %{data: Enum.map(users, &user_to_json/1)})
+    case Authorization.user_scope(current_user(conn)) do
+      :forbidden -> {:error, :forbidden}
+      scope -> render(conn, :index, users: Accounts.list_users(params, scope))
+    end
   end
 
   operation(:create,
-    summary: "Create a user",
+    summary: "Create a user (administrator)",
     request_body: {"User attributes", "application/json", UserRequest},
     responses: [
       created: {"User created", "application/json", UserResponse},
+      forbidden: {"Not allowed", "application/json", ErrorResponse},
       unprocessable_entity: {"Validation errors", "application/json", ValidationErrorResponse}
     ]
   )
 
-  def create(conn, %{"user" => user_params}) do
-    with {:ok, %User{} = user} <- Accounts.create_user(user_params) do
+  def create(conn, %{"user" => user_params}) when is_map(user_params) do
+    with :ok <- authorize(Authorization.administrator?(current_user(conn))),
+         {:ok, %User{} = user} <-
+           Accounts.create_user(
+             Map.take(user_params, ["username", "email", "password"]),
+             Map.get(user_params, "role", "employee")
+           ) do
       conn
       |> put_status(:created)
       |> put_resp_header("location", ~p"/api/users/#{user}")
       |> render(:show, user: user)
     end
   end
+
+  def create(_conn, _params), do: {:error, :bad_request}
 
   operation(:show,
     summary: "Get a user by ID",
@@ -57,105 +74,118 @@ defmodule TimeManagerWeb.UserController do
     ],
     responses: [
       ok: {"User", "application/json", UserResponse},
+      forbidden: {"Outside the caller's scope", "application/json", ErrorResponse},
       not_found: {"User not found", "application/json", ErrorResponse}
     ]
   )
 
   def show(conn, %{"id" => id}) do
-    case Accounts.fetch_user(id) do
-      {:ok, %User{} = user} ->
-        json(conn, %{data: user_to_json(user)})
-
-      {:error, :not_found} ->
-        conn
-        |> put_status(:not_found)
-        |> json(%{error: "User not found"})
+    with {:ok, id} <- cast_id(id),
+         :ok <- authorize(Authorization.can_view?(current_user(conn), id)),
+         {:ok, %User{} = user} <- Accounts.fetch_user(id) do
+      render(conn, :show, user: user)
     end
   end
 
-  # def update(conn, %{"id" => id, "user" => user_params}) do
-  #   with {:ok, %User{} = user} <- Accounts.fetch_user(id), {:ok, %User{} = updated_user} <- Accounts.update_ser(user, user_parames) do
-  #     json(conn, %{data: user_to_json(updated_user)})
-  #   else
-  #     {:error, :not_found} ->
-  #       conn
-  #       |>put_status(:not_found)
-  #       |> json(%{error: "user not found"})
-  #   end
-  # end
-
   operation(:update,
     summary: "Update a user",
+    description:
+      "Yourself or, for an administrator, anyone. Only username, email and password are " <>
+        "read: the role has its own route.",
     parameters: [
       id: [in: :path, type: :integer, description: "User ID", example: 1]
     ],
     request_body: {"User attributes", "application/json", UserRequest},
     responses: [
       ok: {"User updated", "application/json", UserResponse},
+      forbidden: {"Not allowed", "application/json", ErrorResponse},
       not_found: {"User not found", "application/json", ErrorResponse},
       unprocessable_entity: {"Validation errors", "application/json", ValidationErrorResponse}
     ]
   )
 
-  def update(conn, %{"id" => id, "user" => user_params}) do
-    with {:ok, %User{} = user} <- Accounts.fetch_user(id),
-         {:ok, %User{} = updated_user} <- Accounts.update_user(user, user_params) do
-      json(conn, %{data: user_to_json(updated_user)})
-    else
-      {:error, :not_found} ->
-        conn
-        |> put_status(:not_found)
-        |> json(%{error: "Utilisateur non trouvé"})
+  def update(conn, %{"id" => id, "user" => user_params}) when is_map(user_params) do
+    me = current_user(conn)
 
-      {:error, %Ecto.Changeset{} = changeset} ->
-        conn
-        |> put_status(:unprocessable_entity)
-        |> json(%{errors: format_errors(changeset)})
+    with {:ok, id} <- cast_id(id),
+         :ok <- authorize(Authorization.can_edit_profile?(me, id)),
+         {:ok, %User{} = user} <- Accounts.fetch_user(id),
+         {:ok, user} <-
+           Accounts.update_account(
+             user,
+             Map.take(user_params, ["username", "email"]),
+             password_change(me, user, user_params)
+           ) do
+      render(conn, :show, user: user)
     end
   end
 
+  def update(_conn, _params), do: {:error, :bad_request}
+
+  operation(:update_role,
+    summary: "Promote or demote a user (administrator)",
+    description:
+      "Administrators only, never on themselves. The last administrator cannot be demoted. " <>
+        "The new role applies from the user's next request.",
+    parameters: [
+      id: [in: :path, type: :integer, description: "User ID", example: 1]
+    ],
+    request_body: {"New role", "application/json", RoleRequest},
+    responses: [
+      ok: {"User updated", "application/json", UserResponse},
+      forbidden: {"Not allowed", "application/json", ErrorResponse},
+      not_found: {"User not found", "application/json", ErrorResponse},
+      conflict: {"Last administrator", "application/json", ErrorResponse},
+      unprocessable_entity: {"Unknown role", "application/json", ValidationErrorResponse}
+    ]
+  )
+
+  def update_role(conn, %{"id" => id, "role" => role}) do
+    me = current_user(conn)
+
+    with {:ok, id} <- cast_id(id),
+         :ok <- authorize(Authorization.administrator?(me) and me.id != id),
+         {:ok, %User{} = user} <- Accounts.fetch_user(id),
+         {:ok, user} <- Accounts.change_role(user, role) do
+      render(conn, :show, user: user)
+    end
+  end
+
+  def update_role(_conn, _params), do: {:error, :bad_request}
+
   operation(:delete,
-    summary: "Delete a user",
+    summary: "Delete a user (administrator)",
+    description: "Also deletes their clock events and working times.",
     parameters: [
       id: [in: :path, type: :integer, description: "User ID", example: 1]
     ],
     responses: [
       no_content: "User deleted",
-      not_found: {"User not found", "application/json", ErrorResponse}
+      forbidden: {"Not allowed", "application/json", ErrorResponse},
+      not_found: {"User not found", "application/json", ErrorResponse},
+      conflict: {"Last administrator", "application/json", ErrorResponse}
     ]
   )
 
   def delete(conn, %{"id" => id}) do
-    with {:ok, %User{} = user} <- Accounts.fetch_user(id),
+    with {:ok, id} <- cast_id(id),
+         :ok <- authorize(Authorization.administrator?(current_user(conn))),
+         {:ok, %User{} = user} <- Accounts.fetch_user(id),
          {:ok, %User{}} <- Accounts.delete_user(user) do
       send_resp(conn, :no_content, "")
-    else
-      {:error, :not_found} ->
-        conn
-        |> put_status(:not_found)
-        |> json(%{error: "Utilisateur non trouvé"})
-
-      {:error, _reason} ->
-        conn
-        |> put_status(:bad_request)
-        |> json(%{error: "Impossible de supprimer l'utilisateur"})
     end
   end
 
-  defp user_to_json(%User{} = user) do
-    %{
-      id: user.id,
-      email: user.email,
-      username: user.username,
-      inserted_at: user.inserted_at
-    }
+  # No password in the request: nothing to change. An administrator resets
+  # someone else's password; anyone changing their own must give the current one.
+  defp password_change(me, user, %{"password" => password} = params)
+       when is_binary(password) and password != "" do
+    if Authorization.administrator?(me) and me.id != user.id do
+      {:reset, password}
+    else
+      {:change, params["current_password"], password}
+    end
   end
 
-  defp format_errors(changeset) do
-    Ecto.Changeset.traverse_errors(changeset, fn {msg, opts} ->
-      Regex.replace(~r"%{(\w+)}", msg, fn _, key ->
-        opts |> Keyword.get(String.to_existing_atom(key), key) |> to_string()
-      end)
-    end)
-  end
+  defp password_change(_me, _user, _params), do: :none
 end

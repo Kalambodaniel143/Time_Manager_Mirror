@@ -6,12 +6,36 @@ defmodule TimeManagerWeb.Router do
     plug OpenApiSpex.Plug.PutApiSpec, module: TimeManagerWeb.ApiSpec
   end
 
-  scope "/api", TimeManagerWeb do
+  # Every protected request must carry the jwt cookie and a matching
+  # X-CSRF-Token header; the plug assigns conn.assigns.current_user.
+  pipeline :auth do
+    plug TimeManagerWeb.Plugs.Authenticate
+  end
+
+  # Public routes: the only ones reachable without a session.
+  scope "/api/auth", TimeManagerWeb do
     pipe_through :api
+
+    post "/login", AuthController, :login
+    post "/register", AuthController, :register
+  end
+
+  scope "/api", TimeManagerWeb do
+    pipe_through [:api, :auth]
+
+    get "/auth/me", AuthController, :me
+    post "/auth/logout", AuthController, :logout
+
+    get "/roles", RoleController, :index
+
+    resources "/teams", TeamController, except: [:new, :edit]
+    post "/teams/:id/members", TeamController, :add_member
+    delete "/teams/:id/members/:user_id", TeamController, :remove_member
 
     get "/clocks/:userID", ClockController, :index
     post "/clocks/:userID", ClockController, :create
     post "/clocks/:userID/:clockID/complete", ClockController, :complete
+    put "/users/:id/role", UserController, :update_role
     resources "/users", UserController, except: [:new, :edit]
 
     scope "/workingtime" do

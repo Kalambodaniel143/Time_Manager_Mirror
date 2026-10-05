@@ -15,11 +15,16 @@ defmodule TimeManagerWeb.UserJSON do
     %{data: data(user)}
   end
 
-  defp data(%User{} = user) do
+  @doc """
+  The public fields of a user. The password hash is never rendered.
+  """
+  def data(%User{} = user) do
     %{
       id: user.id,
       username: user.username,
-      email: user.email
+      email: user.email,
+      role: user.role.name,
+      inserted_at: user.inserted_at
     }
   end
 end

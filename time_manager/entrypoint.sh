@@ -14,6 +14,8 @@ echo "entrypoint: database is up"
 
 mix ecto.create
 mix ecto.migrate
+# Roles and the first administrator (ADMIN_EMAIL / ADMIN_PASSWORD); idempotent.
+mix run priv/repo/seeds.exs
 
 echo "entrypoint: starting Phoenix"
 exec mix phx.server
