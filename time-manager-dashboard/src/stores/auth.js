@@ -1,5 +1,6 @@
 import { reactive } from 'vue'
 import * as authService from '../services/authService'
+import { AUTH_USE_MOCK, getSession, logoutAccount } from '../services/organizationService'
 
 // The JWT lives in an HttpOnly cookie: page scripts can never read it. The
 // front-end only keeps the CSRF token returned at login, in memory and in
@@ -16,6 +17,7 @@ export const ROLE_LABELS = {
 
 export const auth = reactive({
   user: null,
+  organizationSession: null,
   csrfToken: readCsrf(),
   // True once we know whether a session exists (GET /auth/me answered).
   checked: false,
@@ -46,6 +48,15 @@ function startSession(session) {
   return session.user
 }
 
+// Organization demos use the same role checks as backend users.
+export function startOrganizationSession(session) {
+  writeCsrf(null)
+  auth.organizationSession = session
+  auth.user = { ...session.user, role: session.role === 'admin' ? 'administrator' : session.role }
+  auth.checked = true
+  return auth.user
+}
+
 export async function login(email, password) {
   return startSession(await authService.login(email, password))
 }
@@ -57,6 +68,11 @@ export async function register(attrs) {
 // Asks the API who is logged in. Without a CSRF token there is no usable
 // session, so the call is skipped.
 export async function fetchMe() {
+  if (AUTH_USE_MOCK) {
+    try { return startOrganizationSession(await getSession()) }
+    catch { clearSession(); return null }
+  }
+
   if (!auth.csrfToken) {
     auth.checked = true
     return null
@@ -74,7 +90,8 @@ export async function fetchMe() {
 
 export async function logout() {
   try {
-    await authService.logout()
+    if (auth.organizationSession) await logoutAccount()
+    else await authService.logout()
   } finally {
     clearSession()
   }
@@ -82,6 +99,7 @@ export async function logout() {
 
 // Forgets the session locally (logout, or a 401 from the API).
 export function clearSession() {
+  auth.organizationSession = null
   auth.user = null
   auth.checked = true
   writeCsrf(null)

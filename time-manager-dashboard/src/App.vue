@@ -1,9 +1,12 @@
 <template>
-  <RouterView v-if="!user || $route.meta.public" />
+  <RouterView v-if="!user || $route.meta.public" v-slot="{ Component }">
+    <component :is="Component" v-if="Component && $route.meta.public" v-bind="publicBindings" />
+  </RouterView>
 
   <div v-else class="shell">
-    <AppSidebar :role="user.role" :theme="theme" :space="persona.space" :user-id="userId" @update:theme="setTheme">
-      <User :user="user" @logout="logout" />
+    <AppSidebar :role="user.role" :theme="theme" :space="persona.space" :user-id="userId" :organization-access="Boolean(organizationSession)" @update:theme="setTheme">
+      <AccountIdentity v-if="organizationSession" :session="organizationSession" @logout="logout" />
+      <User v-else :user="user" @logout="logout" />
     </AppSidebar>
 
     <main class="main">
@@ -31,12 +34,14 @@
 import { RouterView } from 'vue-router'
 import ToastStack from './components/ToastStack.vue'
 import User from './components/User.vue'
+import AccountIdentity from './components/auth/AccountIdentity.vue'
+import { AUTH_USE_MOCK } from './services/organizationService'
 import WorkingTimes from './components/WorkingTimes.vue'
 import AppSidebar from './components/layout/AppSidebar.vue'
 import OnboardingTour from './components/ui/OnboardingTour.vue'
 import { personaFor } from './services/orgService'
 import { getWorkingTimes } from './services/workingTimeService'
-import { auth, logout } from './stores/auth'
+import { auth, logout, fetchMe, startOrganizationSession } from './stores/auth'
 import { durationInHours } from './utils/date'
 import { applyTheme, readStorage, readTheme, writeStorage, writeTheme } from './utils/session'
 
@@ -52,7 +57,7 @@ const TOUR_STEPS = [
 export default {
   name: 'App',
 
-  components: { AppSidebar, OnboardingTour, RouterView, ToastStack, User, WorkingTimes },
+  components: { AccountIdentity, AppSidebar, OnboardingTour, RouterView, ToastStack, User, WorkingTimes },
 
   data() {
     return {
@@ -71,7 +76,14 @@ export default {
       return auth.user
     },
 
+    organizationSession() { return auth.organizationSession },
+
+    publicBindings() {
+      return AUTH_USE_MOCK ? { theme: this.theme, onLogin: this.loginOrganization, 'onUpdate:theme': this.setTheme } : {}
+    },
+
     userId() {
+      if (this.organizationSession) return null
       return this.user ? this.user.id : null
     },
 
@@ -80,6 +92,7 @@ export default {
     persona() {
       const mock = personaFor(this.user && this.user.role === 'administrator' ? 'admin' : this.user && this.user.role)
       if (!this.user) return mock
+      if (this.organizationSession) return { ...mock, username: this.user.username, email: this.user.email, name: `${this.user.first_name} ${this.user.last_name}`, space: this.organizationSession.organization.name }
 
       return { ...mock, username: this.user.username, email: this.user.email, name: this.user.username }
     },
@@ -102,6 +115,7 @@ export default {
 
     routeProps() {
       const name = this.$route.name
+      if (name === 'organization') return { session: this.organizationSession }
 
       if (name === 'overview') {
         return { persona: this.persona, userId: this.userId, workingTimes: this.workingTimes, loading: this.loadingStats, now: this.now }
@@ -153,16 +167,32 @@ export default {
   },
 
   mounted() {
+    window.addEventListener('focus', this.refreshOrganizationSession)
     this.clock = setInterval(() => {
       this.now = new Date()
     }, 60000)
   },
 
   beforeUnmount() {
+    window.removeEventListener('focus', this.refreshOrganizationSession)
     clearInterval(this.clock)
   },
 
   methods: {
+    async refreshOrganizationSession() {
+      if (!this.organizationSession) return
+      await fetchMe()
+      if (!this.user) this.$router.push({ name: 'login' })
+      else if (this.$route.meta.roles && !this.$route.meta.roles.includes(this.user.role)) {
+        this.$router.push({ name: this.user.role === 'administrator' ? 'organization' : this.user.role === 'manager' ? 'team' : 'overview' })
+      }
+    },
+
+    loginOrganization(session) {
+      startOrganizationSession(session)
+      this.$router.push({ name: session.role === 'admin' ? 'organization' : session.role === 'manager' ? 'team' : 'overview' })
+    },
+
     sumHours(entries) {
       return entries.reduce((sum, entry) => sum + durationInHours(entry.start, entry.end), 0)
     },

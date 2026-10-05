@@ -58,6 +58,7 @@ export default {
   components: { AppIcon, RouterLink, SegmentedControl },
 
   props: {
+    organizationAccess: { type: Boolean, default: false },
     role: { type: String, required: true },
     theme: { type: String, required: true },
     space: { type: String, required: true },
@@ -86,6 +87,7 @@ export default {
 
       if (this.role === 'administrator') {
         return [
+          ...(this.organizationAccess ? [{ label: 'Mon organisation', icon: 'users', to: { name: 'organization' } }] : []),
           { label: 'Paie du mois', icon: 'check-circle', to: { name: 'payroll' } },
           { label: 'Utilisateurs et rôles', icon: 'shield', to: { name: 'adminUsers' } },
           { label: 'Équipes', icon: 'users', to: { name: 'adminTeams' } },

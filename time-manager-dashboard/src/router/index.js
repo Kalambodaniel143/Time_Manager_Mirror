@@ -1,5 +1,8 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import Authentication from '../components/Authentication.vue'
+import LoginScreen from '../views/LoginScreen.vue'
+import OrganizationAdmin from '../views/OrganizationAdmin.vue'
+import { AUTH_USE_MOCK } from '../services/organizationService'
 import ChartManager from '../components/ChartManager.vue'
 import ClockManager from '../components/ClockManager.vue'
 import Profile from '../components/Profile.vue'
@@ -28,8 +31,8 @@ const ADMINS = ['administrator']
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
-    { path: '/connexion', name: 'login', component: Authentication, meta: { public: true } },
-    { path: '/inscription', name: 'register', component: Registration, meta: { public: true } },
+    { path: '/connexion', name: 'login', component: AUTH_USE_MOCK ? LoginScreen : Authentication, meta: { public: true } },
+    { path: '/inscription', name: 'register', component: AUTH_USE_MOCK ? LoginScreen : Registration, meta: { public: true } },
     { path: '/profil', name: 'profile', component: Profile, meta: { roles: EVERYONE } },
     { path: '/', name: 'overview', component: EmployeeToday, meta: { roles: ['employee'] } },
     { path: '/planning', name: 'planning', component: EmployeePlanning, meta: { roles: ['employee'] } },
@@ -75,6 +78,7 @@ const router = createRouter({
     },
     { path: '/equipe', name: 'team', component: TeamOverview, meta: { roles: MANAGERS } },
     { path: '/equipe/planning', name: 'teamPlanning', component: TeamPlanning, meta: { roles: MANAGERS } },
+    { path: '/admin/organisation', name: 'organization', component: OrganizationAdmin, meta: { roles: ADMINS, organization: true } },
     { path: '/admin/paie', name: 'payroll', component: PayrollMonth, meta: { roles: ADMINS } },
     { path: '/admin/utilisateurs', name: 'adminUsers', component: AdminUsers, meta: { roles: ADMINS } },
     { path: '/equipes', name: 'adminTeams', component: AdminTeams, meta: { roles: MANAGERS } },
@@ -87,7 +91,7 @@ const router = createRouter({
 configureHttp({
   csrfToken: () => auth.csrfToken,
   onUnauthorized: () => {
-    if (!auth.user) return
+    if (!auth.user || auth.organizationSession) return
 
     clearSession()
     notify('Votre session a expiré. Reconnectez-vous.', 'error')
@@ -95,9 +99,13 @@ configureHttp({
   },
 })
 
+function sessionHome(role) {
+  return auth.organizationSession && role === 'administrator' ? { name: 'organization' } : homeFor(role)
+}
+
 function denied(role) {
   notify('Accès refusé : cette page ne fait pas partie de vos droits.', 'error')
-  return homeFor(role)
+  return sessionHome(role)
 }
 
 // Runs before every page change. It only improves the experience: the API
@@ -107,13 +115,15 @@ router.beforeEach(async (to) => {
 
   const user = auth.user
 
-  if (to.meta.public) return user ? homeFor(user.role) : true
+  if (to.meta.public) return user ? sessionHome(user.role) : true
   if (!user) return { name: 'login', query: to.fullPath === '/' ? {} : { redirect: to.fullPath } }
 
   // The home page of each space.
-  if (to.name === 'overview' && user.role !== 'employee') return homeFor(user.role)
+  if (to.name === 'overview' && user.role !== 'employee') return sessionHome(user.role)
 
   if (to.meta.roles && !to.meta.roles.includes(user.role)) return denied(user.role)
+
+  if (to.meta.organization && !auth.organizationSession) return sessionHome(user.role)
 
   const target = to.meta.userParam && to.params[to.meta.userParam]
   if (target && !isSelf(target)) {
