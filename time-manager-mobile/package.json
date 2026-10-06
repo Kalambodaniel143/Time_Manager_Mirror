@@ -1,0 +1,31 @@
+{
+  "name": "time-manager-mobile",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "build:cordova": "vite build --mode cordova",
+    "preview": "vite preview",
+    "cordova": "cordova",
+    "android:build": "npm run build:cordova && cordova build android",
+    "android:run": "npm run build:cordova && cordova run android"
+  },
+  "dependencies": {
+    "vue": "^3.5.42",
+    "vue-router": "^5.3.1"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^6.0.8",
+    "vite": "^8.2.2",
+    "cordova": "^12.0.0"
+  },
+  "engines": {
+    "node": "^22.18.0 || >=24.12.0"
+  },
+  "cordova": {
+    "platforms": [],
+    "plugins": {}
+  }
+}
