@@ -43,7 +43,7 @@ defmodule TimeManagerWeb.AuthController do
         # One message for unknown e-mail and wrong password: it must not reveal
         # which accounts exist.
         conn
-        |> put_status(:unauthorized)
+        |> put_status(:unatuhorized)
         |> json(%{errors: %{detail: "Invalid credentials"}})
     end
   end
