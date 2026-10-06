@@ -1,0 +1,44 @@
+:root {
+  font-family: system-ui, sans-serif;
+  color: #17233b;
+  background: #f2f5ff;
+  font-synthesis: none;
+  line-height: 1.5;
+}
+* { box-sizing: border-box; }
+body { margin: 0; min-width: 280px; }
+a { color: #0037cc; }
+button, input { font: inherit; }
+button, .button-link {
+  min-height: 48px; padding: 12px 16px;
+  border: 1px solid #0037cc; border-radius: 8px;
+  background: #0037cc; color: white;
+}
+.button-link { display: inline-block; text-decoration: none; }
+button:disabled { background: #e4e8f0; border-color: #c4ccda; color: #536078; cursor: not-allowed; }
+:focus-visible { outline: 3px solid #ba5a00; outline-offset: 3px; }
+.mobile-layout { max-width: 720px; margin: auto; }
+.page-header { padding: calc(20px + env(safe-area-inset-top)) 20px 8px; }
+.brand { color: #0037cc; font-weight: 700; margin: 0; }
+h1 { font-size: 1.75rem; margin: 8px 0; }
+h2 { font-size: 1.2rem; margin-top: 0; }
+.page-content { padding: 12px 20px calc(100px + env(safe-area-inset-bottom)); }
+.card { background: white; border: 1px solid #d6deed; border-radius: 12px; padding: 20px; }
+.muted { color: #536078; }
+.clock-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.bottom-tabs {
+  position: fixed; bottom: 0; left: 0; right: 0;
+  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
+  max-width: 720px; margin: auto; background: white;
+  border-top: 1px solid #d6deed; padding-bottom: env(safe-area-inset-bottom);
+}
+.bottom-tabs a {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 4px; min-height: 72px; padding: 8px 2px; text-decoration: none;
+  color: #536078; font-size: .8rem;
+}
+.bottom-tabs .app-icon { font-size: 1.4rem; }
+.bottom-tabs .router-link-active { background: #eef2ff; color: #0037cc; font-weight: 700; }
+.login-page { max-width: 480px; margin: auto; padding: calc(24px + env(safe-area-inset-top)) 20px; }
+.login-page form { display: grid; gap: 12px; margin: 20px 0; }
+input { min-height: 48px; width: 100%; padding: 10px; border: 1px solid #7a879e; border-radius: 6px; }
