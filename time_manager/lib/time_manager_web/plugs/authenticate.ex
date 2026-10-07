@@ -7,14 +7,16 @@ defmodule TimeManagerWeb.Plugs.Authenticate do
     * the `jwt` cookie (HttpOnly, set at login, sent by the browser), and
     * the `X-CSRF-Token` header (set by the front-end from the login response).
 
-  The JWT must be validly signed and not expired, and its `xsrf` claim must
-  match the header. A third-party site can make the browser send the cookie,
-  but cannot know the CSRF token, so it cannot forge a request.
+  The JWT must be validly signed, not expired and not revoked by a logout, and
+  its `xsrf` claim must match the header. A third-party site can make the
+  browser send the cookie, but cannot know the CSRF token, so it cannot forge a
+  request.
 
   The user and their role are then read from the database, not from the
   token: a demotion or a deleted account takes effect on the next request.
-  On success the user is assigned to `conn.assigns.current_user`; otherwise
-  the request stops with 401.
+  On success the user is assigned to `conn.assigns.current_user` (and the JWT
+  claims to `conn.assigns.session_claims`, used by the logout); otherwise the
+  request stops with 401.
   """
   import Plug.Conn
 
@@ -33,8 +35,11 @@ defmodule TimeManagerWeb.Plugs.Authenticate do
          {:ok, claims} <- Token.verify_and_validate(jwt),
          xsrf when is_binary(xsrf) <- claims["xsrf"],
          true <- Plug.Crypto.secure_compare(csrf, xsrf),
+         false <- Accounts.session_revoked?(claims["jti"]),
          {:ok, user} <- Accounts.fetch_user(claims["user_id"]) do
-      assign(conn, :current_user, user)
+      conn
+      |> assign(:current_user, user)
+      |> assign(:session_claims, claims)
     else
       _ -> unauthorized(conn)
     end

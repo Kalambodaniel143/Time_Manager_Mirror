@@ -12,13 +12,16 @@ defmodule TimeManagerWeb.UserController do
 
   action_fallback TimeManagerWeb.FallbackController
 
+  # The only fields a profile form may change (mass assignment).
+  @profile_fields ["username", "email", "first_name", "last_name"]
+
   tags(["users"])
 
   operation(:index,
     summary: "List users",
     description:
-      "Administrators see everyone, managers see the members of the teams they manage " <>
-        "(and themselves). Employees get 403.",
+      "Administrators see their organization, managers see the members of the teams they " <>
+        "manage (and themselves). Employees get 403.",
     parameters: [
       email: [in: :query, type: :string, required: false, description: "Filter by exact email"],
       username: [
@@ -35,14 +38,16 @@ defmodule TimeManagerWeb.UserController do
   )
 
   def index(conn, params) do
-    case Authorization.user_scope(current_user(conn)) do
+    me = current_user(conn)
+
+    case Authorization.user_scope(me) do
       :forbidden -> {:error, :forbidden}
-      scope -> render(conn, :index, users: Accounts.list_users(params, scope))
+      scope -> render(conn, :index, users: Accounts.list_users(params, scope), viewer: me)
     end
   end
 
   operation(:create,
-    summary: "Create a user (administrator)",
+    summary: "Create a user in the administrator's organization",
     request_body: {"User attributes", "application/json", UserRequest},
     responses: [
       created: {"User created", "application/json", UserResponse},
@@ -52,16 +57,19 @@ defmodule TimeManagerWeb.UserController do
   )
 
   def create(conn, %{"user" => user_params}) when is_map(user_params) do
-    with :ok <- authorize(Authorization.administrator?(current_user(conn))),
+    me = current_user(conn)
+
+    with :ok <- authorize(Authorization.administrator?(me)),
          {:ok, %User{} = user} <-
            Accounts.create_user(
-             Map.take(user_params, ["username", "email", "password"]),
-             Map.get(user_params, "role", "employee")
+             Map.take(user_params, @profile_fields ++ ["password"]),
+             Map.get(user_params, "role", "employee"),
+             me.organization_id
            ) do
       conn
       |> put_status(:created)
       |> put_resp_header("location", ~p"/api/users/#{user}")
-      |> render(:show, user: user)
+      |> render(:show, user: user, viewer: me)
     end
   end
 
@@ -80,18 +88,20 @@ defmodule TimeManagerWeb.UserController do
   )
 
   def show(conn, %{"id" => id}) do
+    me = current_user(conn)
+
     with {:ok, id} <- cast_id(id),
-         :ok <- authorize(Authorization.can_view?(current_user(conn), id)),
+         :ok <- authorize(Authorization.can_view?(me, id)),
          {:ok, %User{} = user} <- Accounts.fetch_user(id) do
-      render(conn, :show, user: user)
+      render(conn, :show, user: user, viewer: me)
     end
   end
 
   operation(:update,
     summary: "Update a user",
     description:
-      "Yourself or, for an administrator, anyone. Only username, email and password are " <>
-        "read: the role has its own route.",
+      "Yourself or, for an administrator, anyone in their organization. Only username, " <>
+        "email, first_name, last_name and password are read: the role has its own route.",
     parameters: [
       id: [in: :path, type: :integer, description: "User ID", example: 1]
     ],
@@ -113,10 +123,10 @@ defmodule TimeManagerWeb.UserController do
          {:ok, user} <-
            Accounts.update_account(
              user,
-             Map.take(user_params, ["username", "email"]),
+             Map.take(user_params, @profile_fields),
              password_change(me, user, user_params)
            ) do
-      render(conn, :show, user: user)
+      render(conn, :show, user: user, viewer: me)
     end
   end
 
@@ -125,8 +135,9 @@ defmodule TimeManagerWeb.UserController do
   operation(:update_role,
     summary: "Promote or demote a user (administrator)",
     description:
-      "Administrators only, never on themselves. The last administrator cannot be demoted. " <>
-        "The new role applies from the user's next request.",
+      "Administrators of the user's organization only, never on themselves. The last " <>
+        "administrator of an organization cannot be demoted. The new role applies from the " <>
+        "user's next request.",
     parameters: [
       id: [in: :path, type: :integer, description: "User ID", example: 1]
     ],
@@ -144,17 +155,17 @@ defmodule TimeManagerWeb.UserController do
     me = current_user(conn)
 
     with {:ok, id} <- cast_id(id),
-         :ok <- authorize(Authorization.administrator?(me) and me.id != id),
+         :ok <- authorize(Authorization.can_change_role?(me, id)),
          {:ok, %User{} = user} <- Accounts.fetch_user(id),
          {:ok, user} <- Accounts.change_role(user, role) do
-      render(conn, :show, user: user)
+      render(conn, :show, user: user, viewer: me)
     end
   end
 
   def update_role(_conn, _params), do: {:error, :bad_request}
 
   operation(:delete,
-    summary: "Delete a user (administrator)",
+    summary: "Delete a user of the administrator's organization",
     description: "Also deletes their clock events and working times.",
     parameters: [
       id: [in: :path, type: :integer, description: "User ID", example: 1]
@@ -169,7 +180,7 @@ defmodule TimeManagerWeb.UserController do
 
   def delete(conn, %{"id" => id}) do
     with {:ok, id} <- cast_id(id),
-         :ok <- authorize(Authorization.administrator?(current_user(conn))),
+         :ok <- authorize(Authorization.administrator_of?(current_user(conn), id)),
          {:ok, %User{} = user} <- Accounts.fetch_user(id),
          {:ok, %User{}} <- Accounts.delete_user(user) do
       send_resp(conn, :no_content, "")

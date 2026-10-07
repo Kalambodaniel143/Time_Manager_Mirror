@@ -342,6 +342,21 @@ Le module le plus subtil du backend, détaillé en [section 10](#10-les-pointage
 
 Le propriétaire d'une période vient toujours du code (`%WorkingTime{user_id: user_id}`) et jamais du corps de la requête : `user_id` n'est pas dans la liste des champs que le changeset accepte.
 
+### 6.8 `organizations.ex`, `organizations/*.ex` — organisations et demandes d'adhésion
+
+Ce contexte implémente [CONTRAT_BACKEND_ORGANISATIONS.md](CONTRAT_BACKEND_ORGANISATIONS.md). Les règles de validation du profil (prénom, nom, e-mail, genre, date et lieu de naissance) sont dans `accounts/profile.ex`, partagées par `User` et `JoinRequest`.
+
+| Fonction | Rôle |
+|---|---|
+| `create_organization/3` | Valide l'organisation et son administrateur ensemble (toutes les erreurs d'un coup), puis les insère dans une transaction. Nom ou e-mail déjà pris : `409`. |
+| `lookup_organization/1` | Cherche le nom normalisé exact (casse, accents et espaces successifs ignorés, comme `normalizeName` côté front). |
+| `submit_join_request/2` | Enregistre une demande `pending` sans compte ni mot de passe. Renvoie une référence aléatoire dont seule l'empreinte SHA-256 est stockée. |
+| `approve_join_request/4` | Verrouille la demande (`FOR UPDATE`), vérifie qu'elle est `pending`, crée l'employé et marque la demande, dans une transaction : deux acceptations simultanées ne créent qu'un compte. |
+| `reject_join_request/4` | Même verrou ; motif de 1 à 500 caractères, erreurs rapportées sur le champ `reason`. |
+| `set_member_role/3` | `employee` ou `manager` uniquement, jamais sur un administrateur. |
+
+Une demande en attente est unique par organisation et par e-mail grâce à un index unique partiel (`WHERE status = 'pending'`). Une demande refusée n'empêche donc pas d'en déposer une nouvelle.
+
 ---
 
 ## 7. La couche web, fichier par fichier
@@ -421,15 +436,15 @@ Front-end                                   Backend
 POST /api/auth/login
 { email, password }      ─────────────▶   Accounts.authenticate/2
                                             ├─ cherche l'e-mail (en minuscules)
-                                            └─ bcrypt, temps constant
+                                            └─ Argon2id, temps constant
                                           csrf = 32 octets aléatoires
-                                          jwt  = signe { user_id, role, xsrf: csrf, exp: +8 h }
+                                          jwt  = signe { user_id, role, xsrf: csrf, jti, exp: +8 h }
                          ◀─────────────   Set-Cookie: jwt=...; HttpOnly; SameSite=Strict; Max-Age=28800
-                                          200 { data: { csrf_token, user } }
+                                          200 { data: { csrf_token, role, user, organization } }
 garde csrf_token en mémoire
 ```
 
-L'inscription (`register`) suit le même chemin après avoir créé le compte, et répond **201**.
+L'inscription (`register`) et la création d'une organisation (`POST /api/organizations`) suivent le même chemin après avoir créé le compte, et répondent **201**. Un hash bcrypt antérieur au passage à Argon2id est vérifié avec bcrypt puis remplacé par un hash Argon2id, puisque le mot de passe est alors connu.
 
 ### 8.3 Chaque requête protégée
 
@@ -439,13 +454,21 @@ Le plug `Authenticate` exécute ces vérifications dans l'ordre ; la moindre err
 2. l'en-tête `X-CSRF-Token` est présent ;
 3. la signature HS256 est valide, le token n'est pas expiré, `iss` et `aud` sont corrects (`Token.verify_and_validate/1`) ;
 4. le claim `xsrf` est égal à l'en-tête, comparé en temps constant (`Plug.Crypto.secure_compare`) ;
-5. l'utilisateur `user_id` existe **encore** en base. Il est rechargé avec son rôle.
+5. le `jti` du JWT ne figure pas dans `revoked_tokens` (session fermée par une déconnexion) ;
+6. l'utilisateur `user_id` existe **encore** en base. Il est rechargé avec son rôle.
 
-Le point 5 est important : le rôle utilisé pour les autorisations est **celui de la base**, pas celui du token. Rétrograder un manager ou supprimer un compte prend effet dès la requête suivante, sans attendre l'expiration du JWT.
+Le point 6 est important : le rôle utilisé pour les autorisations est **celui de la base**, pas celui du token. Rétrograder un manager ou supprimer un compte prend effet dès la requête suivante, sans attendre l'expiration du JWT.
 
 ### 8.4 La déconnexion
 
-`POST /api/auth/logout` demande au navigateur de supprimer le cookie (mêmes options que lors de sa création, sinon le navigateur ne le reconnaît pas) et répond **204**.
+`POST /api/auth/logout` inscrit le `jti` du JWT dans la table `revoked_tokens` jusqu'à son expiration, puis demande au navigateur de supprimer le cookie (mêmes options que lors de sa création, sinon le navigateur ne le reconnaît pas) et répond **204**. Un JWT copié avant la déconnexion est donc refusé. Les entrées expirées sont purgées à chaque déconnexion.
+
+### 8.6 Les protections des routes publiques
+
+Les routes publiques (connexion, inscription, organisations, demandes d'adhésion) n'ont pas encore de token CSRF. Deux plugs les protègent :
+
+- `Plugs.CheckOrigin` (pipeline `:api`) refuse en **403** une requête d'écriture dont l'`Origin` ou le `Referer` désigne un autre hôte que celui de l'API ;
+- `Plugs.RateLimit` (déclaré dans chaque contrôleur) répond **429** au-delà d'un seuil par minute, par adresse IP ou, pour la connexion, aussi par e-mail. Les compteurs vivent dans une table ETS tenue par `TimeManagerWeb.RateLimiter`. La configuration de test le désactive (`config :time_manager, :rate_limit, false`).
 
 ### 8.5 Les options du cookie
 
@@ -470,17 +493,24 @@ Toute permission combine deux questions :
 |---|---|
 | `employee` | Lui-même |
 | `manager` | Lui-même + les membres des équipes qu'il dirige |
-| `administrator` | Tout le monde |
+| `administrator` | Son organisation |
+
+Les organisations sont étanches : aucun rôle n'atteint les données d'une autre. Les comptes sans organisation forment un espace à part : pour toutes les vérifications, « même organisation » inclut « tous deux sans organisation ».
 
 ### Les fonctions de `Authorization`
 
 | Fonction | Vrai quand… | Utilisée par |
 |---|---|---|
-| `can_view?(user, target_id)` | c'est soi-même, ou l'appelant est administrateur, ou il manage la cible | Lire un profil, des pointages, des périodes |
-| `can_edit_hours?(user, target_id)` | administrateur ; ou manager de la cible **et** la cible n'est pas lui-même | Créer, corriger, supprimer une période |
+| `can_view?(user, target_id)` | c'est soi-même, ou l'appelant administre l'organisation de la cible, ou il manage la cible | Lire un profil, des pointages, des périodes |
+| `can_edit_hours?(user, target_id)` | administrateur de l'organisation de la cible ; ou manager de la cible **et** la cible n'est pas lui-même | Créer, corriger, supprimer une période |
 | `can_clock?(user, target_id)` | c'est soi-même, quel que soit le rôle | Pointer, compléter un départ |
-| `can_edit_profile?(user, target_id)` | soi-même, ou administrateur | Modifier un profil |
-| `user_scope(user)` | `:all` (admin), liste d'ids (manager), `:forbidden` (employé) | Lister les utilisateurs |
+| `can_edit_profile?(user, target_id)` | soi-même, ou administrateur de l'organisation de la cible | Modifier un profil |
+| `can_change_role?(user, target_id)` | administrateur de l'organisation de la cible, jamais sur soi-même | Changer un rôle |
+| `administrator_of?(user, target_id)` | administrateur de l'organisation de la cible | Supprimer un compte |
+| `administrator_of_team?(user, team)` | administrateur de l'organisation de l'équipe | Gérer une équipe |
+| `organization_admin?(user, org_id)` | administrateur de l'organisation `org_id` (celle de l'URL) | Routes `/api/organizations/:org_id/…` |
+| `can_see_personal_details?(viewer, user)` | soi-même, ou administrateur de l'organisation de `user` | Afficher genre, date et lieu de naissance |
+| `user_scope(user)` | `{:organization, id}` (admin), liste d'ids (manager), `:forbidden` (employé) | Lister les utilisateurs |
 
 Deux règles méritent d'être expliquées :
 
@@ -733,8 +763,8 @@ Exemple : ajouter des « demandes de congé ».
 
 | Limite | Conséquence | Piste |
 |---|---|---|
-| Le JWT n'est pas révocable. | La déconnexion supprime le cookie du navigateur, mais un token copié avant reste valide jusqu'à son expiration (8 h). Un compte supprimé ou rétrogradé, lui, est bien bloqué ou restreint immédiatement, grâce au rechargement depuis la base. | Liste de révocation, ou numéro de version de session stocké sur l'utilisateur et comparé à chaque requête. |
-| Aucune limitation du nombre de tentatives de connexion. | Un attaquant peut essayer des mots de passe en boucle ; bcrypt ralentit chaque essai, sans le bloquer. | Limiteur par IP et par compte (par exemple avec Hammer). |
+| Les compteurs de tentatives sont en mémoire (ETS). | Ils repartent de zéro au redémarrage et ne sont pas partagés entre plusieurs instances. Derrière Nginx, tous les clients partagent l'adresse IP du proxy : seuls les seuils par e-mail restent fins. | Stockage partagé, et lecture de `X-Real-IP` une fois le port 4000 fermé au public. |
+| `/api/auth/register` crée un compte actif sans validation. | Le compte est isolé de toute organisation, mais il contourne le circuit des demandes d'adhésion. | Le supprimer quand le front utilise le circuit organisations. |
 | `COOKIE_SECURE` vaut `false` par défaut. | Sur un site en HTTP, le cookie circule en clair. | Servir en HTTPS et définir `COOKIE_SECURE=true`. |
 | L'image Docker tourne en `MIX_ENV=dev`. | Le rechargement de code et les messages d'erreur détaillés restent actifs sur le serveur. | Construire une release `MIX_ENV=prod` (`mix release`). |
 | Les corrections de périodes ne sont pas historisées. | Une période modifiée par un manager ne garde pas sa valeur d'origine. | Table d'audit (qui, quand, avant, après). |
