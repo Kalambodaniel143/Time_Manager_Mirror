@@ -67,6 +67,8 @@ export const NOTES = {
 
 export const RULES = {
   maxConsecutiveNights: 2,
+  maxNightsPerWeek: 0,
+  maxNightsPerMonth: 0,
   overtimeThreshold: 40,
   publishDaysAhead: 14,
 }
@@ -79,9 +81,9 @@ export const MANAGER_RIGHTS = [
 ]
 
 export const JOURNAL = [
-  { daysAgo: 3, time: '14:12', text: 'Omar C. peut publier le planning de l’équipe Nettoyage. Omar C. a été prévenu.' },
-  { daysAgo: 11, time: '16:05', text: 'Seuil de nuits d’affilée de la Police passé de 3 à 2, à la demande du chef Gordon. Les agents ont été prévenus.' },
-  { daysAgo: 18, time: '11:30', text: 'Lucie F. ne publie plus le planning (changement d’équipe). Lucie F. a été prévenue.' },
+  { daysAgo: 3, time: '14:12', text: 'Omar C. peut publier le planning de l’équipe Nettoyage. Exemple de changement de droit.' },
+  { daysAgo: 11, time: '16:05', text: 'Seuil de nuits d’affilée de la Police passé de 3 à 2, à la demande du chef Gordon. Exemple de changement de règle.' },
+  { daysAgo: 18, time: '11:30', text: 'Lucie F. ne publie plus le planning (changement d’équipe). Exemple de changement de droit.' },
 ]
 
 export const PAYROLL = [

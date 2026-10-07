@@ -11,7 +11,7 @@
       ></span>
       <span class="target" :style="{ left: `calc(${(target / scale) * 100}% - 3px)` }" aria-hidden="true"></span>
     </div>
-    <p class="caption">{{ totalLabel }} comptées sur {{ targetLabel }} prévues.</p>
+    <p class="caption">{{ totalLabel }} confirmées · seuil d’heures supplémentaires : {{ targetLabel }} / semaine.</p>
     <div class="legend">
       <HourTag v-for="segment in legend" :key="segment.kind" :kind="segment.kind" :hours="segment.hours" />
     </div>

@@ -81,4 +81,8 @@ export default {
   margin-top: 2px;
   font-size: 14px;
 }
+.info-note { margin: 0; padding: 18px 18px 18px 54px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface-muted); }
+.info-badge { top: 18px; left: 16px; width: 26px; height: 26px; }
+.info-text { font-size: 13px; }
+.info-title { font-size: 14px; }
 </style>

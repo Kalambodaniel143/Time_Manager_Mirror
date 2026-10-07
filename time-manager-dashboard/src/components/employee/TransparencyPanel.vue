@@ -12,7 +12,7 @@
       <li v-for="item in never" :key="item"><AppIcon name="eye-off" />{{ item }}</li>
     </ul>
 
-    <p class="footer">Chaque correction est tracée : qui, quand, pourquoi. Vous la voyez aussi.</p>
+    <p class="footer">Vos demandes de correction et leurs décisions restent visibles. Les horaires réels sont distingués des heures proposées.</p>
   </section>
 </template>
 
@@ -71,7 +71,7 @@ export default {
   gap: 8px;
   padding: 0;
   list-style: none;
-  font-size: 14.5px;
+  font-size: 13px;
 }
 
 .list li {

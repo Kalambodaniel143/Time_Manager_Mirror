@@ -4,12 +4,14 @@
   </RouterView>
 
   <div v-else class="shell">
+    <a class="skip-link" href="#main-content">Aller au contenu</a>
     <AppSidebar :role="user.role" :theme="theme" :space="persona.space" :user-id="userId" :organization-access="Boolean(organizationSession)" @update:theme="setTheme">
       <AccountIdentity v-if="organizationSession" :session="organizationSession" @logout="logout" />
       <User v-else :user="user" @logout="logout" />
     </AppSidebar>
 
-    <main class="main">
+    <main id="main-content" class="main" tabindex="-1">
+      <p v-if="organizationSession" class="demo-notice">Mode démonstration · vos comptes et actions restent dans ce navigateur.</p>
       <WorkingTimes
         v-if="isOverlay && overlayUserId"
         ref="list"
@@ -43,7 +45,7 @@ import { personaFor } from './services/orgService'
 import { getWorkingTimes } from './services/workingTimeService'
 import { auth, logout, fetchMe, startOrganizationSession } from './stores/auth'
 import { durationInHours } from './utils/date'
-import { applyTheme, readStorage, readTheme, writeStorage, writeTheme } from './utils/session'
+import { applyTheme, applyStrongText, readStrongText, readStorage, readTheme, writeStorage, writeTheme } from './utils/session'
 
 const OVERLAY_ROUTES = ['workingTimeCreate', 'workingTimeEdit']
 const TOUR_KEY = 'tm-tour-seen'
@@ -51,7 +53,7 @@ const TOUR_KEY = 'tm-tour-seen'
 const TOUR_STEPS = [
   { title: 'Pointer, c’est un seul geste', text: 'Touchez le grand rond en arrivant, puis en partant. Le reste se calcule tout seul.' },
   { title: 'Chaque heure a sa couleur', text: 'Jour, nuit ×1,5, astreinte, heures sup. ×2 : la même couleur du planning à la fiche de paie.' },
-  { title: 'Une erreur ? Signalez-la', text: 'Votre manager corrige la journée concernée. Vous voyez la correction dans « Mes heures », avec son auteur.' },
+  { title: 'Une erreur ? Signalez-la', text: 'Complétez un départ oublié ou proposez une correction depuis « Mes heures ». Votre responsable examine votre proposition avant de modifier les horaires.' },
 ]
 
 export default {
@@ -83,7 +85,6 @@ export default {
     },
 
     userId() {
-      if (this.organizationSession) return null
       return this.user ? this.user.id : null
     },
 
@@ -115,18 +116,20 @@ export default {
 
     routeProps() {
       const name = this.$route.name
+      if (name === 'profile') return { theme: this.theme }
       if (name === 'organization') return { session: this.organizationSession }
 
       if (name === 'overview') {
         return { persona: this.persona, userId: this.userId, workingTimes: this.workingTimes, loading: this.loadingStats, now: this.now }
       }
-      if (name === 'workingTimes') return { week: this.week, username: this.persona.username }
+      if (name === 'workingTimes') return { week: this.week, username: Number(this.$route.params.userID) === this.userId ? this.persona.username : '' }
       if (name === 'planning' || name === 'payroll' || name === 'team') return { now: this.now }
 
       return {}
     },
 
     routeListeners() {
+      if (this.$route.name === 'profile') return { 'onUpdate:theme': this.setTheme, onLogout: this.logout, onTour: this.openTour }
       if (this.$route.name === 'clock') return { onChanged: this.onPeriodsChanged }
 
       if (this.$route.name === 'workingTimes') return { onChanged: this.loadStats, onTour: this.openTour }
@@ -165,6 +168,8 @@ export default {
       },
     },
   },
+
+  created() { applyStrongText(readStrongText()) },
 
   mounted() {
     window.addEventListener('focus', this.refreshOrganizationSession)
@@ -250,13 +255,15 @@ export default {
 <style scoped>
 .shell {
   display: grid;
-  grid-template-columns: 284px minmax(0, 1fr);
+  grid-template-columns: 224px minmax(0, 1fr);
   min-height: 100vh;
 }
 
+.main > .demo-notice { margin-bottom: 20px; }
+
 .main {
   min-width: 0;
-  padding: 38px 42px 56px;
+  padding: 30px 34px 48px;
 }
 
 @media (max-width: 900px) {
@@ -265,7 +272,7 @@ export default {
   }
 
   .main {
-    padding: 24px 16px 48px;
+    padding: 22px 16px calc(98px + env(safe-area-inset-bottom));
   }
 }
 </style>

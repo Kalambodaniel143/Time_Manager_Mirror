@@ -21,13 +21,11 @@
           <p class="clock-state serif">{{ stateLabel }}</p>
           <p class="clock-since num">{{ startDateLabel }}</p>
           <!-- En pause, le temps travaillé reste affiché mais n'avance plus. -->
-          <p v-if="ready && (clockIn || onBreak)" class="clock-elapsed">
-            Temps travaillé :
-            <span class="num" role="timer" aria-live="off">{{ elapsedTime }}</span>
-          </p>
+
         </div>
       </div>
 
+      <div class="mobile-clock-time"><span>Heure actuelle</span><strong class="num">{{ currentTimeLabel }}</strong></div>
       <!-- @click appelle une méthode ; :disabled empêche de cliquer pendant l'attente. -->
       <button
         class="btn clock-btn"
@@ -40,6 +38,7 @@
           <circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-width="1.5" />
           <path d="M8 5v3.2l2 1.3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
         </svg>
+        <strong class="clock-counter num" role="timer" aria-live="off">{{ elapsedTime }}</strong>
         <span>{{ clockButtonLabel }}</span>
       </button>
 
@@ -67,6 +66,7 @@
 // SCRIPT : les données du composant et les actions qui les mettent à jour.
 // Le service réalise les requêtes HTTP. L'utilitaire prépare les dates en UTC.
 import { getClocks, createClock } from '../services/clockService'
+import { clockDate } from '../utils/missingDeparture'
 import { formatClockDate } from '../utils/clockDate'
 
 export default {
@@ -106,6 +106,7 @@ export default {
 
   // Valeurs calculées automatiquement à partir des données ci-dessus.
   computed: {
+    currentTimeLabel() { return new Date(this.currentTime).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) },
     loading() {
       // On attend si une lecture OU un enregistrement est en cours.
       return this.fetching || this.saving
@@ -145,7 +146,8 @@ export default {
     startDateLabel() {
       if (this.ready) {
         if (this.onBreak) return 'Le compteur reprendra à votre retour.'
-        return this.clockIn ? `Depuis ${this.startDateTime}` : 'Aucune période en cours'
+        if (!this.clockIn) return 'Aucune période en cours'
+        try { return `Depuis le ${clockDate(this.startDateTime).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' })}` } catch { return 'Heure de début indisponible' }
       }
       if (this.loading) {
         return 'Chargement…'
@@ -440,5 +442,24 @@ button:disabled {
 .clock-error {
   color: var(--danger);
   font-size: 13px;
+}
+.clock-counter { font-size: 32px; letter-spacing: -.04em; }
+.clock-btn { background: var(--surface); border: 4px solid var(--brand); color: var(--title); width: 200px; padding: 18px; font-size: 12px; gap: 8px; }
+.clock-btn:hover:not(:disabled) { background: var(--brand-soft); }
+.clock-btn svg { width: 24px; height: 24px; }
+.clock-status { padding: 0; background: none; justify-content: center; }
+.clock-state { font-size: 14px; }
+.clock-status .clock-since { font-size: 12px; }
+.mobile-clock-time { display: none; }
+@media (max-width: 760px) {
+ .clock-body { margin: 0 16px 16px; padding: 22px 16px; background: var(--side-bg); color: var(--side-ink); border-radius: var(--radius); }
+ .mobile-clock-time { display: flex; flex-direction: column; text-align: center; text-transform: uppercase; font-size: 10px; color: var(--side-muted); }
+ .mobile-clock-time strong { color: var(--side-ink); font-size: 42px; line-height: 1.3; }
+ .clock-state, .clock-since { color: var(--side-ink); }
+ .clock-btn { width: 100%; aspect-ratio: auto; border: 0; border-radius: 8px; padding: 16px; background: #fff; color: #24584f; font-size: 14px; }
+ .clock-counter { font-size: 26px; }
+ .clock-body > .btn-outline { background: transparent; color: var(--side-ink); border-color: var(--side-muted); }
+ .clock-body .refresh, .clock-break-note { color: var(--side-muted); }
+ .clock-error { background: var(--surface); padding: 10px; border-radius: 6px; }
 }
 </style>

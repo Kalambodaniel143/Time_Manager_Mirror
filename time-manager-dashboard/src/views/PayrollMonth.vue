@@ -3,10 +3,11 @@
     <PageHeader :eyebrow="`${monthName} · ${data.rows.length} services`" :title="`Paie de ${monthName}`">
       <button class="btn btn-primary" type="button" @click="exportCsv">
         <AppIcon name="check" />
-        Exporter vers la paie
+        Télécharger le relevé CSV
       </button>
     </PageHeader>
 
+    <p class="demo-notice">Relevé d’exemple · ces valeurs ne sont pas calculées à partir des comptes de votre organisation. Le téléchargement ne transmet rien à un logiciel de paie.</p>
     <div class="kpis">
       <article v-for="kpi in kpis" :key="kpi.kind" class="kpi card">
         <HourTag :kind="kpi.kind" />
@@ -173,4 +174,6 @@ export default {
     grid-template-columns: 1fr;
   }
 }
+.demo-notice { margin-bottom: 20px; }
+.kpi-value { font-size: 30px; }
 </style>
