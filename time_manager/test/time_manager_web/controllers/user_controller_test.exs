@@ -55,9 +55,12 @@ defmodule TimeManagerWeb.UserControllerTest do
       assert json_response(conn, 403)
     end
 
-    test "404 for a missing or malformed id", %{conn: conn, admin: admin} do
+    test "403 for an id outside the organization, 404 for a malformed one",
+         %{conn: conn, admin: admin} do
       conn = log_in(conn, admin)
-      assert json_response(get(conn, ~p"/api/users/0"), 404)
+      # A missing id is outside the administrator's organization, like an id of
+      # another organization: same answer, so ids cannot be enumerated.
+      assert json_response(get(conn, ~p"/api/users/0"), 403)
       assert json_response(get(conn, ~p"/api/users/not-an-id"), 404)
     end
   end
@@ -140,10 +143,10 @@ defmodule TimeManagerWeb.UserControllerTest do
       assert {:ok, _} = TimeManager.Accounts.authenticate(ctx.member.email, "reset password")
     end
 
-    test "invalid data: 422; missing user: 404", %{conn: conn, admin: admin} do
+    test "invalid data: 422; missing user: 403", %{conn: conn, admin: admin} do
       conn = log_in(conn, admin)
       assert json_response(put(conn, ~p"/api/users/#{admin}", user: %{email: "bad"}), 422)
-      assert json_response(put(conn, ~p"/api/users/0", user: %{username: "x"}), 404)
+      assert json_response(put(conn, ~p"/api/users/0", user: %{username: "x"}), 403)
     end
   end
 

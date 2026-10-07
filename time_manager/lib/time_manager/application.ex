@@ -12,6 +12,8 @@ defmodule TimeManager.Application do
       TimeManager.Repo,
       {DNSCluster, query: Application.get_env(:time_manager, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: TimeManager.PubSub},
+      # Counters of the rate limits on the public routes
+      TimeManagerWeb.RateLimiter,
       # Start a worker by calling: TimeManager.Worker.start_link(arg)
       # {TimeManager.Worker, arg},
       # Start to serve requests, typically the last entry

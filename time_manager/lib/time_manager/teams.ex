@@ -3,6 +3,9 @@ defmodule TimeManager.Teams do
   Teams, their manager and their members. An employee can belong to several
   teams; each team has at most one manager (`teams.manager_id`).
 
+  A team belongs to the organization of the administrator who created it. Its
+  manager and its members must belong to the same organization.
+
   Composing teams and naming managers is an administrator task: a manager able
   to add people to their team would gain access to those people's hours.
   """
@@ -16,9 +19,9 @@ defmodule TimeManager.Teams do
 
   @manager_roles ~w(manager administrator)
 
-  @doc "All teams, with manager and members."
-  def list_teams do
-    Team |> order_by(:name) |> Repo.all() |> preload_team()
+  @doc "All teams of an organization (`nil`: teams without organization), with manager and members."
+  def list_teams(organization_id) do
+    Team |> in_organization(organization_id) |> order_by(:name) |> Repo.all() |> preload_team()
   end
 
   @doc "Teams managed by the user."
@@ -49,8 +52,8 @@ defmodule TimeManager.Teams do
     end
   end
 
-  def create_team(attrs) do
-    %Team{}
+  def create_team(attrs, organization_id \\ nil) do
+    %Team{organization_id: organization_id}
     |> Team.changeset(attrs)
     |> validate_manager()
     |> Repo.insert()
@@ -66,6 +69,11 @@ defmodule TimeManager.Teams do
   end
 
   def delete_team(%Team{} = team), do: Repo.delete(team)
+
+  @doc "Adds a member, who must belong to the team's organization (404 otherwise)."
+  def add_member(%Team{organization_id: org}, %User{organization_id: user_org})
+      when org != user_org,
+      do: {:error, :not_found}
 
   def add_member(%Team{id: team_id} = team, %User{id: user_id}) do
     Repo.insert_all("team_members", [%{team_id: team_id, user_id: user_id}],
@@ -107,14 +115,20 @@ defmodule TimeManager.Teams do
     |> Repo.all()
   end
 
-  # A team's manager must hold the manager (or administrator) role.
+  # A team's manager must hold the manager (or administrator) role and belong
+  # to the team's organization.
   defp validate_manager(changeset) do
+    organization_id = Ecto.Changeset.get_field(changeset, :organization_id)
+
     case Ecto.Changeset.get_change(changeset, :manager_id) do
       nil ->
         changeset
 
       manager_id ->
         case Accounts.fetch_user(manager_id) do
+          {:ok, %User{organization_id: other}} when other != organization_id ->
+            Ecto.Changeset.add_error(changeset, :manager_id, "does not exist")
+
           {:ok, %User{role: %{name: role}}} when role in @manager_roles ->
             changeset
 
@@ -126,6 +140,9 @@ defmodule TimeManager.Teams do
         end
     end
   end
+
+  defp in_organization(query, nil), do: from(t in query, where: is_nil(t.organization_id))
+  defp in_organization(query, id), do: from(t in query, where: t.organization_id == ^id)
 
   defp preload_team(team_or_teams, opts \\ []) do
     Repo.preload(team_or_teams, [manager: :role, members: :role], opts)
