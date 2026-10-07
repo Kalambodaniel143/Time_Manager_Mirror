@@ -10,12 +10,15 @@
       </button>
     </PageHeader>
 
+    <label v-if="teams.length > 1" class="field team-picker"><span class="field-label">Équipe affichée</span><select v-model="selectedTeamId" class="input" :disabled="loading" @change="loadTeam"><option v-for="item in teams" :key="item.id" :value="item.id">{{ item.name }}</option></select></label>
+    <div v-if="!loading && !error" class="summary-grid"><article class="card summary-metric"><p>Agents</p><strong>{{ rows.length }}</strong><span>{{ cleanRows.length }} feuilles sans anomalie</span></article><article class="card summary-metric"><p>Heures confirmées</p><strong>{{ formatHours(totalHours) }}</strong><span>Heures enregistrées, hors propositions</span></article><article class="card summary-metric"><p>Alertes</p><strong>{{ alertCount }}</strong><span>Seuils et pointages à vérifier</span></article><article class="card summary-metric"><p>À valider</p><strong>{{ selection.length }}</strong><span>Feuilles sélectionnées</span></article></div>
+    <p class="demo-notice validation-notice">La validation des semaines est enregistrée localement. Un seuil de nuits dépassé nécessite un examen, sans effacer les heures travaillées.</p>
     <div class="stack">
       <AlertBanner
         v-for="alert in nightAlerts"
         :key="alert.username"
         tone="danger"
-        :title="`${alert.short} a fait ${alert.nightRun} nuits d’affilée la semaine dernière`"
+        :title="alert.frequencyExceeded ? `${alert.short} : fréquence de nuits à examiner` : `${alert.short} a fait ${alert.nightRun} nuits d’affilée la semaine dernière`"
         :text="alert.text"
       >
         <RouterLink class="btn btn-on-dark btn-sm" :to="{ name: 'teamPlanning' }">Voir le planning à venir</RouterLink>
@@ -64,12 +67,19 @@
           />
         </ul>
       </section>
+      <section v-if="!loading && !error" class="card validation-footer"><div><strong>{{ selection.length }} feuille{{ selection.length > 1 ? 's' : '' }} sélectionnée{{ selection.length > 1 ? 's' : '' }}</strong><p class="field-hint">Les départs manquants doivent être régularisés avant validation.</p></div><button class="btn btn-primary" type="button" :disabled="!selection.length" @click="validate">Valider {{ selection.length }} feuille{{ selection.length > 1 ? 's' : '' }}</button></section>
+      <CorrectionPanel can-review @changed="loadTeam" />
     </div>
   </div>
 </template>
 
 <script>
 import { RouterLink } from 'vue-router'
+import CorrectionPanel from '../components/reviews/CorrectionPanel.vue'
+import { auth } from '../stores/auth'
+import { USE_MOCK } from '../config'
+import { listTeams } from '../services/teamService'
+import { workMembers } from '../mocks/organizationWork'
 import AlertBanner from '../components/ui/AlertBanner.vue'
 import AppIcon from '../components/ui/AppIcon.vue'
 import PageHeader from '../components/ui/PageHeader.vue'
@@ -81,13 +91,13 @@ import { getClocks } from '../services/clockService'
 import { clockDate, findMissingDeparture } from '../utils/missingDeparture'
 import { formatClockDate } from '../utils/clockDate'
 import { toDateInput } from '../utils/date'
-import { addDays, formatRange, isoWeek, weekBuckets, weekFilters, weekNightRun } from '../utils/hours'
+import { addDays, formatRange, isoWeek, formatHours, nightFrequency, weekBuckets, weekFilters, weekNightRun } from '../utils/hours'
 import { notify } from '../utils/toast'
 
 export default {
   name: 'TeamOverview',
 
-  components: { AlertBanner, AppIcon, PageHeader, RouterLink, TeamMemberRow },
+  components: { CorrectionPanel, AlertBanner, AppIcon, PageHeader, RouterLink, TeamMemberRow },
 
   props: {
     now: { type: Date, default: () => new Date() },
@@ -96,8 +106,12 @@ export default {
   data() {
     return {
       monday: lastWeekMonday(),
+      members: null,
+      teams: [],
+      selectedTeamId: null,
       teamName: team().name,
       entries: {},
+      monthEntries: {},
       users: {},
       clocks: {},
       clockErrors: {},
@@ -109,6 +123,8 @@ export default {
   },
 
   computed: {
+    totalHours() { return this.rows.reduce((total, row) => total + row.buckets.total, 0) },
+    alertCount() { return this.rows.filter(row => this.hasAnomaly(row)).length },
     weekKey() {
       return toDateInput(this.monday)
     },
@@ -126,7 +142,7 @@ export default {
     },
 
     rows() {
-      return team().members.map((member) => {
+      return (this.members || team().members).map((member) => {
         const entries = this.entries[member.username] || []
         const missingDeparture = findMissingDeparture(this.clocks[member.username] || [], this.now)
         const day = missingDeparture ? formatClockDate(missingDeparture.arrival.time).slice(0, 10) : ''
@@ -138,6 +154,8 @@ export default {
           departureInWeek: !!missingDeparture && day >= this.weekKey && day < toDateInput(addDays(this.monday, 7)),
           clockError: this.clockErrors[member.username] || '',
           buckets: weekBuckets(entries, org.rules.overtimeThreshold),
+          nightCount: nightFrequency(entries).total,
+          frequencyExceeded: (org.rules.maxNightsPerWeek > 0 && nightFrequency(entries).total > org.rules.maxNightsPerWeek) || (org.rules.maxNightsPerMonth > 0 && Object.entries(nightFrequency(this.monthEntries?.[member.username] || []).months).some(([month, count]) => Array.from({ length: 7 }, (_, offset) => toDateInput(addDays(this.monday, offset)).slice(0, 7)).includes(month) && count > org.rules.maxNightsPerMonth)),
           nightRun: weekNightRun(entries, this.monday),
           note: noteFor(member.username, this.weekKey),
           validated: isValidated(member.username, this.weekKey),
@@ -168,13 +186,13 @@ export default {
     nightAlerts() {
       const upcoming = planAlerts()
       return this.rows
-        .filter((row) => row.nightRun > this.maxNights)
+        .filter((row) => row.nightRun > this.maxNights || row.frequencyExceeded)
         .map((row) => {
           const planned = upcoming.find((alert) => alert.member.username === row.username)
           const next = planned
             ? `Le planning à venir en prévoit encore ${planned.run.length} : ajustez-le avant de le publier.`
             : 'Le planning à venir respecte le seuil.'
-          return { ...row, text: `Le seuil de l’équipe est de ${this.maxNights}. ${next}` }
+          return { ...row, text: `${row.frequencyExceeded ? `Fréquence de nuits à examiner (${row.nightCount} cette semaine). ` : ''}Le seuil de l’équipe est de ${this.maxNights}. ${next}` }
         })
     },
   },
@@ -195,8 +213,9 @@ export default {
   },
 
   methods: {
+    formatHours,
     hasAnomaly(row) {
-      return row.nightRun > this.maxNights || row.departureInWeek || !!row.clockError
+      return row.nightRun > this.maxNights || row.frequencyExceeded || row.departureInWeek || !!row.clockError
     },
 
     canSelect(row) {
@@ -223,10 +242,22 @@ export default {
       this.selection = []
 
       try {
-        const users = await listUsers()
+        let users
+        if (auth.organizationSession) {
+          users = workMembers()
+          this.teamName = auth.organizationSession.organization.name
+          this.members = users.map(user => ({ username: user.username, name: `${user.first_name} ${user.last_name}`, short: user.first_name, job: user.role === 'manager' ? 'Responsable' : user.role === 'admin' ? 'Administrateur' : 'Employé', unit: this.teamName }))
+        } else if (auth.user && !USE_MOCK) {
+          this.teams = await listTeams()
+          const selected = this.teams.find(item => item.id === Number(this.selectedTeamId)) || this.teams[0]
+          this.selectedTeamId = selected?.id || null
+          this.teamName = selected?.name || 'Mon équipe'
+          users = selected?.members || []
+          this.members = users.map(user => ({ username: user.username, name: user.username, short: user.username, job: user.role === 'manager' ? 'Responsable' : 'Employé', unit: this.teamName }))
+        } else users = await listUsers()
         if (!Array.isArray(users)) throw new Error('Liste des utilisateurs invalide')
         const records = await Promise.all(
-          team().members.map(async (member) => {
+          (this.members || team().members).map(async (member) => {
             const user = users.find((item) => item && item.username === member.username)
             if (!user) return { username: member.username, entries: [], clocks: [], clockError: 'profil absent de l’API' }
 
@@ -238,11 +269,13 @@ export default {
             }).catch(() => ({ clocks: [], clockError: 'pointages indisponibles, actualisez pour réessayer' }))
             const [entries, clockResult] = await Promise.all([getWorkingTimes(user.id, weekFilters(this.monday)), readClocks])
             if (!Array.isArray(entries)) throw new Error('Liste des heures invalide')
-            return { username: member.username, user, entries, ...clockResult }
+            const monthEntries = org.rules.maxNightsPerMonth > 0 ? await getWorkingTimes(user.id) : []
+            return { username: member.username, user, entries, monthEntries, ...clockResult }
           }),
         )
         if (version !== this.requestVersion) return
         this.entries = Object.fromEntries(records.map((record) => [record.username, record.entries]))
+        this.monthEntries = Object.fromEntries(records.map(record => [record.username, record.monthEntries || []]))
         this.clocks = Object.fromEntries(records.map((record) => [record.username, record.clocks]))
         this.clockErrors = Object.fromEntries(records.map((record) => [record.username, record.clockError]))
         this.users = Object.fromEntries(records.map((record) => [record.username, record.user]))
@@ -278,7 +311,7 @@ export default {
       if (count === 0) return
       validateSheets(selected, this.weekKey)
       this.selection = []
-      notify(`${count} feuille${count > 1 ? 's' : ''} validée${count > 1 ? 's' : ''}.`)
+      notify(`${count} feuille${count > 1 ? 's' : ''} validée${count > 1 ? 's' : ''} localement.`)
     },
   },
 }
@@ -358,4 +391,9 @@ export default {
     white-space: normal;
   }
 }
+.summary-grid { margin-bottom: 20px; }
+.validation-notice { margin-bottom: 20px; }
+.validation-footer { display: flex; justify-content: space-between; align-items: center; gap: 14px; padding: 18px; }
+.team-picker { max-width: 400px; margin-bottom: 18px; }
+@media (max-width: 760px) { .validation-footer { flex-direction: column; align-items: stretch; } }
 </style>

@@ -2,7 +2,7 @@ export const THEMES = ['light', 'night', 'contrast']
 
 const THEME_KEY = 'tm-theme'
 
-const THEME_COLORS = { light: '#0037ff', night: '#090d2b', contrast: '#0021a5' }
+const THEME_COLORS = { light: '#24584f', night: '#121b17', contrast: '#123c2e' }
 
 export function readStorage(key) {
   try {
@@ -56,3 +56,9 @@ export const ROLE_HOME = { employee: 'overview', manager: 'team', administrator:
 export function homeFor(role) {
   return { name: ROLE_HOME[role] || ROLE_HOME.employee }
 }
+
+export function readStrongText() { return readStorage('tm-strong-text') === 'true' }
+export function applyStrongText(value) {
+  if (typeof document !== 'undefined') document.documentElement.dataset.strongText = String(Boolean(value))
+}
+export function writeStrongText(value) { writeStorage('tm-strong-text', String(Boolean(value))); applyStrongText(value) }

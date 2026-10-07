@@ -3,8 +3,8 @@
     <label class="note-title" for="manager-note">Note pour votre manager</label>
     <p class="note-hint">Facultatif. Pour expliquer une journée particulière.</p>
     <textarea id="manager-note" v-model="text" class="input note-input" rows="3" @change="save"></textarea>
-    <p class="note-visible"><AppIcon name="eye" />Visible par {{ managerName }}, votre manager</p>
-    <p class="note-hint">Complétez vendredi pour envoyer votre semaine.</p>
+    <p class="note-visible"><AppIcon name="eye" />Note enregistrée dans ce navigateur · le partage avec votre responsable reste à raccorder.</p>
+    <p class="note-hint">Une note est facultative et ne remplace pas une demande de correction.</p>
   </section>
 </template>
 

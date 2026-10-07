@@ -2,13 +2,14 @@
   <div class="rights">
     <PageHeader eyebrow="Administration" title="Équipes et droits" />
 
+    <p class="demo-notice">Droits et règles de démonstration · enregistrés dans ce navigateur. Les permissions du serveur restent celles des rôles et équipes réels.</p>
     <div class="layout">
       <div class="column">
         <RightsTable />
 
         <section class="card journal">
           <h2 class="card-title">Journal des modifications</h2>
-          <p class="card-subtitle">Visible par l’administration et par chaque personne concernée.</p>
+          <p class="card-subtitle">Historique des changements effectués dans cette démonstration.</p>
           <ol class="entries">
             <li v-for="entry in journal" :key="`${entry.at}-${entry.text}`" class="entry">
               <time class="entry-at num">{{ stamp(entry.at) }}</time>
@@ -21,7 +22,7 @@
       <div class="column">
         <OrgRules />
         <InfoNote title="Aucun droit en secret">
-          Chaque changement de droit ou de règle est inscrit au journal et signalé à la personne concernée.
+          Les changements sont visibles dans ce journal. Le partage et les notifications seront activés après raccordement du serveur.
         </InfoNote>
       </div>
     </div>
@@ -114,4 +115,5 @@ export default {
     gap: 2px;
   }
 }
+.demo-notice { margin-bottom: 20px; }
 </style>

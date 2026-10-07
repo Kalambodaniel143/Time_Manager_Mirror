@@ -23,6 +23,7 @@
                 :aria-label="`${right.name} : ${column.label}`"
                 @change="setRight(right.id, column.key, $event.target.checked)"
               />
+              <span class="right-state">{{ right[column.key] ? 'Autorisé' : 'Non autorisé' }}</span>
             </td>
           </tr>
         </tbody>
@@ -97,4 +98,5 @@ export default {
   height: 22px;
   accent-color: var(--brand);
 }
+.right-state { display: block; font-size: 11px; color: var(--text-muted); margin-top: 4px; }
 </style>

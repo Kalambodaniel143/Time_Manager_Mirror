@@ -22,14 +22,14 @@
             </span>
           </div>
           <p class="card-subtitle">
-            {{ canEdit ? 'Chaque journée se corrige pendant 7 jours.' : 'Une erreur ? Demandez la correction à votre manager : elle sera tracée et visible ici.' }}
+            {{ canEdit ? 'Chaque journée se corrige pendant 7 jours.' : 'Une erreur ? Proposez une correction : votre responsable l’examine avant toute modification.' }}
           </p>
         </header>
 
         <p v-if="error" class="field-error" role="alert">Impossible de charger vos heures : {{ error }}</p>
         <div v-else-if="loading && workingTimes.length === 0" class="skeleton table-skeleton"></div>
         <!-- Seul l'agent lui-même peut compléter son départ : l'API refuse les autres. -->
-        <WeekTable v-else :monday="monday" :entries="workingTimes" :now="now" :user-id="isSelf ? userId : null" :can-edit="canEdit" @edit="openEdit" @create="openCreate" @completed="onDepartureCompleted" />
+        <WeekTable v-else :monday="monday" :entries="workingTimes" :now="now" :user-id="isSelf ? userId : null" :can-edit="canEdit" :can-request="isSelf" @edit="openEdit" @create="openCreate" @completed="onDepartureCompleted" @request="openRequest" />
       </section>
 
       <aside class="side">
@@ -37,11 +37,15 @@
         <ManagerNote v-if="username" :username="username" :week-key="weekKey" />
       </aside>
     </div>
+    <CorrectionPanel :user-id="userId" :can-review="!isSelf && canEdit" :refresh-key="correctionVersion" @changed="onDepartureCompleted" />
+    <CorrectionRequest v-if="requestEntry" :entry="requestEntry" @close="requestEntry = null" @sent="correctionVersion += 1" />
   </div>
 </template>
 
 <script>
 import AppIcon from './ui/AppIcon.vue'
+import CorrectionRequest from './reviews/CorrectionRequest.vue'
+import CorrectionPanel from './reviews/CorrectionPanel.vue'
 import PageHeader from './ui/PageHeader.vue'
 import LastWeekCard from './employee/LastWeekCard.vue'
 import ManagerNote from './hours/ManagerNote.vue'
@@ -55,7 +59,7 @@ import { addDays, formatRange, isoWeek, mondayOf, weekBuckets, weekFilters } fro
 export default {
   name: 'WorkingTimes',
 
-  components: { AppIcon, LastWeekCard, ManagerNote, PageHeader, WeekTable },
+  components: { CorrectionRequest, CorrectionPanel, AppIcon, LastWeekCard, ManagerNote, PageHeader, WeekTable },
 
   props: {
     userID: { type: [Number, String], required: true },
@@ -68,6 +72,8 @@ export default {
   data() {
     return {
       userId: Number(this.userID),
+      requestEntry: null,
+      correctionVersion: 0,
       workingTimes: [],
       loading: false,
       error: '',
@@ -81,7 +87,7 @@ export default {
     },
 
     canEdit() {
-      return canEditHours(this.userID)
+      return !this.isSelf && canEditHours(this.userID)
     },
 
     monday() {
@@ -143,6 +149,7 @@ export default {
   },
 
   methods: {
+    openRequest(id) { this.requestEntry = this.workingTimes.find(entry => entry.id === id) || null },
     async onDepartureCompleted() {
       await this.getWorkingTimes()
       this.$emit('changed')
@@ -227,4 +234,5 @@ export default {
     grid-template-columns: 1fr;
   }
 }
+.hours > .corrections { margin-top: 24px; }
 </style>

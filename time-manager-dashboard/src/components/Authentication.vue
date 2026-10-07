@@ -11,7 +11,7 @@
 
       <label class="field">
         <span class="field-label">Mot de passe</span>
-        <input v-model="password" class="input" type="password" autocomplete="current-password" required />
+        <span class="password-control"><input v-model="password" class="input" :type="showLoginPassword ? 'text' : 'password'" autocomplete="current-password" required /><button class="password-toggle" type="button" :aria-label="showLoginPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'" :aria-pressed="showLoginPassword" @click="showLoginPassword = !showLoginPassword"><AppIcon :name="showLoginPassword ? 'eye-off' : 'eye'" /></button></span>
       </label>
 
       <p v-if="error" class="field-error" role="alert">{{ error }}</p>
@@ -44,7 +44,7 @@ export default {
   components: { AppIcon, AuthLayout, RouterLink },
 
   data() {
-    return { email: '', password: '', error: '', loading: false }
+    return { showLoginPassword: false, email: '', password: '', error: '', loading: false }
   },
 
   mounted() {
