@@ -54,7 +54,8 @@ defmodule TimeManager.MixProject do
       {:bandit, "~> 1.5"},
       {:open_api_spex, "~> 3.21"},
       {:joken, "~> 2.6"},
-      {:bcrypt_elixir, "~> 3.3"}
+      {:bcrypt_elixir, "~> 3.3"},
+      {:argon2_elixir, "~> 4.1"}
     ]
   end
 

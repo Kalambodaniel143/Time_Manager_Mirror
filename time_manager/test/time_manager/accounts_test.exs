@@ -30,7 +30,8 @@ defmodule TimeManager.AccountsTest do
       assert user.role.name == "employee"
       assert user.password == nil
       assert user.password_hash != valid_password()
-      assert Bcrypt.verify_pass(valid_password(), user.password_hash)
+      assert "$argon2id$" <> _ = user.password_hash
+      assert Argon2.verify_pass(valid_password(), user.password_hash)
     end
 
     test "create_user/1 with invalid data returns error changeset" do

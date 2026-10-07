@@ -152,9 +152,71 @@ defmodule TimeManagerWeb.AuthControllerTest do
     end
   end
 
-  test "logout removes the cookie", %{conn: conn, user: user} do
-    conn = conn |> log_in(user) |> post(~p"/api/auth/logout")
-    assert response(conn, 204)
-    assert conn.resp_cookies["jwt"].max_age == 0
+  describe "login of an organization member" do
+    test "returns the session model with the organization", %{conn: conn} do
+      admin = organization_admin_fixture(name: "Atelier Gotham")
+      conn = post(conn, ~p"/api/auth/login", email: admin.email, password: valid_password())
+
+      assert %{
+               "csrf_token" => _,
+               "role" => "administrator",
+               "user" => %{"role" => "administrator", "organization_id" => org_id},
+               "organization" => %{"id" => org_id, "name" => "Atelier Gotham"}
+             } = json_response(conn, 200)["data"]
+    end
+
+    test "a bcrypt hash from before Argon2 still works and is upgraded", %{conn: conn, user: user} do
+      legacy = Bcrypt.hash_pwd_salt(valid_password())
+      TimeManager.Repo.update_all(TimeManager.Accounts.User, set: [password_hash: legacy])
+
+      conn = post(conn, ~p"/api/auth/login", email: user.email, password: valid_password())
+      assert json_response(conn, 200)
+
+      assert "$argon2id$" <> _ = TimeManager.Accounts.get_user!(user.id).password_hash
+    end
+  end
+
+  describe "session" do
+    test "returns role, user and organization (null without organization)",
+         %{conn: conn, user: user} do
+      conn = conn |> log_in(user) |> get(~p"/api/auth/session")
+
+      assert %{"role" => "employee", "user" => %{"id" => id}, "organization" => nil} =
+               json_response(conn, 200)["data"]
+
+      assert id == user.id
+    end
+
+    test "401 without a session, never data: null", %{conn: conn} do
+      assert json_response(get(conn, ~p"/api/auth/session"), 401)
+    end
+  end
+
+  test "logout removes the cookie and revokes the JWT on the server", %{conn: conn, user: user} do
+    conn = log_in(conn, user)
+    logout = post(conn, ~p"/api/auth/logout")
+    assert response(logout, 204)
+    assert logout.resp_cookies["jwt"].max_age == 0
+
+    # The same cookie and CSRF token, replayed after the logout.
+    assert json_response(get(conn, ~p"/api/auth/session"), 401)
+    assert json_response(post(conn, ~p"/api/auth/logout"), 401)
+  end
+
+  test "a request from another site is refused, even on a public route", %{conn: conn, user: user} do
+    forged =
+      conn
+      |> put_req_header("origin", "https://evil.example")
+      |> post(~p"/api/auth/login", email: user.email, password: valid_password())
+
+    assert json_response(forged, 403)
+    refute forged.resp_cookies["jwt"]
+
+    same_site =
+      build_conn()
+      |> put_req_header("origin", "http://www.example.com:8080")
+      |> post(~p"/api/auth/login", email: user.email, password: valid_password())
+
+    assert json_response(same_site, 200)
   end
 end
