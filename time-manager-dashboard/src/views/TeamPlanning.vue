@@ -7,6 +7,9 @@
       </button>
     </PageHeader>
 
+    <p class="demo-notice">Planning d’exemple · les modifications restent dans ce navigateur et aucun agent n’est notifié. Le contrôle mensuel porte sur les jours affichés ; le serveur devra vérifier le mois complet.</p>
+    <div class="week-tabs" aria-label="Semaine du planning"><button v-for="(week, index) in weeks" :key="index" class="btn btn-outline" :aria-pressed="selectedWeek === index" type="button" @click="selectedWeek = index">{{ week }}</button></div>
+    <label class="agent-select field"><span class="field-label">Afficher la semaine de</span><select v-model="selectedAgent" class="input"><option v-for="row in rows" :key="row.username" :value="row.username">{{ row.name }} · {{ row.unit }}</option></select></label>
     <div class="stack">
       <AlertBanner v-for="alert in alerts" :key="alert.member.username" tone="danger" :title="alert.title" :text="alert.text">
         <button v-if="alert.partner" class="btn btn-on-dark btn-sm" type="button" @click="swap(alert)">
@@ -14,7 +17,9 @@
         </button>
       </AlertBanner>
 
-      <PlanGrid :days="days" :rows="rows" :max-nights="maxNights" @cycle="cycle" />
+      <AlertBanner v-for="message in frequencyAlerts" :key="message" tone="warning" title="Fréquence de nuits à ajuster" :text="message" />
+      <PlanGrid :days="visibleDays" :rows="visibleRows" :max-nights="maxNights" :offset="selectedWeek * 7" :selected-agent="selectedAgent" @cycle="cycle" />
+      <section v-if="swapRequests.length" class="card section-card"><h2 class="card-title">Demandes d’échange de la démonstration</h2><article v-for="item in swapRequests" :key="item.id" class="swap-request"><strong>{{ item.username }} · {{ item.day }}</strong><p>{{ item.reason }}</p><div><button class="btn btn-outline btn-sm" type="button" @click="resolveSwap(item.id, 'accepted')">Examiner et organiser</button><button class="btn btn-quiet btn-sm" type="button" @click="resolveSwap(item.id, 'rejected')">Refuser</button></div></article></section>
 
       <p class="legend">
         <HourTag kind="day" />
@@ -41,6 +46,7 @@ import PageHeader from '../components/ui/PageHeader.vue'
 import PlanGrid from '../components/manager/PlanGrid.vue'
 import {
   canPublish,
+  resolveShiftSwap,
   org,
   planAlerts,
   publishPlan,
@@ -49,6 +55,7 @@ import {
   teamPlanDays,
   teamPlanRows,
 } from '../services/orgService'
+import { auth } from '../stores/auth'
 import { formatRange, longestRun } from '../utils/hours'
 import { notify } from '../utils/toast'
 
@@ -63,7 +70,27 @@ export default {
 
   components: { AlertBanner, AppIcon, HourTag, PageHeader, PlanGrid },
 
+  data() { return { selectedWeek: 0, selectedAgent: '' } },
   computed: {
+    frequencyAlerts() {
+      return this.rows.flatMap(row => {
+        const messages = []
+        if (org.rules.maxNightsPerWeek > 0) [0, 7].forEach(offset => {
+          const count = row.shifts.slice(offset, offset + 7).filter(kind => kind === 'night').length
+          if (count > org.rules.maxNightsPerWeek) messages.push(`${row.name} : ${count} nuits sur la semaine du ${this.days[offset].getDate()}, seuil ${org.rules.maxNightsPerWeek}.`)
+        })
+        if (org.rules.maxNightsPerMonth > 0) {
+          const months = {}
+          row.shifts.forEach((kind, index) => { if (kind === 'night') { const month = this.days[index].getMonth(); months[month] = (months[month] || 0) + 1 } })
+          if (Object.values(months).some(count => count > org.rules.maxNightsPerMonth)) messages.push(`${row.name} dépasse déjà le seuil mensuel de ${org.rules.maxNightsPerMonth} nuits sur la période affichée.`)
+        }
+        return messages
+      })
+    },
+    weeks() { return [0, 7].map(offset => formatRange(this.days[offset], this.days[offset + 6])) },
+    visibleDays() { return this.days.slice(this.selectedWeek * 7, this.selectedWeek * 7 + 7) },
+    visibleRows() { return this.rows.map(row => ({ ...row, shifts: row.shifts.slice(this.selectedWeek * 7, this.selectedWeek * 7 + 7) })) },
+    swapRequests() { return org.swapRequests.filter(item => item.status === 'pending') },
     days() {
       return teamPlanDays()
     },
@@ -112,25 +139,26 @@ export default {
     },
 
     rightGranted() {
-      return canPublish('lucie')
+      return auth.organizationSession ? ['manager', 'administrator'].includes(auth.user?.role) : auth.user?.role === 'administrator' || canPublish(auth.user?.username?.split('.')[0] || 'lucie')
     },
 
     publishable() {
-      return !this.published && this.alerts.length === 0 && this.rightGranted
+      return !this.published && this.alerts.length === 0 && this.frequencyAlerts.length === 0 && this.rightGranted
     },
 
     blockReason() {
       if (this.published) return 'Planning déjà publié.'
-      if (this.alerts.length) return 'Corrigez les alertes avant de publier.'
+      if (this.alerts.length || this.frequencyAlerts.length) return 'Corrigez les alertes avant de publier.'
       if (!this.rightGranted) return 'Droit de publication désactivé par l’administration.'
       return ''
     },
   },
 
   methods: {
+    resolveSwap(id, status) { resolveShiftSwap(id, status) },
     swap(alert) {
       swapShifts(alert.member.username, alert.partner.username, alert.index)
-      notify(`${alert.member.short} et ${alert.partner.short} ont échangé le ${alert.day}. Les deux agents seront prévenus.`)
+      notify(`${alert.member.short} et ${alert.partner.short} ont échangé le ${alert.day}. Échange enregistré localement, sans notification.`)
     },
 
     cycle(username, index) {
@@ -140,7 +168,7 @@ export default {
 
     publish() {
       publishPlan()
-      notify(`Planning publié jusqu’au ${dayMonth(this.days[this.days.length - 1])}. L’équipe a été prévenue.`)
+      notify(`Planning publié jusqu’au ${dayMonth(this.days[this.days.length - 1])}. Publication enregistrée dans la démonstration, sans notification.`)
     },
   },
 }
@@ -161,4 +189,9 @@ export default {
   font-size: 14.5px;
   color: var(--text-muted);
 }
+.agent-select { display: none; margin-bottom: 18px; }
+.week-tabs button[aria-pressed='true'] { background: var(--brand-soft); border-color: var(--brand); }
+.swap-request { padding-top: 14px; margin-top: 14px; border-top: 1px solid var(--border); }
+.swap-request p { margin: 8px 0; }
+@media (max-width: 760px) { .agent-select { display: flex; } }
 </style>

@@ -40,6 +40,7 @@
       </section>
     </template>
 
+    <CorrectionPanel can-review />
     <Teleport to="body">
       <div v-if="review || credentials || roleTarget" class="overlay" @click.self="closeDialog">
         <form ref="dialog" class="dialog card review-dialog" role="dialog" aria-modal="true" aria-labelledby="review-title" tabindex="-1" novalidate @submit.prevent="submitDialog" @keydown="trapFocus">
@@ -80,13 +81,14 @@
 import AppIcon from '../components/ui/AppIcon.vue'
 import InfoNote from '../components/ui/InfoNote.vue'
 import PageHeader from '../components/ui/PageHeader.vue'
+import CorrectionPanel from '../components/reviews/CorrectionPanel.vue'
 import { approveJoinRequest, listJoinRequests, listMembers, rejectJoinRequest, setMemberRole } from '../services/organizationService'
 import { GENDERS, passwordError } from '../utils/registration'
 import { notify } from '../utils/toast'
 
 export default {
   name: 'OrganizationAdmin',
-  components: { AppIcon, InfoNote, PageHeader },
+  components: { CorrectionPanel, AppIcon, InfoNote, PageHeader },
   props: { session: { type: Object, required: true } },
   data() { return { requests: [], members: [], loading: false, busy: false, error: '', review: null, decision: '', password: '', confirmation: '', reason: '', dialogError: '', credentials: null, showPassword: false, copied: false, roleTarget: null, returnFocus: null } },
   computed: {

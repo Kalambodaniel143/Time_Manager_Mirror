@@ -172,3 +172,11 @@ export function weekNightRun(entries, monday) {
   )
   return longestRun(kinds).length
 }
+
+// Count nights by service day; several work segments from one night count once.
+export function nightFrequency(entries) {
+  const days = new Set(entries.filter(entry => classifyEntry(entry) === 'night').map(entry => entry.start.slice(0, 10)))
+  const months = {}
+  days.forEach(day => { const month = day.slice(0, 7); months[month] = (months[month] || 0) + 1 })
+  return { total: days.size, months }
+}

@@ -1,5 +1,6 @@
 <template>
-  <div class="grid-wrap card">
+  <div>
+  <div class="grid-wrap card desktop-plan">
     <table class="plan">
       <thead>
         <tr>
@@ -23,7 +24,7 @@
               :class="[`cell-${kind}`, { 'is-flagged': isFlagged(row, index) }]"
               type="button"
               :title="`${row.short} · ${columns[index].label} : ${labels[kind]} (cliquer pour changer)`"
-              @click="$emit('cycle', row.username, index)"
+              @click="$emit('cycle', row.username, index + offset)"
             >
               {{ labels[kind] }}
             </button>
@@ -36,6 +37,8 @@
       </tbody>
     </table>
   </div>
+  <div v-if="mobileRow" class="mobile-plan card"><article v-for="(kind, index) in mobileRow.shifts" :key="index"><strong>{{ columns[index].label }}</strong><button class="cell" :class="`cell-${kind}`" type="button" :aria-label="`${columns[index].label} : ${labels[kind]}, modifier`" @click="$emit('cycle', mobileRow.username, index + offset)">{{ labels[kind] }}</button></article></div>
+  </div>
 </template>
 
 <script>
@@ -43,7 +46,7 @@ import AppIcon from '../ui/AppIcon.vue'
 import { toDateInput } from '../../utils/date'
 import { weekdayUpper } from '../../utils/hours'
 
-const LABELS = { day: 'Jour', night: 'Nuit', oncall: 'Astr.', leave: 'Congé', rest: 'Repos' }
+const LABELS = { day: 'Jour', night: 'Nuit', oncall: 'Astreinte', leave: 'Congé', rest: 'Repos' }
 
 export default {
   name: 'PlanGrid',
@@ -51,6 +54,8 @@ export default {
   components: { AppIcon },
 
   props: {
+    offset: { type: Number, default: 0 },
+    selectedAgent: { type: String, default: '' },
     days: { type: Array, required: true },
     rows: { type: Array, required: true },
     maxNights: { type: Number, required: true },
@@ -63,6 +68,7 @@ export default {
   },
 
   computed: {
+    mobileRow() { return this.rows.find(row => row.username === this.selectedAgent) || this.rows[0] },
     columns() {
       return this.days.map((date) => ({
         key: toDateInput(date),
@@ -77,7 +83,7 @@ export default {
   methods: {
     isFlagged(row, index) {
       const { run } = row
-      return run.length > this.maxNights && index >= run.start && index < run.start + run.length
+      return run.length > this.maxNights && index + this.offset >= run.start && index + this.offset < run.start + run.length
     },
 
     nightsLabel(count) {
@@ -195,4 +201,6 @@ export default {
   padding-left: 16px;
   text-align: right;
 }
+.mobile-plan { display: none; }
+@media (max-width: 760px) { .desktop-plan { display: none; } .mobile-plan { display: block; padding: 8px 16px; } .mobile-plan article { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 0; border-bottom: 1px solid var(--border); } .mobile-plan strong { font-size: 12px; } .mobile-plan .cell { width: 100px; border-radius: 6px; } }
 </style>

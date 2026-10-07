@@ -35,7 +35,7 @@
           <h2 class="page-title">Connexion</h2>
           <p class="lede">Votre email et le mot de passe fourni par votre admin vous donnent accès à votre organisation.</p>
           <label class="field"><span class="field-label">Adresse email</span><input v-model.trim="email" class="input" type="email" autocomplete="username" required /></label>
-          <label class="field"><span class="field-label">Mot de passe</span><input v-model="password" class="input" type="password" autocomplete="current-password" required /></label>
+          <label class="field"><span class="field-label">Mot de passe</span><span class="password-control"><input v-model="password" class="input" :type="showLoginPassword ? 'text' : 'password'" autocomplete="current-password" required /><button class="password-toggle" type="button" :aria-label="showLoginPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'" :aria-pressed="showLoginPassword" @click="showLoginPassword = !showLoginPassword"><AppIcon :name="showLoginPassword ? 'eye-off' : 'eye'" /></button></span></label>
           <p v-if="error" class="field-error" role="alert">{{ error }}</p>
           <button class="btn btn-primary btn-login" type="submit" :disabled="busy"><AppIcon name="login" />{{ busy ? 'Connexion…' : 'Se connecter' }}</button>
           <p class="field-hint">Demande en attente ? Utilisez « Suivre ma demande » ci-dessous.</p>
@@ -92,9 +92,9 @@ import { emptyProfile, errorFields, organizationError, passwordError, profileErr
 import { readJson, writeJson } from '../utils/session'
 
 const THEMES = [
-  { value: 'light', label: 'Clair', text: 'Pour le bureau et la journée.', colors: ['#0037ff', '#f2f5ff', '#ffd000'] },
-  { value: 'night', label: 'Nuit', text: 'Moins d’éblouissement.', colors: ['#2c4cf0', '#090d2b', '#c8d0ff'] },
-  { value: 'contrast', label: 'Contraste élevé', text: 'Textes renforcés.', colors: ['#0021a5', '#ffffff', '#000000'] },
+  { value: 'light', label: 'Clair', text: 'Pour le bureau et la journée.', colors: ['#24584f', '#f7f6f2', '#e4eee8'] },
+  { value: 'night', label: 'Nuit', text: 'Moins d’éblouissement.', colors: ['#203f33', '#121b17', '#a7d5c2'] },
+  { value: 'contrast', label: 'Contraste élevé', text: 'Textes renforcés.', colors: ['#123c2e', '#ffffff', '#000000'] },
 ]
 const RECEIPT_KEY = 'tm-last-join-receipt'
 
@@ -105,7 +105,7 @@ export default {
   emits: ['login', 'update:theme'],
   data() {
     return {
-      mode: 'login', email: '', password: '', passwordConfirmation: '', organizationName: '', organization: null,
+      showLoginPassword: false, mode: 'login', email: '', password: '', passwordConfirmation: '', organizationName: '', organization: null,
       profile: emptyProfile(), errors: {}, error: '', busy: false, checking: false, lookupVersion: 0,
       receipt: null, reference: readJson(RECEIPT_KEY, null)?.reference || '', mock: AUTH_USE_MOCK,
       themes: THEMES,
@@ -454,4 +454,22 @@ export default {
 .receipt .input { font-size: 13px; }
 .follow-link { align-self: flex-start; }
 @media (max-width: 400px) { .access-nav { grid-template-columns: 1fr; } .access-choice { flex-direction: row; align-items: center; } }
+
+.deco, .pixels { display: none; }
+.intro-title { font-family: var(--font); font-size: clamp(32px, 3vw, 48px); font-weight: 700; text-transform: none; letter-spacing: -.04em; }
+.intro-title::after, .intro-eyebrow::before, .intro-eyebrow::after { content: none; }
+.intro-eyebrow { margin-top: 24px; text-transform: none; }
+.intro-list { font-size: 16px; }
+.login { grid-template-columns: minmax(280px, 34%) minmax(0, 1fr); }
+.panel { justify-content: center; padding: 48px 28px; }
+.form { margin: 0; width: min(500px, 100%); }
+@media (max-width: 760px) {
+ .login { display: block; }
+ .intro { display: flex; min-height: auto; padding: 28px 20px; align-items: center; text-align: center; }
+ .intro-title { font-size: 28px; }
+ .intro-eyebrow { margin: 8px 0 0; }
+ .intro-list { display: none; }
+ .panel { padding: 28px 20px; }
+}
+
 </style>

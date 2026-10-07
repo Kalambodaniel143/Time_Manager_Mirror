@@ -1,7 +1,7 @@
 <template>
   <!-- Le même formulaire est utilisable dans l'accueil et dans une ligne du tableau. -->
   <component :is="tableRow ? 'tr' : 'section'" v-if="visible">
-    <component :is="tableRow ? 'td' : 'div'" :colspan="tableRow ? 5 : undefined">
+    <component :is="tableRow ? 'td' : 'div'" :colspan="tableRow ? 6 : undefined">
       <div class="missing-departure">
         <AlertBanner v-if="missing" title="Départ à vérifier" :text="description">
           <button v-if="!editing" class="btn btn-outline" type="button" :disabled="loading || saving" @click="editing = true">

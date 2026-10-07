@@ -1,277 +1,64 @@
 <template>
-  <div class="planning">
-    <PageHeader :eyebrow="rangeLabel" title="Mon planning">
-      <button class="btn btn-outline" type="button" @click="$emit('tour')">
-        <AppIcon name="help" />
-        Revoir la prise en main
-      </button>
-    </PageHeader>
-
-    <div class="layout">
-      <div>
-        <p class="published">
-          <AppIcon name="calendar" />
-          Publié le {{ publishedLabel }}, {{ daysAhead }} jours à l’avance. Prochaine publication le {{ nextLabel }}, pour le
-          {{ nextRange }}.
-        </p>
-
-        <div class="grid">
-          <p v-for="label in weekdays" :key="label" class="weekday">{{ label }}</p>
-          <article v-for="day in days" :key="day.key" class="day" :class="{ 'is-rest': day.kind === 'rest' }">
-            <p class="day-number serif num">{{ day.date.getDate() }}</p>
-            <template v-if="day.kind === 'rest'">
-              <p class="rest">Repos</p>
-            </template>
-            <template v-else>
-              <HourTag :kind="day.kind" />
-              <p class="day-hours num">{{ day.shift.from }} –<br />{{ day.shift.to }}</p>
-            </template>
-            <p v-if="day.isToday" class="today">Aujourd’hui</p>
-          </article>
-        </div>
-
-        <p class="legend">
-          <HourTag kind="day" />
-          <HourTag kind="night" />
-          <HourTag kind="oncall" />
-          <span>Chaque garde garde sa couleur, du planning à la fiche de paie.</span>
-        </p>
-      </div>
-
-      <aside class="side">
-        <section class="nights card">
-          <h2 class="card-title">Mes nuits sur deux semaines</h2>
-          <p class="nights-count serif num">{{ nights }} nuit{{ nights > 1 ? 's' : '' }}</p>
-          <p class="nights-text">Jamais plus de {{ maxNights }} d’affilée. Chaque nuit est payée ×1,5.</p>
-          <HourTag kind="night" :hours="nights * nightHours" />
-        </section>
-
-        <button class="btn btn-outline btn-swap" type="button" @click="requestSwap">
-          <AppIcon name="users" />
-          Demander un échange de garde
-        </button>
-
-        <InfoNote icon="calendar" title="Pas de surprise">
-          Un changement de dernière minute vous est signalé tout de suite, avec sa raison, et compté dans vos heures.
-        </InfoNote>
-      </aside>
-    </div>
-  </div>
+ <div class="planning page-stack">
+  <PageHeader :eyebrow="rangeLabel" title="Mon planning"><button class="btn btn-outline" type="button" @click="swapOpen = true">Demander un échange de garde</button></PageHeader>
+  <p class="demo-notice">Planning d’exemple · vos affectations réelles et les dates de publication restent à confirmer auprès de votre responsable.</p>
+  <div class="week-tabs" aria-label="Semaine du planning"><button v-for="(week, index) in weeks" :key="week.label" class="btn btn-outline" :class="{ 'is-selected': selectedWeek === index }" :aria-pressed="selectedWeek === index" type="button" @click="selectedWeek = index">{{ week.label }}</button></div>
+  <section v-for="(week, index) in weeks" :key="week.label" class="week-section" :class="{ 'mobile-hidden': selectedWeek !== index }"><h2 class="card-title">{{ week.label }}</h2><div class="week-grid"><article v-for="day in week.days" :key="day.key" class="card day" :class="{ 'is-rest': day.kind === 'rest', 'is-today': day.isToday }"><strong>{{ day.label }}</strong><div class="day-details"><span v-if="day.kind === 'rest'" class="muted">Repos</span><HourTag v-else :kind="day.kind" /><span v-if="day.isToday" class="field-hint">Aujourd’hui</span><p v-if="day.shift" class="num">{{ day.shift.from }} – {{ day.shift.to }}</p></div></article></div></section>
+  <div class="bottom-grid"><section class="card section-card"><h2 class="card-title">Gardes de nuit et d’astreinte</h2><ul class="shift-list"><li v-for="day in constrainedDays" :key="day.key"><span>{{ day.fullLabel }}</span><span>{{ day.shift.from }} – {{ day.shift.to }}</span><HourTag :kind="day.kind" /></li></ul></section><section class="card section-card"><h2 class="card-title">Des nuits espacées</h2><p class="night-count num">{{ nights }} nuits</p><p class="muted">sur deux semaines · seuil de {{ maxNights }} nuits consécutives.</p><p class="field-hint">Les heures de nuit sont distinguées des heures supplémentaires.</p></section></div>
+  <section v-if="myRequests.length" class="card section-card"><h2 class="card-title">Mes demandes d’échange</h2><article v-for="item in myRequests" :key="item.id" class="swap-status"><strong>{{ item.day }}</strong><p>{{ item.reason }}</p><span class="pill" :class="item.status === 'pending' ? 'pill-warn' : 'pill-ok'">{{ statuses[item.status] }}</span></article></section>
+  <ModalDialog v-if="swapOpen" title="Demander un échange de garde" id="swap-title" :busy="false" @close="swapOpen = false"><p>Cette demande est enregistrée dans la démonstration. Aucune garde réelle ne sera modifiée et aucun message ne sera envoyé.</p><form class="page-stack" @submit.prevent="requestSwap"><label class="field"><span class="field-label">Garde concernée</span><select v-model="swapDay" class="input" required><option value="" disabled>Choisir une garde</option><option v-for="day in workingDays" :key="day.key" :value="day.key">{{ day.fullLabel }} · {{ day.shift.from }}–{{ day.shift.to }}</option></select></label><label class="field"><span class="field-label">Votre demande</span><textarea v-model.trim="swapReason" class="input" rows="3" maxlength="500" required /></label><p v-if="swapError" class="field-error" role="alert">{{ swapError }}</p><button class="btn btn-primary" type="submit">Enregistrer la demande</button></form></ModalDialog>
+ </div>
 </template>
-
 <script>
-import AppIcon from '../components/ui/AppIcon.vue'
 import HourTag from '../components/ui/HourTag.vue'
-import InfoNote from '../components/ui/InfoNote.vue'
 import PageHeader from '../components/ui/PageHeader.vue'
-import { SHIFT_HOURS, TEAM } from '../mocks/org'
-import { employeePlan, org, planPublishedOn, planStart } from '../services/orgService'
+import ModalDialog from '../components/ui/ModalDialog.vue'
+import { employeePlan, org, requestShiftSwap } from '../services/orgService'
+import { auth } from '../stores/auth'
 import { toDateInput } from '../utils/date'
-import { addDays, formatDayMonthLong, formatRange } from '../utils/hours'
-import { notify } from '../utils/toast'
-
-const WEEKDAYS = ['Lun.', 'Mar.', 'Mer.', 'Jeu.', 'Ven.', 'Sam.', 'Dim.']
-
+import { formatRange } from '../utils/hours'
 export default {
-  name: 'EmployeePlanning',
-
-  components: { AppIcon, HourTag, InfoNote, PageHeader },
-
-  props: {
-    now: { type: Date, required: true },
-  },
-
-  emits: ['tour'],
-
-  data() {
-    return { weekdays: WEEKDAYS, nightHours: SHIFT_HOURS.night.hours }
-  },
-
-  computed: {
-    days() {
-      return employeePlan(this.now).map((day) => ({ ...day, key: toDateInput(day.date) }))
-    },
-
-    rangeLabel() {
-      return formatRange(this.days[0].date, this.days[this.days.length - 1].date)
-    },
-
-    publishedLabel() {
-      return formatDayMonthLong(planPublishedOn(this.now))
-    },
-
-    nextLabel() {
-      return formatDayMonthLong(this.days[0].date)
-    },
-
-    nextRange() {
-      const start = planStart()
-      const end = addDays(start, 13)
-      return `${start.getDate()} au ${formatDayMonthLong(end)}`
-    },
-
-    daysAhead() {
-      return org.rules.publishDaysAhead
-    },
-
-    maxNights() {
-      return org.rules.maxConsecutiveNights
-    },
-
-    nights() {
-      return this.days.filter((day) => day.kind === 'night').length
-    },
-  },
-
-  methods: {
-    requestSwap() {
-      notify(`Demande d’échange envoyée à ${TEAM.manager.short}, votre manager.`)
-    },
-  },
+ name: 'EmployeePlanning', components: { HourTag, PageHeader, ModalDialog }, props: { now: { type: Date, required: true } }, emits: ['tour'],
+ data() { return { selectedWeek: 0, swapOpen: false, swapDay: '', swapReason: '', swapError: '', statuses: { pending: 'En attente', accepted: 'Examinée · échange à organiser', rejected: 'Refusée' } } },
+ computed: {
+  days() { return employeePlan(this.now).map(day => ({ ...day, key: toDateInput(day.date), label: day.date.toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' }), fullLabel: day.date.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' }) })) },
+  weeks() { return [0, 7].map(offset => ({ days: this.days.slice(offset, offset + 7), label: formatRange(this.days[offset].date, this.days[offset + 6].date) })) },
+  rangeLabel() { return formatRange(this.days[0].date, this.days.at(-1).date) },
+  workingDays() { return this.days.filter(day => day.shift) },
+  constrainedDays() { return this.days.filter(day => ['night', 'oncall'].includes(day.kind)) },
+  maxNights() { return org.rules.maxConsecutiveNights },
+  nights() { return this.days.filter(day => day.kind === 'night').length },
+  myRequests() { return org.swapRequests.filter(item => item.user_id === auth.user?.id) },
+ },
+ methods: {
+  requestSwap() { try { requestShiftSwap(auth.user, this.swapDay, this.swapReason); this.swapOpen = false; this.swapDay = ''; this.swapReason = ''; this.swapError = '' } catch (error) { this.swapError = error.message } },
+ },
 }
 </script>
-
 <style scoped>
-.layout {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 334px;
-  gap: 26px;
-  align-items: start;
-}
-
-.published {
-  display: flex;
-  gap: 10px;
-  margin-bottom: 18px;
-  font-size: 14.5px;
-  color: var(--text-muted);
-}
-
-.published svg {
-  width: 18px;
-  height: 18px;
-  flex-shrink: 0;
-}
-
-.grid {
-  display: grid;
-  grid-template-columns: repeat(7, minmax(0, 1fr));
-  gap: 10px 9px;
-}
-
-.weekday {
-  padding-left: 4px;
-  font-size: 12.5px;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-
-.day {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 10px;
-  min-height: 168px;
-  padding: 10px 10px 12px;
-  background: var(--surface);
-  border: var(--card-bw) solid var(--border);
-  border-radius: var(--radius-sm);
-  box-shadow: var(--shadow-sm);
-}
-
-.day.is-rest {
-  background: transparent;
-  border: 1px dashed var(--rest-bd);
-  box-shadow: none;
-}
-
-.day-number {
-  font-size: 28px;
-}
-
-.day :deep(.tag) {
-  max-width: calc(100% + 20px);
-}
-
-.day-hours {
-  font-size: 15px;
-  font-weight: 600;
-  line-height: 1.4;
-}
-
-.rest {
-  margin-top: -6px;
-  font-size: 14px;
-  color: var(--text-muted);
-}
-
-.today {
-  margin-top: auto;
-  font-size: 14.5px;
-  font-weight: 700;
-  color: var(--title);
-}
-
-.legend {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 10px;
-  margin-top: 16px;
-  font-size: 14.5px;
-  color: var(--text-muted);
-}
-
-.side {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-}
-
-.nights {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 8px;
-  padding: 24px;
-}
-
-.nights > .card-title {
-  font-size: 19px;
-}
-
-.nights-count {
-  font-size: 48px;
-}
-
-.nights-text {
-  font-size: 14.5px;
-  color: var(--text-muted);
-}
-
-.btn-swap {
-  padding: 14px 18px;
-  font-size: 16px;
-}
-
-@media (max-width: 1180px) {
-  .layout {
-    grid-template-columns: 1fr;
-  }
-}
-
+.page-stack { gap: 18px; }
+.week-tabs { display: none; }
+.week-section > h2 { margin-bottom: 14px; }
+.week-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 10px; }
+.day { padding: 16px 10px; display: flex; flex-direction: column; gap: 14px; }
+.day > strong { font-size: 12px; }
+.day-details { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+.day-details p { font-size: 12px; }
+.day.is-rest { background: var(--surface-muted); }
+.day.is-today { border-color: var(--brand); }
+.bottom-grid { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 20px; }
+.shift-list { list-style: none; margin: 14px 0 0; padding: 0; }
+.shift-list li { display: flex; gap: 12px; flex-wrap: wrap; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+.night-count { margin: 16px 0 8px; font-size: 30px; font-weight: 700; }
+.swap-status { padding: 14px 0; border-bottom: 1px solid var(--border); display: flex; gap: 10px; flex-wrap: wrap; }
 @media (max-width: 760px) {
-  .grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .weekday {
-    display: none;
-  }
-
-  .day {
-    min-height: 0;
-  }
+ .week-tabs { display: flex; }
+ .week-tabs .is-selected { border-color: var(--brand); background: var(--brand-soft); }
+ .mobile-hidden { display: none; }
+ .week-grid { display: flex; flex-direction: column; gap: 0; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+ .day { display: grid; grid-template-columns: 76px minmax(0, 1fr); border: none; border-radius: 0; padding: 14px; border-bottom: 1px solid var(--border); }
+ .day > strong { padding-top: 4px; }
+ .day-details { gap: 5px; }
+ .bottom-grid { grid-template-columns: 1fr; }
 }
 </style>

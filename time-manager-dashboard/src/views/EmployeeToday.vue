@@ -1,41 +1,11 @@
 <template>
   <div class="today">
-    <PageHeader :eyebrow="dateLabel" :title="`${greetingText} ${firstName}`">
-      <button class="btn btn-outline" type="button" @click="$emit('tour')">
-        <AppIcon name="help" />
-        Revoir la prise en main
-      </button>
-    </PageHeader>
-
+    <PageHeader :eyebrow="dateLabel" :title="`${greetingText} ${firstName}`"><button class="btn btn-outline btn-sm" type="button" @click="$emit('tour')"><AppIcon name="help" />Revoir la prise en main</button></PageHeader>
+    <MissingDeparture v-if="userId" ref="missingDeparture" :user-id="userId" :now="now" @completed="onDepartureCompleted" @refreshed="onDepartureCompleted" />
     <div class="layout">
-      <div class="column">
-        <div class="clock-panel">
-          <!-- Attendre l'utilisateur avant de charger ses pointages. -->
-          <ClockManager v-if="userId" ref="clockManager" :user-id="userId" @changed="onClockChanged" />
-          <p v-else class="card clock-waiting" role="status">
-            Le pointage sera disponible une fois votre profil chargé.
-          </p>
-          <p class="clock-privacy">
-            <AppIcon name="shield" />
-            Seules vos heures d’arrivée, de pause, de reprise et de départ sont enregistrées.
-          </p>
-        </div>
-
-        <InfoNote title="Vos heures vous appartiennent">
-          Vous voyez tout ce que voit votre manager. Une erreur ? Votre manager la corrige, et la correction reste visible ici.
-        </InfoNote>
-      </div>
-
-      <div class="column">
-        <MissingDeparture v-if="userId" ref="missingDeparture" :user-id="userId" :now="now" @completed="onDepartureCompleted" @refreshed="onDepartureCompleted" />
-
-        <LastWeekCard :title="`Semaine dernière · ${lastWeekRange}`" :buckets="buckets" :target="target" :loading="loading" />
-
-        <div class="split">
-          <NextShifts :today="now" />
-          <TransparencyPanel />
-        </div>
-      </div>
+      <div class="column"><ClockManager v-if="userId" ref="clockManager" :user-id="userId" @changed="onClockChanged" /><p v-else class="card clock-waiting" role="status">Le pointage sera disponible une fois votre profil chargé.</p><InfoNote title="Vos heures vous appartiennent" flat>Un oubli ? Complétez votre départ. Une erreur dans vos heures ? Proposez une correction : votre responsable l’examine avant modification.</InfoNote></div>
+      <div class="column"><LastWeekCard :title="`Semaine dernière · ${lastWeekRange}`" :buckets="buckets" :target="target" :loading="loading" /><NextShifts :today="now" /></div>
+      <TransparencyPanel />
     </div>
   </div>
 </template>
@@ -119,7 +89,7 @@ export default {
 <style scoped>
 .layout {
   display: grid;
-  grid-template-columns: minmax(0, 375px) minmax(0, 1fr);
+  grid-template-columns: minmax(230px, 1fr) minmax(260px, 1.1fr) minmax(220px, .9fr);
   gap: 26px;
   align-items: start;
 }
@@ -171,4 +141,7 @@ export default {
     grid-template-columns: 1fr;
   }
 }
+.today > section { margin-bottom: 20px; }
+@media (max-width: 1180px) { .layout { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } .layout > .transparency { grid-column: 1 / -1; } }
+@media (max-width: 760px) { .layout { grid-template-columns: 1fr; } .layout > .transparency { grid-column: auto; } }
 </style>
