@@ -38,3 +38,10 @@ config :phoenix,
 
 # Hashing passwords on purpose takes time; keep the test suite fast.
 config :bcrypt_elixir, :log_rounds, 1
+
+# Cheapest Argon2 parameters: password hashing is not what the tests measure.
+config :argon2_elixir, t_cost: 1, m_cost: 8
+
+# Many tests log in from the same address within a minute. The rate-limit
+# tests turn the plug back on explicitly.
+config :time_manager, :rate_limit, false

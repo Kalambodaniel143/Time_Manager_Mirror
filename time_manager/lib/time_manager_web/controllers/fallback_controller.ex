@@ -45,6 +45,19 @@ defmodule TimeManagerWeb.FallbackController do
     |> json(%{errors: %{detail: "The last administrator cannot be demoted or deleted"}})
   end
 
+  # Errors of the organizations contract carry their own displayable message.
+  def call(conn, {:error, {:conflict, detail, fields}}) do
+    conn
+    |> put_status(:conflict)
+    |> json(%{errors: Map.put(fields, :detail, detail)})
+  end
+
+  def call(conn, {:error, {status, detail}}) when status in [:not_found, :forbidden] do
+    conn
+    |> put_status(status)
+    |> json(%{errors: %{detail: detail}})
+  end
+
   def call(conn, {:error, :bad_request}) do
     conn
     |> put_status(:bad_request)

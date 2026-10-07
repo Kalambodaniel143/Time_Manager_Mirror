@@ -1,7 +1,8 @@
 defmodule TimeManagerWeb.TeamController do
   @moduledoc """
   Teams. Everyone can read the teams they belong to or manage; only an
-  administrator creates teams, names their manager and composes them.
+  administrator creates the teams of their organization, names their manager
+  and composes them. Teams of another organization answer 404.
   """
   use TimeManagerWeb, :controller
   use OpenApiSpex.ControllerSpecs
@@ -33,7 +34,7 @@ defmodule TimeManagerWeb.TeamController do
 
     teams =
       if Authorization.administrator?(me) do
-        Teams.list_teams()
+        Teams.list_teams(me.organization_id)
       else
         managed = Teams.list_managed_teams(me)
         managed_ids = MapSet.new(managed, & &1.id)
@@ -65,7 +66,8 @@ defmodule TimeManagerWeb.TeamController do
     me = current_user(conn)
 
     with {:ok, team} <- Teams.fetch_team(id),
-         :ok <- authorize(Authorization.administrator?(me) or team.manager_id == me.id) do
+         :ok <-
+           authorize(Authorization.administrator_of_team?(me, team) or team.manager_id == me.id) do
       render(conn, :show, team: team)
     end
   end
@@ -81,8 +83,10 @@ defmodule TimeManagerWeb.TeamController do
   )
 
   def create(conn, %{"team" => attrs}) when is_map(attrs) do
-    with :ok <- authorize(Authorization.administrator?(current_user(conn))),
-         {:ok, team} <- Teams.create_team(attrs) do
+    me = current_user(conn)
+
+    with :ok <- authorize(Authorization.administrator?(me)),
+         {:ok, team} <- Teams.create_team(attrs, me.organization_id) do
       conn
       |> put_status(:created)
       |> render(:show, team: team)
@@ -104,8 +108,7 @@ defmodule TimeManagerWeb.TeamController do
   )
 
   def update(conn, %{"id" => id, "team" => attrs}) when is_map(attrs) do
-    with :ok <- authorize(Authorization.administrator?(current_user(conn))),
-         {:ok, team} <- Teams.fetch_team(id),
+    with {:ok, team} <- fetch_administered_team(current_user(conn), id),
          {:ok, team} <- Teams.update_team(team, attrs) do
       render(conn, :show, team: team)
     end
@@ -124,8 +127,7 @@ defmodule TimeManagerWeb.TeamController do
   )
 
   def delete(conn, %{"id" => id}) do
-    with :ok <- authorize(Authorization.administrator?(current_user(conn))),
-         {:ok, team} <- Teams.fetch_team(id),
+    with {:ok, team} <- fetch_administered_team(current_user(conn), id),
          {:ok, _team} <- Teams.delete_team(team) do
       send_resp(conn, :no_content, "")
     end
@@ -143,8 +145,7 @@ defmodule TimeManagerWeb.TeamController do
   )
 
   def add_member(conn, %{"id" => id, "user_id" => user_id}) do
-    with :ok <- authorize(Authorization.administrator?(current_user(conn))),
-         {:ok, team} <- Teams.fetch_team(id),
+    with {:ok, team} <- fetch_administered_team(current_user(conn), id),
          {:ok, user} <- Accounts.fetch_user(user_id),
          {:ok, team} <- Teams.add_member(team, user) do
       render(conn, :show, team: team)
@@ -167,11 +168,21 @@ defmodule TimeManagerWeb.TeamController do
   )
 
   def remove_member(conn, %{"id" => id, "user_id" => user_id}) do
-    with :ok <- authorize(Authorization.administrator?(current_user(conn))),
-         {:ok, team} <- Teams.fetch_team(id),
+    with {:ok, team} <- fetch_administered_team(current_user(conn), id),
          {:ok, user} <- Accounts.fetch_user(user_id),
          {:ok, team} <- Teams.remove_member(team, user) do
       render(conn, :show, team: team)
+    end
+  end
+
+  # An administrator only reaches the teams of their organization; the others
+  # do not exist for them (404). Non-administrators get 403.
+  defp fetch_administered_team(me, id) do
+    with :ok <- authorize(Authorization.administrator?(me)),
+         {:ok, team} <- Teams.fetch_team(id) do
+      if Authorization.administrator_of_team?(me, team),
+        do: {:ok, team},
+        else: {:error, :not_found}
     end
   end
 end

@@ -1,15 +1,20 @@
 defmodule TimeManager.Accounts do
   @moduledoc """
-  The Accounts context: users, their password and their role.
+  The Accounts context: users, their password, their role and their sessions.
 
   Users returned by this module always have their role preloaded, so callers
   can read `user.role.name` directly.
+
+  A user belongs to at most one organization. Users without one (created before
+  organizations existed, or by self-registration) form their own space: for
+  every check in this module and in `TimeManager.Authorization`, "the same
+  organization" includes "both without organization".
   """
 
   import Ecto.Query, warn: false
   alias TimeManager.Repo
 
-  alias TimeManager.Accounts.{Role, User}
+  alias TimeManager.Accounts.{RevokedToken, Role, User}
 
   @default_role "employee"
 
@@ -44,11 +49,12 @@ defmodule TimeManager.Accounts do
 
   @doc """
   Lists users, optionally filtered by exact `email` and `username`, and restricted
-  to the given `ids` when it is a list (`:all` means no restriction).
+  to `scope`: a list of ids, `{:organization, id}` (an organization, `nil` for
+  users without one) or `:all` (no restriction).
   """
-  def list_users(params, ids \\ :all) do
+  def list_users(params, scope \\ :all) do
     User
-    |> filter_by_ids(ids)
+    |> filter_by_scope(scope)
     |> filter_by_email(params["email"])
     |> filter_by_username(params["username"])
     |> order_by([u], asc: u.id)
@@ -56,8 +62,9 @@ defmodule TimeManager.Accounts do
     |> Repo.all()
   end
 
-  defp filter_by_ids(query, :all), do: query
-  defp filter_by_ids(query, ids), do: from(u in query, where: u.id in ^ids)
+  defp filter_by_scope(query, :all), do: query
+  defp filter_by_scope(query, {:organization, id}), do: in_organization(query, id)
+  defp filter_by_scope(query, ids) when is_list(ids), do: from(u in query, where: u.id in ^ids)
 
   defp filter_by_email(query, nil), do: query
 
@@ -115,19 +122,55 @@ defmodule TimeManager.Accounts do
     end
   end
 
+  @doc "The members of an organization, by id."
+  def list_organization_members(organization_id) do
+    User
+    |> in_organization(organization_id)
+    |> order_by([u], asc: u.id)
+    |> preload(:role)
+    |> Repo.all()
+  end
+
+  @doc "Fetches the user `id` only if they belong to the organization."
+  def fetch_organization_member(organization_id, id) do
+    with {:ok, %User{organization_id: ^organization_id} = user} <- fetch_user(id) do
+      {:ok, user}
+    else
+      _ -> {:error, :not_found}
+    end
+  end
+
+  @doc """
+  True when the user `id` exists and belongs to the organization
+  `organization_id` (`nil`: has no organization).
+  """
+  def in_organization?(id, organization_id) do
+    case Ecto.Type.cast(:id, id) do
+      {:ok, id} ->
+        from(u in User, where: u.id == ^id) |> in_organization(organization_id) |> Repo.exists?()
+
+      :error ->
+        false
+    end
+  end
+
+  @doc "Loads the organization of `user` (nil when they have none)."
+  def preload_organization(%User{} = user), do: Repo.preload(user, :organization)
+
   ## Authentication
 
   @doc """
   Checks an e-mail and password pair.
 
   Unknown e-mail and wrong password give the same result, in the same time, so
-  the answer does not reveal which accounts exist.
+  the answer does not reveal which accounts exist. A bcrypt hash from before the
+  switch to Argon2id is replaced now that the password is known.
   """
   def authenticate(email, password) when is_binary(email) and is_binary(password) do
-    user = Repo.get_by(User, email: String.downcase(email))
+    user = Repo.get_by(User, email: email |> String.trim() |> String.downcase())
 
     if User.valid_password?(user, password) do
-      {:ok, Repo.preload(user, :role)}
+      {:ok, user |> upgrade_hash(password) |> Repo.preload(:role)}
     else
       {:error, :invalid_credentials}
     end
@@ -137,6 +180,39 @@ defmodule TimeManager.Accounts do
     User.valid_password?(nil, nil)
     {:error, :invalid_credentials}
   end
+
+  defp upgrade_hash(user, password) do
+    with true <- User.legacy_hash?(user),
+         {:ok, user} <- user |> User.rehash_changeset(password) |> Repo.update() do
+      user
+    else
+      _ -> user
+    end
+  end
+
+  ## Sessions
+
+  @doc """
+  Ends a session before its expiry: its `jti` is recorded until the JWT would
+  have expired. Expired entries are purged at the same time.
+  """
+  def revoke_session(%{"jti" => jti, "exp" => exp}) when is_binary(jti) and is_integer(exp) do
+    now = DateTime.utc_now() |> DateTime.truncate(:second)
+    from(t in RevokedToken, where: t.expires_at < ^now) |> Repo.delete_all()
+
+    Repo.insert_all(RevokedToken, [%{jti: jti, expires_at: DateTime.from_unix!(exp)}],
+      on_conflict: :nothing
+    )
+
+    :ok
+  end
+
+  def revoke_session(_claims), do: :ok
+
+  def session_revoked?(jti) when is_binary(jti),
+    do: Repo.exists?(from t in RevokedToken, where: t.jti == ^jti)
+
+  def session_revoked?(_jti), do: true
 
   ## Writing users
 
@@ -153,14 +229,14 @@ defmodule TimeManager.Accounts do
       {:error, %Ecto.Changeset{}}
 
   """
-  def create_user(attrs, role_name \\ @default_role) do
+  def create_user(attrs, role_name \\ @default_role, organization_id \\ nil) do
     case get_role_by_name(role_name) do
       nil ->
         {:error, role_error(%User{}, attrs)}
 
       role ->
         %User{}
-        |> User.registration_changeset(attrs, role.id)
+        |> User.registration_changeset(attrs, role.id, organization_id)
         |> Repo.insert()
         |> preload_role()
     end
@@ -232,8 +308,8 @@ defmodule TimeManager.Accounts do
   end
 
   @doc """
-  Promotes or demotes a user. The last administrator cannot be demoted, so the
-  application always keeps someone able to manage it.
+  Promotes or demotes a user. The last administrator of an organization cannot
+  be demoted, so it always keeps someone able to manage it.
   """
   def change_role(%User{} = user, role_name) do
     user = Repo.preload(user, :role)
@@ -249,7 +325,7 @@ defmodule TimeManager.Accounts do
 
   @doc """
   Deletes a user, with their clock events and working times. The last
-  administrator cannot be deleted.
+  administrator of an organization cannot be deleted.
 
   ## Examples
 
@@ -276,10 +352,11 @@ defmodule TimeManager.Accounts do
     User.changeset(user, attrs)
   end
 
-  defp ensure_not_last_admin(%User{role: %Role{name: "administrator"}}, new_role)
+  defp ensure_not_last_admin(%User{role: %Role{name: "administrator"}} = user, new_role)
        when new_role != "administrator" do
     admins =
       from(u in User, join: r in assoc(u, :role), where: r.name == "administrator")
+      |> in_organization(user.organization_id)
       |> Repo.aggregate(:count)
 
     if admins > 1, do: :ok, else: {:error, :last_administrator}
@@ -292,6 +369,9 @@ defmodule TimeManager.Accounts do
     |> User.changeset(attrs)
     |> Ecto.Changeset.add_error(:role, "is invalid", validation: :inclusion, enum: Role.names())
   end
+
+  defp in_organization(query, nil), do: from(u in query, where: is_nil(u.organization_id))
+  defp in_organization(query, id), do: from(u in query, where: u.organization_id == ^id)
 
   defp preload_role(result, opts \\ [])
   defp preload_role({:ok, user}, opts), do: {:ok, Repo.preload(user, :role, opts)}

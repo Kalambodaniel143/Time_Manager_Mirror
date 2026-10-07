@@ -53,17 +53,18 @@ Le mécanisme suit le sujet : un **JWT signé avec Joken**, envoyé dans un **co
 ```text
 1. CONNEXION
    Navigateur ── POST /api/auth/login {email, password} ──▶ API
-                                                          vérifie le hash bcrypt
+                                                          vérifie le hash Argon2id
                                                           génère un token CSRF aléatoire (32 octets)
-                                                          signe le JWT {user_id, role, xsrf, exp}
+                                                          signe le JWT {user_id, role, xsrf, jti, exp}
    Navigateur ◀── Set-Cookie: jwt=… (HttpOnly, SameSite=Strict, 8 h)
-                  + {"data": {"csrf_token": "…", "user": {…}}}
+                  + {"data": {"csrf_token": "…", "role": "…", "user": {…}, "organization": {…}}}
    Le front garde csrf_token (mémoire + sessionStorage). Il ne voit jamais le JWT.
 
 2. CHAQUE REQUÊTE
    Navigateur ── cookie jwt (envoyé par le navigateur) + en-tête X-CSRF-Token ──▶ API
                                                           signature et expiration du JWT valides ?
                                                           xsrf du JWT == X-CSRF-Token ? (temps constant)
+                                                          jti absent de la liste des sessions révoquées ?
                                                           relit l'utilisateur et son rôle en base
                                                           contrôle le rôle et le périmètre
    Navigateur ◀── 200 · 401 non authentifié · 403 interdit
@@ -75,20 +76,27 @@ Le mécanisme suit le sujet : un **JWT signé avec Joken**, envoyé dans un **co
 |---|---|
 | Cookie `HttpOnly` | Le vol du JWT par un script injecté dans la page (XSS) : le JavaScript ne peut pas lire ce cookie. |
 | Token CSRF dans un en-tête | Les requêtes forgées depuis un autre site (CSRF) : le navigateur y joint le cookie, mais le site tiers ne connaît pas le token. |
-| Token CSRF *dans* le JWT | Le serveur reste sans état : il compare l'en-tête au `xsrf` du JWT, qu'il est seul à pouvoir signer. Rien n'est stocké en base. |
+| Token CSRF *dans* le JWT | Le serveur n'a pas à stocker le token CSRF : il compare l'en-tête au `xsrf` du JWT, qu'il est seul à pouvoir signer. Seules les sessions fermées par une déconnexion sont notées en base (`revoked_tokens`). |
 
 **Le rôle est relu en base à chaque requête.** Le JWT contient le rôle du moment de la connexion, mais le plug d'authentification ne s'y fie pas : il recharge l'utilisateur. Une rétrogradation ou une suppression de compte prend effet dès la requête suivante, sans attendre l'expiration du jeton.
 
-**Mots de passe.** Ils sont hachés avec bcrypt (`bcrypt_elixir`) et ne sont jamais renvoyés. Minimum 8 caractères. Un e-mail inconnu et un mauvais mot de passe donnent la même réponse, en un temps comparable, pour ne pas révéler quels comptes existent.
+**Mots de passe.** Ils sont hachés avec Argon2id (`argon2_elixir`) et ne sont jamais renvoyés. De 8 à 128 caractères, conservés tels que saisis (ni coupés ni tronqués), jamais composés uniquement d'espaces. Les hashs bcrypt créés avant le passage à Argon2id restent acceptés et sont remplacés à la connexion suivante. Un e-mail inconnu et un mauvais mot de passe donnent la même réponse, en un temps comparable, pour ne pas révéler quels comptes existent.
+
+**Déconnexion réelle.** `POST /api/auth/logout` inscrit l'identifiant du JWT (`jti`) dans `revoked_tokens` jusqu'à son expiration : rejoué après la déconnexion, le même cookie donne `401`.
+
+**Origine des requêtes.** Toute requête `POST`, `PUT`, `PATCH` ou `DELETE` dont l'en-tête `Origin` (ou, à défaut, `Referer`) désigne un autre hôte que celui de l'API est refusée en `403`, y compris sur les routes publiques. Une requête sans ces en-têtes (curl) passe.
+
+**Limitation des tentatives.** Les routes publiques répondent `429` avec `Retry-After` au-delà d'un seuil par minute : connexion (10 par e-mail, 100 par adresse IP), inscription (20), création d'organisation (10), recherche d'organisation (60), demande d'adhésion (10), suivi (30).
 
 ### Routes d'authentification
 
 | Méthode | Route | Accès | Rôle |
 |---|---|---|---|
-| `POST` | `/api/auth/login` | Public | Vérifie e-mail et mot de passe, pose le cookie, renvoie `csrf_token` et l'utilisateur. |
-| `POST` | `/api/auth/register` | Public | Crée un compte **employé** (un `role` envoyé est ignoré) et ouvre la session. |
+| `POST` | `/api/auth/login` | Public | Vérifie e-mail et mot de passe, pose le cookie, renvoie `csrf_token` et la session (`role`, `user`, `organization`). |
+| `POST` | `/api/auth/register` | Public | Crée un compte **employé** hors organisation (un `role` envoyé est ignoré) et ouvre la session. |
 | `GET` | `/api/auth/me` | Connecté | L'utilisateur courant. Le front l'appelle au chargement. |
-| `POST` | `/api/auth/logout` | Connecté | Supprime le cookie. |
+| `GET` | `/api/auth/session` | Connecté | La session relue en base : `role`, `user`, `organization` (`null` pour un compte sans organisation). |
+| `POST` | `/api/auth/logout` | Connecté | Révoque le JWT côté serveur et supprime le cookie. |
 
 ```bash
 curl -i -X POST http://localhost:4000/api/auth/login \
@@ -100,13 +108,15 @@ curl -i -X POST http://localhost:4000/api/auth/login \
 HTTP/1.1 200 OK
 set-cookie: jwt=eyJhbGciOiJIUzI1NiIs…; path=/; max-age=28800; HttpOnly; SameSite=Strict
 
-{"data": {"csrf_token": "6KeGXn3aCMbz…", "user": {"id": 1, "username": "admin", "email": "admin@gotham.gov", "role": "administrator", "inserted_at": "…"}}}
+{"data": {"csrf_token": "6KeGXn3aCMbz…", "role": "administrator", "user": {"id": 1, "username": "admin", "email": "admin@gotham.gov", "first_name": null, "last_name": null, "organization_id": null, "role": "administrator", "gender": null, "birth_date": null, "birth_place": null, "inserted_at": "…", "created_at": "…"}, "organization": null}}
 ```
 
 | Réponse | Cause |
 |---|---|
 | `401` `{"errors": {"detail": "Invalid credentials"}}` | E-mail ou mot de passe incorrect, quel que soit le cas. |
-| `401` `{"errors": {"detail": "Unauthorized"}}` | Sur une route protégée : cookie absent, JWT invalide ou expiré, en-tête `X-CSRF-Token` absent ou différent, compte supprimé. |
+| `401` `{"errors": {"detail": "Unauthorized"}}` | Sur une route protégée : cookie absent, JWT invalide, expiré ou révoqué, en-tête `X-CSRF-Token` absent ou différent, compte supprimé. |
+| `403` `{"errors": {"detail": "Origine de la requête refusée."}}` | Requête d'écriture envoyée depuis un autre site. |
+| `429` | Trop de tentatives ; réessayer après `Retry-After` secondes. |
 
 ### Côté navigateur
 
@@ -127,7 +137,11 @@ Une permission combine un **rôle** (quel type d'action) et un **périmètre** (
 |---|---|---|
 | `employee` | Soi | Pointe, consulte ses heures et son profil. |
 | `manager` | Soi + les membres des équipes qu'il **dirige** | Consulte et corrige les heures de son équipe. Pour ses propres heures, c'est un employé. |
-| `administrator` | Tout le monde | Comptes, rôles, équipes, toutes les heures. |
+| `administrator` | Son organisation | Comptes, rôles, équipes, heures, demandes d'adhésion de son organisation. |
+
+**Les organisations sont étanches.** Aucun rôle n'atteint les données d'une autre organisation, quel que soit l'identifiant mis dans l'URL. Les comptes sans organisation (créés avant les organisations, ou par `/api/auth/register`) forment leur propre espace, lui aussi isolé. Un identifiant d'utilisateur hors de l'organisation, qu'il existe ailleurs ou non, donne la même réponse `403` : on ne peut pas sonder quels identifiants existent.
+
+**Données personnelles.** Genre, date et lieu de naissance ne sont renvoyés qu'à l'utilisateur lui-même et aux administrateurs de son organisation, jamais à un manager.
 
 Être manager suppose deux conditions : avoir le rôle `manager` **et** être désigné manager d'une équipe (`teams.manager_id`). Être simple membre d'une équipe ne donne aucun droit sur les autres membres.
 
@@ -135,20 +149,44 @@ Une permission combine un **rôle** (quel type d'action) et un **périmètre** (
 
 | Route | Employé | Manager | Administrateur |
 |---|---|---|---|
-| `GET /api/users` | `403` | Soi + équipe | Tous |
-| `GET /api/users/:id` | Soi | Soi + équipe | Tous |
-| `POST /api/users` | `403` | `403` | Oui |
-| `PUT /api/users/:id` | Soi | Soi | Tous |
-| `PUT /api/users/:id/role` | `403` | `403` | Tous, sauf soi-même |
-| `DELETE /api/users/:id` | `403` | `403` | Tous, sauf le dernier administrateur |
+Dans ce tableau, « Organisation » désigne l'organisation de l'administrateur.
+
+| Route | Employé | Manager | Administrateur |
+|---|---|---|---|
+| `GET /api/users` | `403` | Soi + équipe | Organisation |
+| `GET /api/users/:id` | Soi | Soi + équipe | Organisation |
+| `POST /api/users` | `403` | `403` | Oui, dans son organisation |
+| `PUT /api/users/:id` | Soi | Soi | Organisation |
+| `PUT /api/users/:id/role` | `403` | `403` | Organisation, sauf soi-même |
+| `DELETE /api/users/:id` | `403` | `403` | Organisation, sauf le dernier administrateur |
 | `GET /api/roles` | Oui | Oui | Oui |
-| `GET /api/teams` | Ses équipes (noms seuls) | Ses équipes, avec membres | Toutes |
-| `POST/PUT/DELETE /api/teams…` | `403` | `403` | Oui |
-| `GET /api/clocks/:userID` | Soi | Soi + équipe | Tous |
+| `GET /api/teams` | Ses équipes (noms seuls) | Ses équipes, avec membres | Celles de l'organisation |
+| `POST/PUT/DELETE /api/teams…` | `403` | `403` | Organisation |
+| `GET /api/clocks/:userID` | Soi | Soi + équipe | Organisation |
 | `POST /api/clocks/:userID` | Soi | Soi | Soi |
-| `GET /api/workingtime/:userID[/:id]` | Soi | Soi + équipe | Tous |
-| `POST /api/workingtime/:userID` | `403` | Équipe, pas soi | Tous |
-| `PUT/DELETE /api/workingtime/:id` | `403` | Équipe, pas soi | Tous |
+| `GET /api/workingtime/:userID[/:id]` | Soi | Soi + équipe | Organisation |
+| `POST /api/workingtime/:userID` | `403` | Équipe, pas soi | Organisation |
+| `PUT/DELETE /api/workingtime/:id` | `403` | Équipe, pas soi | Organisation |
+
+### Organisations et demandes d'adhésion
+
+Ces routes suivent le contrat [CONTRAT_BACKEND_ORGANISATIONS.md](CONTRAT_BACKEND_ORGANISATIONS.md) (corps et réponses détaillés en section 5). Les erreurs `404`, `403` et `409` portent un message affichable dans `errors.detail` ; un `409` nomme aussi le champ en cause (`name`, `email`).
+
+| Méthode | Route | Accès | Effet |
+|---|---|---|---|
+| `POST` | `/api/organizations` | Public | Crée l'organisation et son administrateur, ouvre sa session (`201` + cookie + `csrf_token`). `409` si le nom (casse, accents et espaces ignorés) ou l'e-mail est déjà pris. |
+| `GET` | `/api/organizations/lookup?name=…` | Public | `{id, name}` du nom exact normalisé, sinon `404`. |
+| `POST` | `/api/join-requests` | Public | Demande en attente, sans compte ni mot de passe ; renvoie une référence privée. `409` si l'e-mail a déjà un compte ou une demande en attente. |
+| `POST` | `/api/join-requests/status` | Public | Statut et motif de refus à partir de la référence, jamais le profil. |
+| `GET` | `/api/organizations/:org_id/join-requests` | Admin de `:org_id` | Les demandes, sans leur référence. |
+| `POST` | `/api/organizations/:org_id/join-requests/:id/approve` | Admin de `:org_id` | Crée l'employé avec le mot de passe choisi par l'admin, en une transaction. `409` si déjà traitée. |
+| `POST` | `/api/organizations/:org_id/join-requests/:id/reject` | Admin de `:org_id` | Refus avec un motif de 1 à 500 caractères. `409` si déjà traitée. |
+| `GET` | `/api/organizations/:org_id/members` | Admin de `:org_id` | Les membres, avec leurs données personnelles. |
+| `PATCH` | `/api/organizations/:org_id/members/:id` | Admin de `:org_id` | `employee` ou `manager` uniquement ; jamais sur un administrateur (`403`). |
+
+Le `:org_id` de l'URL n'est jamais cru sur parole : s'il n'est pas l'organisation de l'administrateur connecté, la réponse est `403`, que l'organisation existe ou non.
+
+**Nom du rôle administrateur.** L'API renvoie `administrator` partout, y compris dans la session. La maquette front du contrat attend `admin` dans `session.role` (`organizationService.js`, `sessionResult`) : ce test doit accepter `administrator` au raccordement.
 
 ### Règles de sécurité appliquées
 
@@ -159,7 +197,9 @@ Une permission combine un **rôle** (quel type d'action) et un **périmètre** (
 | `GET /api/workingtime/:userID/:id` vérifie que la période appartient à `:userID`. | Lire la période d'un autre en mettant son propre identifiant dans l'URL. |
 | `PUT /api/users/:id` ne lit que `username`, `email` et `password`. Le rôle a sa propre route. | Se promouvoir en ajoutant `"role": "administrator"` au formulaire de profil (*mass assignment*). |
 | Changer son propre mot de passe exige `current_password`. | Prendre le contrôle d'un compte avec une session volée. |
-| Personne ne change son propre rôle ; le dernier administrateur ne peut être ni rétrogradé ni supprimé (`409`). | L'auto-promotion, et le blocage définitif de l'administration. |
+| Personne ne change son propre rôle ; le dernier administrateur d'une organisation ne peut être ni rétrogradé ni supprimé (`409`). | L'auto-promotion, et le blocage définitif de l'administration. |
+| Le manager et les membres d'une équipe appartiennent à l'organisation de l'équipe. | Rattacher un inconnu à son équipe pour lire ses heures. |
+| La référence de suivi d'une demande est aléatoire (32 octets), envoyée dans le corps et stockée hachée (SHA-256). | La deviner, la retrouver dans des logs d'URL ou dans une fuite de la base. |
 | Un manager ne crée ni ne corrige ses propres heures. | Valider soi-même ses heures. |
 | Seul l'administrateur compose les équipes et nomme les managers. | Qu'un manager s'ouvre l'accès aux heures de quelqu'un en l'ajoutant à son équipe. |
 | Chacun pointe pour soi uniquement. | Les pointages fictifs pour le compte d'un autre. |
@@ -403,8 +443,9 @@ curl -s -b $JAR -c $JAR -H "X-CSRF-Token: $CSRF" -X POST $API/auth/logout
 
 | Limite | Conséquence | Piste |
 |---|---|---|
-| La déconnexion supprime le cookie, mais le JWT reste valide jusqu'à son expiration (8 h). | Un JWT copié avant la déconnexion, avec son token CSRF, fonctionne encore. | Liste de révocation (`jti`) ou date de dernière déconnexion par utilisateur, vérifiée par le plug. |
-| Pas de limitation des tentatives de connexion. | Essais de mots de passe en série possibles. | Limiter les essais par IP et par compte (ex. `hammer`). |
+| Les compteurs de tentatives (`429`) sont en mémoire et propres au serveur. | Ils repartent de zéro au redémarrage et ne sont pas partagés entre plusieurs instances. | Stockage partagé (Redis, ou PostgreSQL) si l'API passe à plusieurs instances. |
+| Derrière Nginx, toutes les requêtes ont l'adresse IP du proxy. | Les seuils « par IP » s'appliquent à tous les clients ensemble ; ils sont donc larges. Le seuil par e-mail de la connexion, lui, reste efficace. | Lire `X-Real-IP` posé par Nginx, à condition que le port 4000 ne soit plus exposé directement. |
+| `/api/auth/register` crée encore un compte actif hors organisation. | On peut ouvrir un compte sans validation, isolé de toute organisation. | Le supprimer une fois le front passé au circuit organisations. |
 | `COOKIE_SECURE` désactivé tant que le site est en HTTP. | Le cookie peut circuler en clair sur le réseau. | Passer en HTTPS (reverse proxy) puis `COOKIE_SECURE=true`. |
 | `time` du pointage fourni par le client. | Un client peut pointer à une heure arbitraire. | Utiliser l'heure du serveur, ou borner l'écart accepté. |
 | Pas de validation mensuelle ni de journal d'audit. | Une période corrigée par un manager ne garde pas la trace de l'auteur. | Champs `created_by`/`validated_by` et table d'audit. |

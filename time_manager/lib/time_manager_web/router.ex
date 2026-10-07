@@ -1,8 +1,11 @@
 defmodule TimeManagerWeb.Router do
   use TimeManagerWeb, :router
 
+  # CheckOrigin refuses POST/PUT/PATCH/DELETE sent by a browser from another
+  # site, including on the public routes that have no CSRF token yet.
   pipeline :api do
     plug :accepts, ["json"]
+    plug TimeManagerWeb.Plugs.CheckOrigin
     plug OpenApiSpex.Plug.PutApiSpec, module: TimeManagerWeb.ApiSpec
   end
 
@@ -12,19 +15,35 @@ defmodule TimeManagerWeb.Router do
     plug TimeManagerWeb.Plugs.Authenticate
   end
 
-  # Public routes: the only ones reachable without a session.
-  scope "/api/auth", TimeManagerWeb do
+  # Public routes: the only ones reachable without a session. Each one is
+  # rate-limited in its controller.
+  scope "/api", TimeManagerWeb do
     pipe_through :api
 
-    post "/login", AuthController, :login
-    post "/register", AuthController, :register
+    post "/auth/login", AuthController, :login
+    post "/auth/register", AuthController, :register
+
+    post "/organizations", OrganizationController, :create
+    get "/organizations/lookup", OrganizationController, :lookup
+    post "/join-requests", JoinRequestController, :create
+    post "/join-requests/status", JoinRequestController, :status
   end
 
   scope "/api", TimeManagerWeb do
     pipe_through [:api, :auth]
 
     get "/auth/me", AuthController, :me
+    get "/auth/session", AuthController, :session
     post "/auth/logout", AuthController, :logout
+
+    # Administrators of :org_id only (checked against the session, not the URL).
+    scope "/organizations/:org_id" do
+      get "/join-requests", JoinRequestController, :index
+      post "/join-requests/:id/approve", JoinRequestController, :approve
+      post "/join-requests/:id/reject", JoinRequestController, :reject
+      get "/members", OrganizationController, :members
+      patch "/members/:id", OrganizationController, :update_member
+    end
 
     get "/roles", RoleController, :index
 
