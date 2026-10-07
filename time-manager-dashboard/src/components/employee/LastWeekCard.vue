@@ -47,7 +47,7 @@ export default {
 }
 
 .total {
-  font-size: 48px;
+  font-size: 28px;
   color: var(--text);
 }
 

@@ -1,6 +1,6 @@
-# Contrat backend — organisations, adhésions et connexion
+# Contrat backend — organisations, adhésions, connexion et fusion de la maquette
 
-Ce document décrit les appels réellement ajoutés au front dans `time-manager-dashboard/src/services/organizationService.js`. Aucun fichier du backend Phoenix n’a été modifié.
+Ce document décrit les appels du front dans `time-manager-dashboard/src/services/organizationService.js` et les demandes de correction ajoutées dans `src/services/correctionService.js`. La section 9 précise les changements liés à la fusion de la maquette du 7 octobre 2026. Aucun fichier du backend Phoenix n’a été modifié.
 
 ## 1. Parcours implémenté
 
@@ -32,6 +32,7 @@ Pour utiliser la connexion backend existante (les écrans de création/adhésion
 
 ```env
 VITE_AUTH_USE_MOCK=false
+VITE_USE_MOCK=false
 VITE_API_URL=/api
 ```
 
@@ -39,7 +40,7 @@ Redémarrer Vite après un changement de variables ; reconstruire le bundle pour
 
 En simulation, les données sont propres à ce navigateur et à cette origine. La simulation n’est pas un mécanisme de sécurité : son stockage peut être modifié par l’utilisateur. Les mots de passe sont stockés sous forme de dérivés PBKDF2 salés pour ne pas les conserver en clair, mais cela ne transforme pas le navigateur en serveur d’authentification.
 
-Les nouveaux utilisateurs simulés ne sont pas créés dans l’ancien backend. Leur identifiant métier `App.userId` reste donc `null` : aucun chargement automatique des heures avec un faux identifiant. Les anciens écrans de planning, paie, équipes et droits conservent leurs sources existantes ; leur migration en données multi-organisations est un travail backend/métier distinct. La connexion backend existante utilise `auth.user.id` pour les routes de pointage et de périodes existantes.
+Les utilisateurs simulés ne sont pas créés dans le backend. Depuis la fusion, `App.userId` contient leur identifiant local et les services de pointage/périodes/corrections dirigent explicitement leurs appels vers `mocks/organizationWork.js` tant que `auth.organizationSession` existe. Ces identifiants ne sont pas envoyés à l’API. Les données sont persistées sous `tm-work-demo:<organization_id>` ; planning, droits, notes, règles et validation locale sous `tm-org:<organization_id>`. La connexion backend conserve le transport API et `auth.user.id`. Les pages d’administration des utilisateurs et équipes backend sont accessibles en mode backend, tandis que les comptes simulés se gèrent dans Mon organisation.
 
 Pour brancher ensuite les organisations, adapter les réponses `/auth/login` et `/auth/me` et l’état partagé pour inclure l’organisation, activer `LoginScreen` et la route `organization` en mode API, et utiliser le jeton CSRF du transport commun pour les mutations d’organisation. Les tests API du service décrivent le contrat cible ; ils ne prouvent pas sa disponibilité sur le serveur actuel.
 
@@ -351,5 +352,153 @@ Commandes de vérification :
 ```bash
 npm run test:auth
 npm run test:clocks
+npm run test:fusion
 npm run build
 ```
+
+
+## 9. Compléments après fusion de la maquette — 7 octobre 2026
+
+### 9.1 Ce que le front réalise désormais
+
+- Charte verte, navigation desktop et barre inférieure mobile par rôle ; les fonctions d’organisation restent disponibles.
+- Mon compte rassemble identité, affichage Clair/Nuit/Contraste, textes renforcés, confidentialité, aide et déconnexion. En mode backend, les formulaires d’identité et changement de mot de passe existants sont conservés. En mode organisation simulée, ils ne tentent pas de modifier un faux utilisateur dans l’API.
+- Pointages, pauses/reprises et périodes persistants dans la simulation d’organisation. Une pause est exclue des durées. Les données ne sont pas partagées entre organisations.
+- L’employé propose une correction sur une période existante ; ses heures ne changent qu’après acceptation par un autre responsable autorisé. Un refus nécessite un motif. La proposition, les horaires originaux et la décision sont affichés.
+- Les heures existent en tableau desktop et cartes mobile avec durée séparée. Les propositions ne sont pas additionnées aux heures confirmées.
+- Les vrais membres d’équipe sont lus depuis `/teams` en mode backend pour Mon équipe. Dans la simulation, les membres visibles de l’organisation constituent un groupe de démonstration ; cette simplification ne remplace pas les permissions par équipe du serveur.
+- Le planning employé a deux semaines distinctes ; le planning responsable permet une sélection d’agent sur mobile. Les plannings restent des exemples.
+- Demandes d’échange enregistrées localement et examinables dans la démonstration. Les accepter signifie organiser l’échange ; cela n’effectue pas automatiquement une permutation réelle de gardes.
+- Résumés de l’équipe, accès aux fiches, validation groupée locale, règles enregistrées explicitement et droits accompagnés de leurs états lisibles.
+- Aucun badge, aucune géolocalisation, aucune collecte d’activité, aucun email automatique et aucun envoi à un logiciel de paie ne sont introduits. L’export est un téléchargement CSV d’exemple.
+
+### 9.2 Nouvelles routes réellement appelées pour les corrections
+
+Ces trois routes sont proposées au backend et **ne sont pas présentes dans son routeur actuel**. `correctionService.js` utilise le transport HTTP commun : cookie, `credentials: same-origin`, `X-CSRF-Token`, enveloppe `data` et gestion habituelle des erreurs. Les comptes d’organisation simulés utilisent à la place le stockage local. Un serveur répondant 404 produit une information d’indisponibilité ; aucune réussite n’est inventée.
+
+| Méthode | Route sous `/api` | Rôle |
+|---|---|---|
+| GET | `/correction-requests?user_id=14` | Suivi des demandes du salarié ; sans filtre, demandes du périmètre du responsable connecté. |
+| POST | `/workingtime/:id/correction-requests` | Proposition de modification de ses propres horaires. |
+| PATCH | `/correction-requests/:id` | Décision d’un autre manager autorisé ou d’un administrateur de l’organisation. |
+
+POST, corps exact envoyé par le front :
+
+```json
+{
+  "correction": {
+    "start": "2026-10-06 06:00:00",
+    "end": "2026-10-06 13:00:00",
+    "reason": "Départ réel plus tôt après la fin de l’intervention"
+  }
+}
+```
+
+Les dates envoyées sont en UTC, suivant la convention actuelle des pointages (`YYYY-MM-DD HH:mm:ss`). Le formulaire affiche/saisit l’heure locale et la convertit. Le backend accepte et restitue une représentation UTC cohérente. `reason` contient entre 1 et 500 caractères après trim. Les horaires doivent être valides, de durée positive et sans date future. Les identifiants d’auteur, de salarié et d’organisation sont déterminés côté serveur à partir de la session et de la période, jamais depuis le corps client.
+
+Réponse POST/PATCH : un objet dans `data`. Réponse GET : une liste dans `data`. Forme attendue :
+
+```json
+{
+  "data": {
+    "id": 7,
+    "period_id": 23,
+    "user_id": 14,
+    "username": "sara@example.com",
+    "before": { "start": "2026-10-06 06:00:00", "end": "2026-10-06 14:00:00" },
+    "proposal": { "start": "2026-10-06 06:00:00", "end": "2026-10-06 13:00:00" },
+    "reason": "Départ réel plus tôt après la fin de l’intervention",
+    "status": "pending",
+    "created_at": "2026-10-07T09:00:00Z",
+    "reviewed_at": null,
+    "reviewed_by": null,
+    "review_reason": ""
+  }
+}
+```
+
+`reviewed_by` est le nom affichable du décideur (le serveur conserve également son identifiant). `before` est l’instantané lu par le serveur lors de la création. Il doit être conservé après acceptation, afin que le suivi affiche la différence.
+
+PATCH, corps exact :
+
+```json
+{ "status": "approved", "reason": "Horaires vérifiés avec l’agent" }
+```
+
+Ou :
+
+```json
+{ "status": "rejected", "reason": "Précisez la date de votre départ" }
+```
+
+Seuls `approved` et `rejected` sont acceptés pour une décision. Le commentaire est facultatif à l’acceptation, obligatoire au refus.
+
+### 9.3 Règles serveur nécessaires pour ces demandes
+
+1. Un utilisateur peut proposer uniquement une correction de ses propres périodes. Une proposition ne modifie ni les périodes ni les totaux.
+2. Un employé voit uniquement ses demandes ; un manager les demandes des membres de ses équipes ; un admin uniquement celles de son organisation. Le filtre `user_id` ne permet jamais d’élargir ce périmètre.
+3. Personne n’accepte sa propre correction. Les permissions actuelles de modification des heures restent pertinentes pour les corrections directes du manager ; le front n’affiche pas cette édition directe pour ses propres heures.
+4. Une seule demande `pending` par période : doublon = 409. Une demande traitée ne peut pas être rejouée : 409.
+5. Si la période a été modifiée ou supprimée depuis la proposition, l’acceptation échoue avec 409 et un message explicite. Vérifier instantané/version et décision dans une transaction.
+6. L’acceptation modifie la période et conserve auteur, date, ancienne/nouvelle valeurs et motif. Le refus conserve les heures d’origine et son explication.
+7. Les demandes plus anciennes que sept jours restent soumises à une décision manuelle. Elles ne bénéficient pas d’une correction personnelle directe.
+8. Une feuille validée/clôturée ne peut pas être modifiée silencieusement : prévoir une régularisation et une nouvelle validation après acceptation selon le périmètre de clôture retenu.
+9. Compléter un départ oublié est une opération distincte : garder l’endpoint existant `/clocks/:userID/:clockID/complete`, ses protections contre les formulaires périmés et sa fenêtre de sept jours. Quand les feuilles serveur existeront, vérifier aussi leur clôture.
+10. Le front empêche les dates futures et affiche les erreurs ; le backend répète les validations. Les tests de simulation ne constituent pas une preuve de sécurité serveur.
+
+La simulation couvre propositions/décisions/isolement, mais ne possède pas un vrai mécanisme serveur de clôture ou de validation des feuilles. Les points 8 et 9 concernant une feuille clôturée restent à réaliser côté backend, puis à refléter dans les données de capacité retournées au front.
+
+### 9.4 Fonctions encore locales et raccordement à prévoir
+
+Ces fonctionnalités n’introduisent pas aujourd’hui de nouveaux appels HTTP dans le front ; leurs futures API devront être définies et raccordées :
+
+| Fonction | Comportement actuel | Besoin serveur |
+|---|---|---|
+| Planning/publication | Exemple modifiable localement ; aucun agent notifié. | Gardes réelles, brouillon/version publiée, dates de publication et notifications. |
+| Demande d’échange | Enregistrement local dans `org.swapRequests`, statut pending/accepted/rejected ; accepted ne permute pas automatiquement les gardes. | Gardes identifiées, demande persistante, décision et échange transactionnel, contrôles de contraintes. |
+| Notes | Stockage local et avertissement sur l’absence de partage réel. | Note liée au salarié, à la semaine et au manager autorisé, visibilité identique pour les deux. |
+| Validation | État local par utilisateur/semaine ; accès groupé. | Feuille hebdomadaire persistante, validateur/date, anomalies bloquantes, clôture et nouvelle validation après correction. |
+| Droits/règles/journal | Démonstration locale ; pas de notification annoncée comme envoyée. | Droits validate/correct/publish par équipe, règles par organisation et journal métier persistant. |
+| Paie | Relevé d’exemple et CSV téléchargé. | Totaux par mois/service depuis heures réellement confirmées ; catégories, majorations et politique d’arrondi explicites. |
+
+Les dépassements de nuits ne suppriment pas les heures travaillées. La sélection automatique les signale et ne les coche pas ; le responsable peut les examiner puis les sélectionner explicitement. Un départ manquant ou des pointages non vérifiés restent bloquants dans le front. Le serveur devra appliquer une politique cohérente et empêcher l’auto-validation.
+
+Les règles locales contiennent désormais :
+
+```json
+{
+  "maxConsecutiveNights": 2,
+  "maxNightsPerWeek": 0,
+  "maxNightsPerMonth": 0,
+  "overtimeThreshold": 40,
+  "publishDaysAhead": 14
+}
+```
+
+Les seuils de fréquence `0` signifient désactivés ; aucun quota n’est imposé sans décision de l’organisation. Les valeurs sont des entiers, minimum 1 pour nuits consécutives/heures supplémentaires/publication, minimum 0 pour fréquences semaine/mois. Le front déduplique les périodes classées nuit par date de début ; les services coupés par une pause et traversant minuit doivent être rattachés à leur garde par le serveur ; la règle finale de rattachement au jour de service et le fuseau doivent être établis côté serveur. Mon équipe utilise les périodes du mois lorsque le seuil mensuel est activé. Pour le planning de démonstration, les contrôles mensuels portent uniquement sur les quatorze jours affichés : le serveur devra vérifier le mois complet et les frontières entre périodes.
+
+Le repère hebdomadaire du résumé est maintenant explicitement le seuil d’heures supplémentaires, et n’est plus présenté comme un nombre d’heures prévues. Un futur contrat de planning fournira les heures prévues/contractuelles séparément.
+
+Les rappels sont à déclencher après le départ attendu avec un délai adapté à la garde, sans relances répétitives. Ne pas envoyer aveuglément un message à 9 h le lendemain lorsqu’un service de nuit est encore en cours. Aucun automatisme n’a été ajouté au backend par cette fusion.
+
+### 9.5 Préférences et recette complémentaire
+
+Le thème (`tm-theme`) et le renforcement des textes (`tm-strong-text`) sont stockés localement. Aucune nouvelle route n’est nécessaire pour ces préférences. Une synchronisation entre appareils serait une évolution facultative du profil.
+
+Recette dans un même navigateur :
+
+1. Créer une organisation, faire accepter un employé et se connecter avec son email/mot de passe.
+2. Pointer une arrivée, une pause, une reprise, un départ ; recharger et vérifier la persistance. Les pauses ne sont pas comptées.
+3. Depuis Mes heures, proposer une correction motivée. Vérifier que les totaux restent inchangés tant qu’elle est pending.
+4. Se reconnecter admin ou manager autorisé, accepter/refuser et vérifier le suivi et les heures mises à jour.
+5. Tester le refus motivé, le doublon pending, l’auto-acceptation interdite et une période modifiée après proposition.
+6. Essayer une autre organisation : aucune période ou demande de la première n’est visible.
+7. Sur mobile, naviguer par la barre inférieure, changer de semaine, choisir un agent dans le planning responsable et ouvrir Mon compte.
+8. Choisir Nuit/Contraste, activer les textes renforcés et recharger.
+9. Vérifier que notes/planning/validation/CSV restent identifiés comme locaux ou d’exemple, sans promesse d’envoi.
+
+Fichiers ajoutés : `mocks/organizationWork.js`, `services/correctionService.js`, `components/reviews/CorrectionRequest.vue`, `components/reviews/CorrectionPanel.vue`, `components/ui/ModalDialog.vue`, `test/fusion-workflow.test.js`.
+
+La limite maximale de mot de passe du contrat organisations reste 128 caractères ; le modèle User du backend existant limite aujourd’hui à 72. Le raccordement doit harmoniser cette limite et le hachage, sans réduire le minimum de 8 caractères retenu.
+
+Point existant à corriger côté backend avant recette réelle : `AuthController.login` utilise `:unatuhorized` au lieu de `:unauthorized` en cas d’identifiants incorrects. Le backend est resté inchangé pendant cette intervention front.

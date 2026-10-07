@@ -1,12 +1,14 @@
 <template>
   <div class="account-identity">
     <span class="avatar" aria-hidden="true">{{ initials }}</span>
-    <div class="identity"><strong>{{ session.user.first_name }} {{ session.user.last_name }}</strong><span>{{ roleLabel }}</span><span class="email">{{ session.user.email }}</span><button type="button" @click="$emit('logout')">Se déconnecter</button></div>
+    <div class="identity"><RouterLink :to="{ name: 'profile' }">{{ session.user.first_name }} {{ session.user.last_name }}</RouterLink><span>{{ roleLabel }}</span><span class="email">{{ session.user.email }}</span><button type="button" @click="$emit('logout')">Se déconnecter</button></div>
   </div>
 </template>
 <script>
+import { RouterLink } from 'vue-router'
 export default {
   name: 'AccountIdentity',
+  components: { RouterLink },
   props: { session: { type: Object, required: true } },
   emits: ['logout'],
   computed: {
@@ -22,4 +24,5 @@ export default {
 .identity span { color: var(--side-muted); font-size: 13px; }
 .email { overflow-wrap: anywhere; }
 .identity button { align-self: flex-start; padding: 4px 0; border: 0; background: none; color: var(--side-ink); text-decoration: underline; text-underline-offset: 3px; }
+.identity a { color: inherit; font-weight: 700; text-decoration: none; }
 </style>

@@ -1,9 +1,12 @@
+import { auth } from '../stores/auth'
+import { workClocks, workClock } from '../mocks/organizationWork'
 import { CLOCK_USE_MOCK } from '../config'
 import { mocked, request } from './http'
 import { mockCreateClock, mockListClocks } from '../mocks/clocks'
 import { departureError, localDateInput, clockDate } from '../utils/missingDeparture'
 
 export function getClocks(userId) {
+  if (auth.organizationSession) return Promise.resolve().then(() => workClocks(userId))
   if (CLOCK_USE_MOCK) {
     return mocked(() => mockListClocks(Number(userId)))
   }
@@ -12,6 +15,7 @@ export function getClocks(userId) {
 }
 
 export function createClock(userId, attrs) {
+  if (auth.organizationSession) return Promise.resolve().then(() => workClock(userId, attrs))
   if (CLOCK_USE_MOCK) {
     return mocked(() => mockCreateClock(Number(userId), attrs))
   }
@@ -25,6 +29,13 @@ export function createClock(userId, attrs) {
 }
 
 export function completeDeparture(userId, clockId, time) {
+  if (auth.organizationSession) return Promise.resolve().then(() => {
+    const last = workClocks(userId).at(-1)
+    if (!last) throw new Error('Pointages introuvables.')
+    const error = departureError(localDateInput(clockDate(time)), last, new Date())
+    if (error) throw new Error(error)
+    return workClock(userId, { time, status: false, kind: 'departure' }, clockId)
+  })
   if (CLOCK_USE_MOCK) {
     return mocked(null).then(() => {
       const last = mockListClocks(Number(userId)).at(-1)

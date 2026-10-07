@@ -1,6 +1,6 @@
 <template>
   <section class="next-shifts">
-    <h2 class="card-title">Prochaines gardes</h2>
+    <h2 class="card-title">Prochaines gardes</h2><p class="field-hint">Exemple de planning · à confirmer auprès de votre responsable.</p>
     <p v-if="shifts.length === 0" class="card-subtitle">Aucune garde de nuit ou d’astreinte prévue.</p>
     <article v-for="(shift, index) in shifts" :key="shift.date.toISOString()" class="shift card">
       <div class="shift-date">
@@ -125,4 +125,8 @@ export default {
   height: 16px;
   margin-top: 2px;
 }
+.shift { gap: 12px; padding: 14px; }
+.shift-date { width: 48px; min-height: 75px; border-radius: 6px; background: var(--brand); color: var(--on-brand); }
+.shift-day { font-size: 25px; }
+.shift-weekday { font-size: 11px; }
 </style>

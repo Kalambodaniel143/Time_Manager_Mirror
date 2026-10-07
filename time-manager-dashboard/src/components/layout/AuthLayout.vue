@@ -6,7 +6,7 @@
 
       <div class="intro-body">
         <h1 class="intro-title">Time Manager</h1>
-        <p class="intro-eyebrow">Mairie de Gotham</p>
+        <p class="intro-eyebrow">Votre organisation</p>
         <ul class="intro-list">
           <li v-for="point in points" :key="point.icon">
             <AppIcon :name="point.icon" />
@@ -47,8 +47,7 @@
         </fieldset>
 
         <InfoNote icon="phone" title="Pas d’ordinateur ?">
-          Pointez depuis votre téléphone, avec votre badge à l’entrepôt, ou auprès de votre chef d’équipe. Formation sur
-          place : mardi et jeudi, 7 h – 8 h.
+          Utilisez un téléphone ou un appareil partagé. Si vous avez besoin d’aide, demandez un accompagnement à votre responsable.
         </InfoNote>
       </div>
     </section>
@@ -61,15 +60,15 @@ import InfoNote from '../ui/InfoNote.vue'
 import { applyTheme, readTheme, writeTheme } from '../../utils/session'
 
 const POINTS = [
-  { icon: 'login', text: 'Un geste pour pointer, sur ordinateur, téléphone ou badge.' },
+  { icon: 'login', text: 'Un geste pour pointer, sur ordinateur ou téléphone.' },
   { icon: 'moon', text: 'Vos nuits comptent ×1,5, vos heures sup. ×2, et vous le voyez.' },
   { icon: 'eye', text: 'Vous voyez tout ce que voit votre manager. Rien d’autre n’est enregistré.' },
 ]
 
 const THEMES = [
-  { value: 'light', label: 'Clair', text: 'La marque, pour le bureau et la journée.', colors: ['#0037ff', '#f2f5ff', '#ffd000'] },
-  { value: 'night', label: 'Nuit', text: 'Moins d’éblouissement pour les équipes de nuit.', colors: ['#2c4cf0', '#090d2b', '#c8d0ff'] },
-  { value: 'contrast', label: 'Contraste élevé', text: 'Textes renforcés : malvoyance, plein soleil.', colors: ['#0021a5', '#ffffff', '#000000'] },
+  { value: 'light', label: 'Clair', text: 'La marque, pour le bureau et la journée.', colors: ['#24584f', '#f7f6f2', '#e4eee8'] },
+  { value: 'night', label: 'Nuit', text: 'Moins d’éblouissement pour les équipes de nuit.', colors: ['#203f33', '#121b17', '#a7d5c2'] },
+  { value: 'contrast', label: 'Contraste élevé', text: 'Textes renforcés : malvoyance, plein soleil.', colors: ['#123c2e', '#ffffff', '#000000'] },
 ]
 
 const PIXELS = 'llllddllllllolllddllo'.split('').map((code) => ({ l: 'light', d: 'dark', o: 'orange' })[code])
@@ -340,4 +339,22 @@ export default {
     grid-template-columns: 1fr;
   }
 }
+
+.deco, .pixels { display: none; }
+.intro-title { font-family: var(--font); font-size: clamp(32px, 3vw, 48px); font-weight: 700; text-transform: none; letter-spacing: -.04em; }
+.intro-title::after, .intro-eyebrow::before, .intro-eyebrow::after { content: none; }
+.intro-eyebrow { margin-top: 24px; text-transform: none; }
+.intro-list { font-size: 16px; }
+.login { grid-template-columns: minmax(280px, 34%) minmax(0, 1fr); }
+.panel { justify-content: center; padding: 48px 28px; }
+.form { margin: 0; width: min(500px, 100%); }
+@media (max-width: 760px) {
+ .login { display: block; }
+ .intro { display: flex; min-height: auto; padding: 28px 20px; align-items: center; text-align: center; }
+ .intro-title { font-size: 28px; }
+ .intro-eyebrow { margin: 8px 0 0; }
+ .intro-list { display: none; }
+ .panel { padding: 28px 20px; }
+}
+
 </style>

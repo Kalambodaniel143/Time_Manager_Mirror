@@ -180,3 +180,10 @@ export function mockSetRole(organizationId, userId, role) {
   save(db)
   return publicUser(user)
 }
+
+// Members visible in the isolated demonstration workspace (one organization).
+export function mockWorkMembers() {
+  const db = state()
+  const session = current(db)
+  return db.users.filter(user => user.organization_id === session.organization.id && (session.role !== 'employee' || user.id === session.user.id)).map(publicUser)
+}

@@ -1,4 +1,5 @@
-import { reactive } from 'vue'
+import { reactive, watch } from 'vue'
+import { auth } from '../stores/auth'
 import {
   EMPLOYEE_PLACES,
   EMPLOYEE_PLAN,
@@ -17,11 +18,14 @@ import { addDays, longestRun, mondayOf } from '../utils/hours'
 import { readJson, writeJson } from '../utils/session'
 
 const STORAGE_KEY = 'tm-org'
+function storageKey() { return auth.organizationSession ? `${STORAGE_KEY}:${auth.organizationSession.organization.id}` : STORAGE_KEY }
 const PLAN_OFFSET_DAYS = 14
 const PLAN_LENGTH = 14
 const RIGHT_LABELS = { validate: 'valider les feuilles', correct: 'corriger les heures', publish: 'publier le planning' }
 const RULE_LABELS = {
   maxConsecutiveNights: 'Nuits d’affilée au maximum',
+  maxNightsPerWeek: 'Nuits par semaine au maximum',
+  maxNightsPerMonth: 'Nuits par mois au maximum',
   overtimeThreshold: 'Heures sup. au-delà de (par semaine)',
   publishDaysAhead: 'Planning publié au moins (jours avant)',
 }
@@ -48,6 +52,7 @@ function freshState() {
     journal: JOURNAL.map((item) => ({ at: stamp(addDays(new Date(), -item.daysAgo), item.time), text: item.text })),
     notes: Object.fromEntries(Object.entries(NOTES).map(([username, text]) => [`${username}:${lastWeek}`, text])),
     validated: {},
+    swapRequests: [],
     teamPlan: {
       start: toDateInput(planStart()),
       rows: JSON.parse(JSON.stringify(TEAM_PLAN)),
@@ -58,7 +63,7 @@ function freshState() {
 
 function restore() {
   const state = freshState()
-  const saved = readJson(STORAGE_KEY, null)
+  const saved = readJson(storageKey(), null)
   if (!saved) return state
 
   return {
@@ -67,14 +72,16 @@ function restore() {
     journal: Array.isArray(saved.journal) ? saved.journal : state.journal,
     notes: { ...state.notes, ...saved.notes },
     validated: saved.validated || {},
+    swapRequests: saved.swapRequests || [],
     teamPlan: saved.teamPlan && saved.teamPlan.start === state.teamPlan.start ? saved.teamPlan : state.teamPlan,
   }
 }
 
 export const org = reactive(restore())
+watch(() => auth.organizationSession?.organization.id, () => Object.assign(org, restore()))
 
 function persist() {
-  writeJson(STORAGE_KEY, org)
+  writeJson(storageKey(), org)
 }
 
 function log(text) {
@@ -218,17 +225,17 @@ export function setRight(managerId, key, value) {
   if (!right || right[key] === value) return
 
   right[key] = value
-  log(`${right.name} ${value ? 'peut' : 'ne peut plus'} ${RIGHT_LABELS[key]} (${right.team}). La personne concernée a été prévenue.`)
+  log(`${right.name} ${value ? 'peut' : 'ne peut plus'} ${RIGHT_LABELS[key]} (${right.team}). Changement enregistré localement.`)
   persist()
 }
 
 export function setRule(key, value) {
   const number = Number(value)
-  if (!Number.isFinite(number) || number <= 0 || org.rules[key] === number) return
+  if (!Object.hasOwn(RULE_LABELS, key) || !Number.isInteger(number) || number < (['maxNightsPerWeek', 'maxNightsPerMonth'].includes(key) ? 0 : 1) || org.rules[key] === number) return
 
   const previous = org.rules[key]
   org.rules[key] = number
-  log(`${RULE_LABELS[key]} : ${previous} → ${number}. Les agents ont été prévenus.`)
+  log(`${RULE_LABELS[key]} : ${previous} → ${number}. Changement enregistré localement.`)
   persist()
 }
 
@@ -261,4 +268,17 @@ export function payrollCsv() {
 export function resetOrg() {
   Object.assign(org, freshState())
   persist()
+}
+
+export function requestShiftSwap(user, day, reason) {
+  if (!day || !reason.trim()) throw new Error('Choisissez une garde et indiquez votre demande.')
+  if (org.swapRequests.some(item => item.user_id === user.id && item.day === day && item.status === 'pending')) throw new Error('Une demande est déjà en attente pour cette garde.')
+  const item = { id: crypto.randomUUID(), user_id: user.id, username: user.username, day, reason: reason.trim(), status: 'pending', created_at: new Date().toISOString() }
+  org.swapRequests.unshift(item); persist(); return item
+}
+export function resolveShiftSwap(id, status) {
+  if (!['accepted', 'rejected'].includes(status)) return
+  const item = org.swapRequests.find(request => request.id === id)
+  if (!item || item.status !== 'pending') return
+  item.status = status; item.reviewed_at = new Date().toISOString(); persist()
 }

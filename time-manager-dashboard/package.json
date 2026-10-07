@@ -11,6 +11,7 @@
     "lint": "run-s \"lint:*\"",
     "lint:oxlint": "oxlint . --fix",
     "lint:eslint": "eslint . --fix --cache",
+    "test:fusion": "node --test test/fusion-workflow.test.js",
     "test:clocks": "node --test test/clocks.test.js",
     "test:auth": "node --test test/auth.test.js test/auth-api.test.js test/auth-store.test.js"
   },

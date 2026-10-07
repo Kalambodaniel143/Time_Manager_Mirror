@@ -125,6 +125,8 @@ router.beforeEach(async (to) => {
 
   if (to.meta.organization && !auth.organizationSession) return sessionHome(user.role)
 
+  if (auth.organizationSession && ['adminUsers', 'adminTeams'].includes(to.name)) return sessionHome(user.role)
+
   const target = to.meta.userParam && to.params[to.meta.userParam]
   if (target && !isSelf(target)) {
     if (to.meta.selfOnly) return { ...to, params: { ...to.params, [to.meta.userParam]: String(user.id) } }
