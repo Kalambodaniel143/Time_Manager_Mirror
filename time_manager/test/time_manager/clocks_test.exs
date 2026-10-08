@@ -106,6 +106,83 @@ defmodule TimeManager.ClocksTest do
     assert Clocks.list_clocks(user) == []
   end
 
+  test "future events are rejected for every valid transition without changing work", %{
+    user: user
+  } do
+    now = DateTime.utc_now() |> DateTime.truncate(:second)
+    future = DateTime.add(now, 3600)
+
+    for {previous, allowed} <- [
+          {nil, [:arrival]},
+          {:arrival, [:pause, :departure]},
+          {:pause, [:resume, :departure]},
+          {:resume, [:pause, :departure]},
+          {:departure, [:arrival]}
+        ] do
+      if previous do
+        time = DateTime.add(now, -600 + length(Clocks.list_clocks(user)) * 60)
+
+        assert {:ok, _} =
+                 Clocks.create_clock(user, %{
+                   time: time,
+                   kind: previous,
+                   status: previous in [:arrival, :resume]
+                 })
+      end
+
+      clocks = Clocks.list_clocks(user)
+      periods = WorkingTimes.list_working_times(user.id)
+
+      for kind <- allowed do
+        assert {:error, changeset} =
+                 Clocks.create_clock(user, %{
+                   time: future,
+                   kind: kind,
+                   status: kind in [:arrival, :resume]
+                 })
+
+        assert errors_on(changeset).time == ["Le pointage ne peut pas être dans le futur."]
+        assert Clocks.list_clocks(user) == clocks
+        assert WorkingTimes.list_working_times(user.id) == periods
+      end
+    end
+  end
+
+  test "the current UTC second is accepted", %{user: user} do
+    now = DateTime.utc_now() |> DateTime.truncate(:second)
+    assert {:ok, %{time: ^now}} = Clocks.create_clock(user, %{time: now, status: true})
+  end
+
+  test "a deleted user cannot record clocks or periods", %{user: user} do
+    Repo.delete!(user)
+    assert {:error, :not_found} = Clocks.create_clock(user, %{time: @arrival, status: true})
+    assert Repo.aggregate(Clock, :count) == 0
+    assert Repo.aggregate(WorkingTime, :count) == 0
+  end
+
+  test "equal timestamps preserve event order and the next transition", %{user: user} do
+    pause_time = DateTime.add(@arrival, 3600)
+
+    for {time, status, kind} <- [
+          {@arrival, true, :arrival},
+          {pause_time, false, :pause},
+          {pause_time, true, :resume},
+          {@departure, false, :departure}
+        ] do
+      assert {:ok, _} = Clocks.create_clock(user, %{time: time, status: status, kind: kind})
+    end
+
+    assert Enum.map(Clocks.list_clocks(user), & &1.kind) == [
+             :arrival,
+             :pause,
+             :resume,
+             :departure
+           ]
+
+    assert {:ok, [first, second]} = WorkingTimes.list_working_times(user.id)
+    assert first.end == second.start
+  end
+
   test "a half-hour pause leaves two and a half hours of work between 9 and 12", %{user: user} do
     for {time, status, kind} <- [
           {~U[2026-09-28 09:00:00Z], true, "arrival"},

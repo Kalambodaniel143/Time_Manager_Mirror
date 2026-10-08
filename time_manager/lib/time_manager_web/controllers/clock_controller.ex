@@ -30,7 +30,7 @@ defmodule TimeManagerWeb.ClockController do
   def index(conn, _params) do
     with {:ok, user_id} <- cast_id(conn.path_params["userID"]),
          :ok <- authorize(Authorization.can_view?(current_user(conn), user_id)),
-         {:ok, user} <- fetch_user(user_id) do
+         {:ok, user} <- Accounts.fetch_user(user_id) do
       render(conn, :index, clocks: Clocks.list_clocks(user))
     end
   end
@@ -55,7 +55,7 @@ defmodule TimeManagerWeb.ClockController do
   def create(conn, %{"clock" => attrs}) when is_map(attrs) do
     with {:ok, user_id} <- cast_id(conn.path_params["userID"]),
          :ok <- authorize(Authorization.can_clock?(current_user(conn), user_id)),
-         {:ok, user} <- fetch_user(user_id),
+         {:ok, user} <- Accounts.fetch_user(user_id),
          {:ok, clock} <- Clocks.create_clock(user, attrs) do
       conn
       |> put_status(:created)
@@ -91,13 +91,11 @@ defmodule TimeManagerWeb.ClockController do
   def complete(conn, %{"clock" => %{"time" => time}}) when is_binary(time) do
     with {:ok, user_id} <- cast_id(conn.path_params["userID"]),
          :ok <- authorize(Authorization.can_clock?(current_user(conn), user_id)),
-         {:ok, user} <- fetch_user(user_id),
+         {:ok, user} <- Accounts.fetch_user(user_id),
          {:ok, clock} <- Clocks.complete_clock(user, conn.path_params["clockID"], time) do
       conn |> put_status(:created) |> render(:show, clock: clock)
     end
   end
 
   def complete(_conn, _params), do: {:error, :bad_request}
-
-  defp fetch_user(user_id), do: Accounts.fetch_user(user_id)
 end
