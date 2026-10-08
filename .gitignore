@@ -12,5 +12,6 @@ time-manager-dashboard/dist/
 # Env secrets (kept as .env.example for reference)
 *.env.local
 .env
+time_manager/logs_backend
 # MkDocs build output
 site/

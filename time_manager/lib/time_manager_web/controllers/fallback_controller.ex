@@ -64,4 +64,23 @@ defmodule TimeManagerWeb.FallbackController do
     |> put_view(json: TimeManagerWeb.ErrorJSON)
     |> render(:"400")
   end
+
+  def call(conn, {:error, reason})
+      when reason in [:invalid_code, :expired_code, :too_many_attempts] do
+    detail =
+      case reason do
+        :invalid_code -> "Invalid verification code"
+        :expired_code -> "Verification code expired"
+        :too_many_attempts -> "Too many verification attempts"
+      end
+
+    status = if reason == :too_many_attempts, do: :too_many_requests, else: :unprocessable_entity
+    json(conn |> put_status(status), %{errors: %{detail: detail}})
+  end
+
+  def call(conn, {:error, :service_unavailable}) do
+    json(conn |> put_status(:service_unavailable), %{
+      errors: %{detail: "Email delivery is unavailable"}
+    })
+  end
 end

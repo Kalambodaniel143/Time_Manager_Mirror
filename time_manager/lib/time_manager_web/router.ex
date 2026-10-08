@@ -22,6 +22,8 @@ defmodule TimeManagerWeb.Router do
 
     post "/auth/login", AuthController, :login
     post "/auth/register", AuthController, :register
+    post "/auth/verify-email", AuthController, :verify_email
+    post "/auth/resend-verification", AuthController, :resend_verification
 
     post "/organizations", OrganizationController, :create
     get "/organizations/lookup", OrganizationController, :lookup

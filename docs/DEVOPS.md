@@ -114,6 +114,10 @@ Pour qu'une suite de commandes s'arrête à la première erreur, il faut les enc
 | `PGUSER`, `PGPASSWORD`, `PGDATABASE` | Stage 2, via `.env` | Utilisateur, mot de passe et nom de la base Postgres |
 | `PGPORT` | Stage 2, via `.env` | Port de Postgres publié sur le serveur (côté hôte) |
 | `JWT_SECRET` | Stage 2, via `.env` | Clé de signature des JWT de session, au moins 32 caractères (`mix phx.gen.secret`). La changer déconnecte tout le monde. |
+| `RESEND_API_KEY` | Stage 2, via `.env` | Clé API Resend utilisée pour envoyer les codes OTP d'inscription. |
+| `RESEND_FROM` | Stage 2, via `.env` | Adresse d'expédition vérifiée dans Resend, par exemple `Time Manager <noreply@example.com>`. |
+| `MAILPIT_HOST`, `MAILPIT_PORT` | Développement local | SMTP Mailpit (`localhost:1025` hors Docker, `mailpit:1025` dans Docker). L'interface est sur `http://localhost:8025`. |
+| `EMAIL_DELIVERY` | Développement et serveur scolaire | Utiliser `mailpit` pour capturer les OTP dans Mailpit, ou `resend` pour une vraie délivrance e-mail. |
 | `ADMIN_EMAIL`, `ADMIN_PASSWORD` | Stage 2, via `.env` | Premier administrateur, créé par le seed s'il n'existe pas encore |
 
 Trois pièges à connaître :

@@ -20,6 +20,24 @@ export function register(attrs) {
   return request('/auth/register', { method: 'POST', body: JSON.stringify({ user: attrs }) })
 }
 
+export function verifyEmail(email, code) {
+  if (USE_MOCK) return mocked(() => mockLogin(email, ''))
+
+  return request('/auth/verify-email', {
+    method: 'POST',
+    body: JSON.stringify({ email, code }),
+    skipUnauthorizedHandler: true,
+  })
+}
+
+export function resendVerification(email) {
+  return request('/auth/resend-verification', {
+    method: 'POST',
+    body: JSON.stringify({ email }),
+    skipUnauthorizedHandler: true,
+  })
+}
+
 export function me() {
   if (USE_MOCK) return mocked(() => mockMe())
 

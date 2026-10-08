@@ -17,6 +17,7 @@ defmodule TimeManager.Accounts.User do
     field :birth_place, :string
     field :password, :string, virtual: true, redact: true
     field :password_hash, :string, redact: true
+    field :email_verified_at, :utc_datetime
 
     belongs_to :role, TimeManager.Accounts.Role
     belongs_to :organization, TimeManager.Organizations.Organization, type: :binary_id
@@ -67,6 +68,7 @@ defmodule TimeManager.Accounts.User do
     |> Profile.validate_identity()
     |> then(&if(personal?, do: Profile.validate_personal_details(&1), else: &1))
     |> then(&put_change(&1, :username, get_field(&1, :email)))
+    |> put_change(:email_verified_at, DateTime.utc_now() |> DateTime.truncate(:second))
     |> unique_constraint(:email, name: :users_email_index)
     |> put_change(:role_id, role_id)
     |> put_change(:organization_id, organization_id)
@@ -112,6 +114,9 @@ defmodule TimeManager.Accounts.User do
     Argon2.no_user_verify()
     false
   end
+
+  def verified?(%__MODULE__{email_verified_at: %DateTime{}}), do: true
+  def verified?(_user), do: false
 
   @doc "True for a bcrypt hash, to be replaced by an Argon2id one."
   def legacy_hash?(%__MODULE__{password_hash: "$2" <> _}), do: true

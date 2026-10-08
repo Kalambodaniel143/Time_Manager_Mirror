@@ -30,6 +30,8 @@ config :time_manager, TimeManagerWeb.Endpoint,
 # For production it's recommended to configure a different adapter
 # at the `config/runtime.exs`.
 config :time_manager, TimeManager.Mailer, adapter: Swoosh.Adapters.Local
+config :time_manager, :resend_from, "Time Manager <onboarding@resend.dev>"
+config :time_manager, :resend_from_email, "onboarding@resend.dev"
 
 # Configure Elixir's Logger
 config :logger, :default_formatter,

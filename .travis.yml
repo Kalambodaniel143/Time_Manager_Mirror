@@ -24,7 +24,7 @@ jobs:
       script:
         - scp -v docker-compose.prod.yml $SERVER_USER@$SERVER_IP:~/docker-compose.yml
         # Build the server .env from the Travis environment variables
-        - printf 'PGUSER=%s\nPGPASSWORD=%s\nPGDATABASE=%s\nPGPORT=%s\nDOCKER_USERNAME=%s\nJWT_SECRET=%s\nADMIN_EMAIL=%s\nADMIN_PASSWORD=%s\n' "$PGUSER" "$PGPASSWORD" "$PGDATABASE" "$PGPORT" "$DOCKER_USERNAME" "$JWT_SECRET" "$ADMIN_EMAIL" "$ADMIN_PASSWORD" > .env.deploy
+        - printf 'PGUSER=%s\nPGPASSWORD=%s\nPGDATABASE=%s\nPGPORT=%s\nDOCKER_USERNAME=%s\nJWT_SECRET=%s\nEMAIL_DELIVERY=mailpit\nADMIN_EMAIL=%s\nADMIN_PASSWORD=%s\n' "$PGUSER" "$PGPASSWORD" "$PGDATABASE" "$PGPORT" "$DOCKER_USERNAME" "$JWT_SECRET" "$ADMIN_EMAIL" "$ADMIN_PASSWORD" > .env.deploy
         - scp .env.deploy $SERVER_USER@$SERVER_IP:~/.env
         - scp deploy.sh $SERVER_USER@$SERVER_IP:~/deploy.sh
         - ssh $SERVER_USER@$SERVER_IP "bash ~/deploy.sh"

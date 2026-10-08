@@ -93,7 +93,9 @@ Le mécanisme suit le sujet : un **JWT signé avec Joken**, envoyé dans un **co
 | Méthode | Route | Accès | Rôle |
 |---|---|---|---|
 | `POST` | `/api/auth/login` | Public | Vérifie e-mail et mot de passe, pose le cookie, renvoie `csrf_token` et la session (`role`, `user`, `organization`). |
-| `POST` | `/api/auth/register` | Public | Crée un compte **employé** hors organisation (un `role` envoyé est ignoré) et ouvre la session. |
+| `POST` | `/api/auth/register` | Public | Crée un compte **employé** hors organisation et envoie un code OTP par e-mail. La session n'est ouverte qu'après vérification. |
+| `POST` | `/api/auth/verify-email` | Public | Vérifie `{email, code}`. Le code expire après 10 minutes et est limité à 5 tentatives ; ouvre ensuite la session. |
+| `POST` | `/api/auth/resend-verification` | Public | Renvoie un code OTP à `{email}` pour un compte non vérifié. |
 | `GET` | `/api/auth/me` | Connecté | L'utilisateur courant. Le front l'appelle au chargement. |
 | `GET` | `/api/auth/session` | Connecté | La session relue en base : `role`, `user`, `organization` (`null` pour un compte sans organisation). |
 | `POST` | `/api/auth/logout` | Connecté | Révoque le JWT côté serveur et supprime le cookie. |

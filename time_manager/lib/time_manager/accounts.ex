@@ -14,9 +14,11 @@ defmodule TimeManager.Accounts do
   import Ecto.Query, warn: false
   alias TimeManager.Repo
 
-  alias TimeManager.Accounts.{RevokedToken, Role, User}
+  alias TimeManager.Accounts.{EmailVerification, RevokedToken, Role, User}
 
   @default_role "employee"
+  @verification_ttl 600
+  @max_verification_attempts 5
 
   ## Roles
 
@@ -169,7 +171,7 @@ defmodule TimeManager.Accounts do
   def authenticate(email, password) when is_binary(email) and is_binary(password) do
     user = Repo.get_by(User, email: email |> String.trim() |> String.downcase())
 
-    if User.valid_password?(user, password) do
+    if User.valid_password?(user, password) and User.verified?(user) do
       {:ok, user |> upgrade_hash(password) |> Repo.preload(:role)}
     else
       {:error, :invalid_credentials}
@@ -229,7 +231,7 @@ defmodule TimeManager.Accounts do
       {:error, %Ecto.Changeset{}}
 
   """
-  def create_user(attrs, role_name \\ @default_role, organization_id \\ nil) do
+  def create_user(attrs, role_name \\ @default_role, organization_id \\ nil, opts \\ []) do
     case get_role_by_name(role_name) do
       nil ->
         {:error, role_error(%User{}, attrs)}
@@ -237,10 +239,89 @@ defmodule TimeManager.Accounts do
       role ->
         %User{}
         |> User.registration_changeset(attrs, role.id, organization_id)
+        |> maybe_verify_email(opts)
         |> Repo.insert()
         |> preload_role()
     end
   end
+
+  defp maybe_verify_email(changeset, opts) do
+    if Keyword.get(opts, :verify_email, true) do
+      Ecto.Changeset.put_change(
+        changeset,
+        :email_verified_at,
+        DateTime.utc_now() |> DateTime.truncate(:second)
+      )
+    else
+      changeset
+    end
+  end
+
+  def issue_email_verification(%User{} = user) do
+    code =
+      :crypto.strong_rand_bytes(4)
+      |> :binary.decode_unsigned()
+      |> rem(1_000_000)
+      |> Integer.to_string()
+      |> String.pad_leading(6, "0")
+
+    now = DateTime.utc_now() |> DateTime.truncate(:second)
+
+    verification = %{
+      user_id: user.id,
+      code_hash: hash_code(code),
+      expires_at: DateTime.add(now, @verification_ttl, :second),
+      attempts: 0,
+      inserted_at: now,
+      updated_at: now
+    }
+
+    Repo.insert_all(EmailVerification, [verification],
+      on_conflict: {:replace, [:code_hash, :expires_at, :attempts, :updated_at]},
+      conflict_target: :user_id
+    )
+
+    {:ok, code}
+  end
+
+  def find_unverified_user(email) when is_binary(email) do
+    case Repo.get_by(User, email: email) do
+      %User{} = user when is_nil(user.email_verified_at) -> {:ok, user}
+      _ -> {:error, :not_found}
+    end
+  end
+
+  def verify_email(email, code) when is_binary(email) and is_binary(code) do
+    user = Repo.get_by(User, email: email |> String.trim() |> String.downcase())
+    verification = user && Repo.get_by(EmailVerification, user_id: user.id)
+    now = DateTime.utc_now() |> DateTime.truncate(:second)
+
+    cond do
+      is_nil(user) or is_nil(verification) ->
+        {:error, :invalid_code}
+
+      DateTime.compare(verification.expires_at, now) == :lt ->
+        {:error, :expired_code}
+
+      verification.attempts >= @max_verification_attempts ->
+        {:error, :too_many_attempts}
+
+      not Plug.Crypto.secure_compare(verification.code_hash, hash_code(code)) ->
+        Repo.update_all(
+          from(v in EmailVerification, where: v.id == ^verification.id),
+          inc: [attempts: 1]
+        )
+
+        {:error, :invalid_code}
+
+      true ->
+        user = user |> Ecto.Changeset.change(email_verified_at: now) |> Repo.update!()
+        Repo.delete!(verification)
+        {:ok, Repo.preload(user, :role)}
+    end
+  end
+
+  defp hash_code(code), do: :crypto.hash(:sha256, code) |> Base.encode16(case: :lower)
 
   @doc """
   Updates the profile fields (username, email).
