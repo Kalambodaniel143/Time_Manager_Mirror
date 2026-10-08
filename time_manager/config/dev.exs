@@ -48,6 +48,14 @@ config :time_manager, TimeManagerWeb.Endpoint,
 # Enable dev routes for dashboard and mailbox
 config :time_manager, dev_routes: true
 
+# Mailpit captures local OTP emails without sending them to real recipients.
+config :time_manager, :email_delivery, :mailpit
+
+config :time_manager, TimeManager.Mailer,
+  adapter: Swoosh.Adapters.SMTP,
+  relay: System.get_env("MAILPIT_HOST", "localhost"),
+  port: String.to_integer(System.get_env("MAILPIT_PORT", "1025"))
+
 # Do not include metadata nor timestamps in development logs
 config :logger, :default_formatter, format: "[$level] $message\n"
 

@@ -23,6 +23,30 @@ end
 config :time_manager, TimeManagerWeb.Endpoint,
   http: [port: String.to_integer(System.get_env("PORT", "4000"))]
 
+config :time_manager,
+       :resend_from,
+       System.get_env("RESEND_FROM", "Time Manager <onboarding@resend.dev>")
+
+config :time_manager,
+       :resend_from_email,
+       System.get_env("RESEND_FROM_EMAIL", "onboarding@resend.dev")
+
+email_delivery =
+  case System.get_env("EMAIL_DELIVERY", "resend") do
+    "mailpit" -> :mailpit
+    "resend" -> :resend
+    value -> raise "EMAIL_DELIVERY must be either mailpit or resend, got: #{value}"
+  end
+
+config :time_manager, :email_delivery, email_delivery
+
+if email_delivery == :mailpit do
+  config :time_manager, TimeManager.Mailer,
+    adapter: Swoosh.Adapters.SMTP,
+    relay: System.get_env("MAILPIT_HOST", "localhost"),
+    port: String.to_integer(System.get_env("MAILPIT_PORT", "1025"))
+end
+
 # Key used to sign the session JWTs (HS256). It must be secret, long and random:
 # generate one with `mix phx.gen.secret`. Development and tests fall back to a
 # fixed key, so that they work without any setup; never deploy without JWT_SECRET.
