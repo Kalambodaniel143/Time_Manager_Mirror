@@ -22,6 +22,7 @@ defmodule TimeManagerWeb.ClockControllerTest do
     assert clock["status"] == false
     assert clock["kind"] == "departure"
     assert clock["user_id"] == user.id
+    assert clock["time"] == Calendar.strftime(finish, "%Y-%m-%d %H:%M:%S")
 
     assert %{"data" => [_]} =
              json_response(get(conn, "/api/workingtime/#{user.id}"), 200)
@@ -96,6 +97,58 @@ defmodule TimeManagerWeb.ClockControllerTest do
       |> post("/api/clocks/#{user.id}", clock: %{time: "2026-09-28 17:00:00", status: false})
 
     assert %{"errors" => %{"status" => [_]}} = json_response(conn, 422)
+  end
+
+  test "POST and GET serialize clock times in the subject format, normalized to UTC", %{
+    conn: conn
+  } do
+    user = user_fixture()
+    conn = log_in(conn, user)
+    path = "/api/clocks/#{user.id}"
+
+    result = post(conn, path, clock: %{time: "2020-01-02T05:04:05+02:00", status: true})
+    assert %{"data" => clock} = json_response(result, 201)
+    assert clock["time"] == "2020-01-02 03:04:05"
+    assert Enum.sort(Map.keys(clock)) == ["id", "kind", "status", "time", "user_id"]
+    assert %{"data" => [^clock]} = json_response(get(conn, path), 200)
+    assert [%{time: ~U[2020-01-02 03:04:05Z]}] = TimeManager.Clocks.list_clocks(user)
+  end
+
+  test "ordinary POST rejects future arrivals in both accepted formats without writing", %{
+    conn: conn
+  } do
+    user = user_fixture()
+    conn = log_in(conn, user)
+    path = "/api/clocks/#{user.id}"
+    future = DateTime.utc_now() |> DateTime.truncate(:second) |> DateTime.add(3600, :second)
+
+    for time <- [DateTime.to_iso8601(future), Calendar.strftime(future, "%Y-%m-%d %H:%M:%S")] do
+      result = post(conn, path, clock: %{time: time, status: true})
+
+      assert %{"errors" => %{"time" => ["Le pointage ne peut pas être dans le futur."]}} =
+               json_response(result, 422)
+    end
+
+    assert TimeManager.Clocks.list_clocks(user) == []
+    assert {:ok, []} = TimeManager.WorkingTimes.list_working_times(user.id)
+  end
+
+  test "ordinary POST rejects a future departure without closing the arrival", %{conn: conn} do
+    user = user_fixture()
+    conn = log_in(conn, user)
+    now = DateTime.utc_now() |> DateTime.truncate(:second)
+
+    {:ok, arrival} =
+      TimeManager.Clocks.create_clock(user, %{time: DateTime.add(now, -60), status: true})
+
+    result =
+      post(conn, "/api/clocks/#{user.id}",
+        clock: %{time: DateTime.to_iso8601(DateTime.add(now, 3600)), status: false}
+      )
+
+    assert %{"errors" => %{"time" => [_]}} = json_response(result, 422)
+    assert [arrival] == TimeManager.Clocks.list_clocks(user)
+    assert {:ok, []} = TimeManager.WorkingTimes.list_working_times(user.id)
   end
 
   test "the API preserves pause/resume events and excludes the break from periods", %{conn: conn} do

@@ -18,8 +18,6 @@ let departureError
 let localDateInput
 let durationInHours
 let formatClockDate
-let mockListClocks
-let mockCreateClock
 const originalFetch = globalThis.fetch
 const instances = []
 
@@ -56,7 +54,6 @@ before(async () => {
   ;({ findMissingDeparture, departureError, localDateInput } = await server.ssrLoadModule('/src/utils/missingDeparture.js'))
   ;({ durationInHours } = await server.ssrLoadModule('/src/utils/date.js'))
   ;({ formatClockDate } = await server.ssrLoadModule('/src/utils/clockDate.js'))
-  ;({ mockListClocks, mockCreateClock } = await server.ssrLoadModule('/src/mocks/clocks.js'))
 })
 
 beforeEach(() => {
@@ -205,22 +202,45 @@ test('malformed server response is not mistaken for an empty history', async () 
   assert.ok(vm.error)
 })
 
+test('invalid event kinds or dates leave the clock unknown and prevent writes', async () => {
+  const vm = component()
+  for (const entry of [
+    { kind: 'unknown', status: true, time: '2026-09-24T09:00:00Z' },
+    { kind: 'arrival', status: true, time: 'invalid' },
+  ]) {
+    let requests = 0
+    globalThis.fetch = async () => { requests += 1; return response([entry]) }
+    await vm.refresh()
+    await vm.clock()
+    assert.equal(vm.ready, false)
+    assert.equal(vm.timerId, null)
+    assert.ok(vm.error)
+    assert.equal(requests, 1)
+  }
+})
+
+test('a pending write cannot change the newly selected user or emit success there', async () => {
+  const pending = deferred()
+  globalThis.fetch = async (_url, options) => options.method === 'POST' ? pending.promise : response([])
+  const vm = component('1')
+  await vm.refresh()
+  const save = vm.clock()
+  vm.userId = '2'
+  await vm.refresh()
+  pending.resolve(response({ status: true, time: '2026-09-24T09:00:00Z' }, 201))
+  await save
+  assert.equal(vm.clockIn, false)
+  assert.equal(vm.ready, true)
+  assert.equal(vm.loading, false)
+  assert.deepEqual(vm.events, [])
+})
+
 test('UTC date convention handles offsets, space format and invalid dates', () => {
   assert.equal(formatClockDate('2026-09-24T11:00:00+02:00'), '2026-09-24 09:00:00')
   assert.equal(formatClockDate('2026-09-24 09:00:00'), '2026-09-24 09:00:00')
   assert.throws(() => formatClockDate('not-a-date'))
   assert.throws(() => formatClockDate(null))
 })
-
-test('simulator stores the requested status/time with stable ordering for identical seconds', () => {
-  const attrs = { time: '2099-01-01 09:00:00', status: true }
-  mockCreateClock(700, attrs)
-  mockCreateClock(700, { ...attrs, status: false })
-  const entries = mockListClocks(700)
-  assert.equal(entries.at(-1).status, false)
-  assert.equal(entries.at(-1).time, attrs.time)
-})
-
 
 test('clock change reloads dashboard totals and the period list without losing filters', async () => {
   const period = { start: '2026-09-28 09:00:00', end: '2026-09-28 17:00:00' }

@@ -10,9 +10,9 @@ defmodule TimeManagerWeb.Schemas.Clock do
       id: %Schema{type: :integer, description: "Clock ID", example: 1},
       time: %Schema{
         type: :string,
-        format: :"date-time",
-        description: "When the clock event happened (ISO 8601, UTC)",
-        example: "2026-09-23T08:00:00Z"
+        pattern: ~S(^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$),
+        description: "When the clock event happened (YYYY-MM-DD hh:mm:ss, UTC)",
+        example: "2026-09-23 08:00:00"
       },
       status: %Schema{
         type: :boolean,

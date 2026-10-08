@@ -63,8 +63,6 @@
 </template>
 
 <script>
-// SCRIPT : les données du composant et les actions qui les mettent à jour.
-// Le service réalise les requêtes HTTP. L'utilitaire prépare les dates en UTC.
 import { getClocks, createClock } from '../services/clockService'
 import { clockDate } from '../utils/missingDeparture'
 import { formatClockDate } from '../utils/clockDate'
@@ -72,43 +70,34 @@ import { formatClockDate } from '../utils/clockDate'
 export default {
   name: 'ClockManager',
 
-  // Information reçue du parent ou du router : pour qui faut-il pointer ?
   props: {
     userId: { type: [Number, String], required: true },
   },
 
-  // Le composant peut prévenir son parent qu'un pointage a été enregistré.
   emits: ['changed'],
 
-  // Vue actualise l'affichage lorsque ces données changent.
   data() {
     return {
-      // Les deux données demandées dans le sujet Epitech.
-      clockIn: false,       // true : travail en cours ; false : pause ou hors service.
-      startDateTime: null, // Date de début ; null si aucune période n'est en cours.
-      onBreak: false,      // Permet de distinguer une pause d'un départ.
-      workedSeconds: 0,   // Travail déjà effectué avant les pauses de ce service.
+      clockIn: false,
+      startDateTime: null,
+      onBreak: false,
+      workedSeconds: 0,
 
-      // L'heure actuelle change chaque seconde ; timerId permet d'arrêter la minuterie.
       currentTime: Date.now(),
       timerId: null,
 
-      // Les états de communication avec l'API.
-      fetching: false, // Lecture des pointages en cours.
-      saving: false,   // Enregistrement d'un pointage en cours.
-      ready: false,    // L'état affiché a été récupéré et on peut s'y fier.
-      error: '',       // Message à afficher ; une chaîne vide n'affiche rien.
+      fetching: false,
+      saving: false,
+      ready: false,
+      error: '',
 
-      // Numéro de la dernière lecture, pour ignorer les réponses devenues anciennes.
       requestVersion: 0,
     }
   },
 
-  // Valeurs calculées automatiquement à partir des données ci-dessus.
   computed: {
     currentTimeLabel() { return new Date(this.currentTime).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) },
     loading() {
-      // On attend si une lecture OU un enregistrement est en cours.
       return this.fetching || this.saving
     },
 
@@ -123,13 +112,11 @@ export default {
       return this.clockIn ? 'Pointer mon départ' : 'Pointer mon arrivée'
     },
 
-    // Total du service : les périodes déjà travaillées + la période en cours.
     elapsedTime() {
       if (!this.ready || (!this.clockIn && !this.onBreak)) return '00:00:00'
 
       let totalSeconds = this.workedSeconds
       if (this.clockIn && this.startDateTime) {
-        // Z indique UTC. 1 000 millisecondes = 1 seconde.
         const start = Date.parse(`${this.startDateTime.replace(' ', 'T')}Z`)
         if (!Number.isFinite(start)) return '00:00:00'
         totalSeconds += Math.max(0, Math.floor((this.currentTime - start) / 1000))
@@ -139,66 +126,48 @@ export default {
       const minutes = Math.floor((totalSeconds % 3600) / 60)
       const seconds = totalSeconds % 60
 
-      // padStart ajoute un zéro devant les chiffres seuls : 5 devient "05".
       return [hours, minutes, seconds].map((value) => String(value).padStart(2, '0')).join(':')
     },
 
     startDateLabel() {
-      if (this.ready) {
-        if (this.onBreak) return 'Le compteur reprendra à votre retour.'
-        if (!this.clockIn) return 'Aucune période en cours'
-        try { return `Depuis le ${clockDate(this.startDateTime).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' })}` } catch { return 'Heure de début indisponible' }
+      if (!this.ready) return this.loading ? 'Chargement…' : 'État indisponible'
+      if (this.onBreak) return 'Le compteur reprendra à votre retour.'
+      if (!this.clockIn) return 'Aucune période en cours'
+      try {
+        return `Depuis le ${clockDate(this.startDateTime).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' })}`
+      } catch {
+        return 'Heure de début indisponible'
       }
-      if (this.loading) {
-        return 'Chargement…'
-      }
-      return 'État indisponible'
     },
   },
 
-  // Recharge les pointages à l'ouverture, puis à chaque changement d'utilisateur.
   watch: {
-    userId: {
-      immediate: true,
-      handler() {
-        this.refresh()
-      },
-    },
+    userId: { immediate: true, handler: 'refresh' },
   },
 
-  // En quittant le composant, arrêter la minuterie et ignorer les réponses en attente.
   beforeUnmount() {
     this.stopTimer()
     this.requestVersion += 1
   },
 
   methods: {
-    // Mettre l'heure à jour immédiatement, puis chaque seconde, sans requête API.
     startTimer() {
-      this.stopTimer() // Évite de lancer deux minuteries après une actualisation.
+      this.stopTimer()
       this.currentTime = Date.now()
       this.timerId = setInterval(() => {
-        // Reprendre l'heure réelle évite de prendre du retard si l'onglet a dormi.
         this.currentTime = Date.now()
       }, 1000)
     },
 
     stopTimer() {
-      if (this.timerId !== null) {
-        clearInterval(this.timerId)
-        this.timerId = null
-      }
+      clearInterval(this.timerId)
+      this.timerId = null
     },
 
-    // async permet d'utiliser await. await attend le résultat de l'appel avant de
-    // continuer cette fonction ; le reste de la page peut continuer à fonctionner.
-
-    // REFRESH : lit les pointages et retrouve l'état actuel de l'utilisateur.
     async refresh() {
       const userId = this.userId
       const version = ++this.requestVersion
 
-      // 1. On commence une lecture : l'ancien état ne doit plus être présenté comme fiable.
       this.stopTimer()
       this.fetching = true
       this.ready = false
@@ -209,70 +178,44 @@ export default {
       this.workedSeconds = 0
 
       try {
-        // 2. Attend la liste renvoyée par GET /api/clocks/:userID.
         const clocks = await getClocks(userId)
         if (!this.isCurrentRequest(version, userId)) return
-        if (!Array.isArray(clocks)) {
-          throw new Error('Réponse de pointage invalide')
-        }
+        if (!Array.isArray(clocks)) throw new Error('Réponse de pointage invalide')
 
-        // 3. Relire les événements permet aussi de retrouver les pauses après un rechargement.
         this.restoreClockState(clocks)
 
-        // 4. L'état est connu : Vue peut l'afficher et autoriser un nouveau pointage.
         this.ready = true
         if (this.clockIn) this.startTimer()
       } catch (error) {
-        // Une lecture échouée laisse ready à false : on ne devine pas le statut.
         if (!this.isCurrentRequest(version, userId)) return
         this.error = error.status === 404
           ? 'Cet utilisateur est introuvable dans l’API.'
           : 'Impossible de récupérer les pointages. Vérifie la connexion à l’API.'
       } finally {
-        // finally s'exécute après une réussite ou un échec.
-        // Une ancienne lecture ne doit pas arrêter l'indicateur de la nouvelle.
-        if (this.isCurrentRequest(version, userId)) {
-          this.fetching = false
-        }
+        if (this.isCurrentRequest(version, userId)) this.fetching = false
       }
     },
 
-    // Phoenix renvoie les événements dans l'ordre, du plus ancien au plus récent.
     restoreClockState(clocks) {
+      // L'API trie par date puis identifiant, y compris à la même seconde.
       for (const entry of clocks) {
-        // Les anciennes réponses sans kind restent lisibles.
+        // Compatibilité avec les pointages antérieurs à l'ajout de kind.
         const kind = entry.kind || (entry.status ? 'arrival' : 'departure')
         const time = formatClockDate(entry.time)
 
-        if (kind === 'arrival') this.workedSeconds = 0
-
-        if (kind === 'arrival' || kind === 'resume') {
-          this.clockIn = true
-          this.onBreak = false
-          this.startDateTime = time
-        } else if (kind === 'pause') {
-          if (this.startDateTime) {
-            const start = Date.parse(`${this.startDateTime.replace(' ', 'T')}Z`)
-            const end = Date.parse(`${time.replace(' ', 'T')}Z`)
-            this.workedSeconds += Math.max(0, (end - start) / 1000)
-          }
-          this.clockIn = false
-          this.onBreak = true
-          this.startDateTime = null
-        } else if (kind === 'departure') {
-          this.clockIn = false
-          this.onBreak = false
-          this.startDateTime = null
-          this.workedSeconds = 0
-        } else {
-          throw new Error('Type de pointage inconnu')
+        if (!['arrival', 'resume', 'pause', 'departure'].includes(kind)) throw new Error('Type de pointage inconnu')
+        if (kind === 'arrival' || kind === 'departure') this.workedSeconds = 0
+        if (kind === 'pause' && this.startDateTime) {
+          this.workedSeconds += Math.max(0, (clockDate(time) - clockDate(this.startDateTime)) / 1000)
         }
+
+        this.clockIn = kind === 'arrival' || kind === 'resume'
+        this.onBreak = kind === 'pause'
+        this.startDateTime = this.clockIn ? time : null
       }
     },
 
-    // Une seule méthode envoie les quatre actions à la même route API.
     async clock(kind = this.onBreak ? 'resume' : this.clockIn ? 'departure' : 'arrival') {
-      // Sans état fiable, ou si un appel est en cours, on ne fait rien.
       if (this.loading || !this.ready) return
 
       const userId = this.userId
@@ -281,8 +224,6 @@ export default {
       this.error = ''
 
       try {
-        // Arrivée et reprise : travail actif. Pause et départ : travail arrêté.
-        // La date est envoyée en UTC au format "YYYY-MM-DD hh:mm:ss".
         await createClock(userId, {
           time: formatClockDate(new Date()),
           status: kind === 'arrival' || kind === 'resume',
@@ -291,28 +232,24 @@ export default {
 
         if (!this.isCurrentRequest(version, userId)) return
 
-        // Une pause ou une sortie enregistre le travail terminé. Recharger les totaux.
         this.$emit('changed')
         await this.refresh()
       } catch (error) {
         if (!this.isCurrentRequest(version, userId)) return
 
-        // Une coupure peut masquer un enregistrement réussi. Il faut relire l'état
-        // avant de réessayer, pour éviter d'envoyer deux fois le même pointage.
+        // Une réponse perdue peut masquer une écriture réussie : relire avant de réessayer.
         this.ready = false
         this.stopTimer()
         this.error = error.status === 422
           ? `${error.message}. Rafraîchis avant de réessayer.`
           : 'Pointage non confirmé. Rafraîchis avant de réessayer.'
       } finally {
-        // La tentative d'enregistrement est terminée, même en cas d'erreur.
         this.saving = false
       }
     },
 
-    // Protection si plusieurs réponses arrivent dans un ordre différent des demandes.
-    // On utilise uniquement celle de la dernière lecture, pour l'utilisateur actuel.
     isCurrentRequest(version, userId) {
+      // La version distingue aussi une navigation A → B → A.
       return version === this.requestVersion && userId === this.userId
     },
   },

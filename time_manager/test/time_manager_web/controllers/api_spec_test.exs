@@ -1,6 +1,16 @@
 defmodule TimeManagerWeb.ApiSpecTest do
   use TimeManagerWeb.ConnCase, async: true
 
+  test "clock response documents a strict UTC text timestamp", %{conn: conn} do
+    spec = conn |> get(~p"/api/openapi") |> json_response(200)
+    time = spec["components"]["schemas"]["Clock"]["properties"]["time"]
+    assert time["type"] == "string"
+    refute Map.has_key?(time, "format")
+    pattern = Regex.compile!(time["pattern"])
+    assert Regex.match?(pattern, "2020-01-02 03:04:05")
+    refute Regex.match?(pattern, "2020-01-02T03:04:05Z")
+  end
+
   test "the OpenAPI spec is public and documents the auth routes", %{conn: conn} do
     spec = conn |> get(~p"/api/openapi") |> json_response(200)
 
