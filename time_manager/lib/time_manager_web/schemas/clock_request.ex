@@ -12,9 +12,9 @@ defmodule TimeManagerWeb.Schemas.ClockRequest do
         properties: %{
           time: %Schema{
             type: :string,
-            format: :"date-time",
-            description: "ISO 8601 UTC timestamp",
-            example: "2026-09-23T08:00:00Z"
+            description:
+              "UTC timestamp, YYYY-MM-DD hh:mm:ss or ISO 8601; must not be in the future",
+            example: "2026-09-23 08:00:00"
           },
           status: %Schema{
             type: :boolean,
@@ -34,7 +34,7 @@ defmodule TimeManagerWeb.Schemas.ClockRequest do
     },
     required: [:clock],
     example: %{
-      "clock" => %{"time" => "2026-09-23T08:00:00Z", "status" => true}
+      "clock" => %{"time" => "2026-09-23 08:00:00", "status" => true}
     }
   })
 end

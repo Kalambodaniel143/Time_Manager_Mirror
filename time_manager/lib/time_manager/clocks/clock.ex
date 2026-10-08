@@ -25,23 +25,18 @@ defmodule TimeManager.Clocks.Clock do
   end
 
   defp default_kind(changeset) do
-    if is_nil(get_field(changeset, :kind)) do
-      case get_field(changeset, :status) do
-        true -> put_change(changeset, :kind, :arrival)
-        false -> put_change(changeset, :kind, :departure)
-        _ -> changeset
-      end
-    else
-      changeset
+    case {get_field(changeset, :kind), get_field(changeset, :status)} do
+      {nil, true} -> put_change(changeset, :kind, :arrival)
+      {nil, false} -> put_change(changeset, :kind, :departure)
+      _ -> changeset
     end
   end
 
   defp validate_kind_status(changeset) do
     kind = get_field(changeset, :kind)
     status = get_field(changeset, :status)
-    expected_status = kind in [:arrival, :resume]
 
-    if kind && not is_nil(status) && status != expected_status do
+    if kind && not is_nil(status) && status != kind in [:arrival, :resume] do
       add_error(changeset, :status, "must match the clock kind")
     else
       changeset

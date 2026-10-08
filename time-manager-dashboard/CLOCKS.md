@@ -95,7 +95,8 @@ La migration `20261005071118_add_kind_to_clocks.exs` doit être appliquée avec
   `stopTimer()` arrête la minuterie à la pause, à la sortie, au changement d'utilisateur,
   lors d'une lecture/écriture incertaine et lorsqu'on quitte le composant.
 - Les dates de pointage utilisent UTC, comme le champ Ecto `:utc_datetime`.
-  Les réponses ISO de Phoenix sont normalisées par `utils/clockDate.js`.
+  Phoenix renvoie `time` au format texte `YYYY-MM-DD hh:mm:ss`, en UTC.
+  `utils/clockDate.js` conserve aussi la compatibilité avec les anciennes réponses ISO.
 - Les heures affichent les secondes (`09:15:42`), et les durées aussi
   (`2h 03m 17s`). Les champs de modification conservent cette précision.
 - Les boutons attendent la réponse API. Un échec d'écriture impose une
@@ -116,17 +117,19 @@ Si `VITE_API_URL` est défini, il remplace cette adresse. Une URL externe exige
 une configuration CORS côté serveur. Le proxy Vite concerne le développement ;
 en déploiement, prévoir aussi le relais `/api` sur le serveur web.
 
-`CLOCK_USE_MOCK = false` active l'API réelle pour les pointages.
+Les pointages utilisent l'API réelle, sauf pour une session de démonstration
+par organisation (`auth.organizationSession`), qui utilise `organizationWork.js`.
+L'ancien simulateur indépendant `mocks/clocks.js`, inaccessible derrière une
+constante fixée à `false`, a été supprimé avec ses branches et son test dédié.
 `USE_MOCK = false` permet aux périodes, aux utilisateurs et aux totaux de lire la même API.
-Les modes de simulation séparés ne reproduisent pas cette liaison automatique.
-Les deux modes sont indiqués séparément dans le pied de page.
+La démonstration par organisation conserve ses pointages et périodes dans le navigateur.
 Le projet réutilise son service HTTP basé sur fetch ; Axios n'est pas ajouté.
 
 ## Vérifications
 
 - `npm run build`
-- `npm run test:clocks` : 49 tests de logique des composants, de contrat HTTP,
-  d'erreurs, de requêtes concurrentes, de dates, du simulateur et du chronomètre.
+- `npm run test:clocks` : 50 tests de logique des composants, de contrat HTTP,
+  d'erreurs, de requêtes concurrentes, de dates et du chronomètre.
   L'horloge contrôlée vérifie les reprises, les arrêts et les retards de minuterie.
   Les appels HTTP de ces tests sont simulés, sans PostgreSQL.
 - Les tests de pause couvrent plusieurs pauses, la reprise après rechargement,
@@ -180,8 +183,74 @@ responsable des graphiques doit les brancher sur les vraies périodes.
 
 ## Validation de la liaison
 
-- Backend : `mix precommit` (50 tests, dont API, pauses, départs oubliés, transaction et accès concurrents).
+- Backend : `mix precommit` (155 tests, dont API, pauses, départs oubliés, transaction et accès concurrents).
 - Frontend : `npm run build`, `npm run test:clocks`, ESLint sur les fichiers modifiés.
 - Les tests utilisent une base PostgreSQL séparée. La migration additive est
   aussi appliquée en développement ; elle renseigne `kind` sur les anciens
   événements sans reconstruire leurs périodes ni modifier leurs dates.
+
+## Audit Web du 8 octobre 2026
+
+Périmètre examiné : ClockManager, MissingDeparture, services HTTP et pointage,
+utilitaires de dates, simulations, routeur, relais des événements dans App et
+EmployeeToday, WeekTable et TeamOverview ; contexte Clocks, schéma Clock,
+contrôleur, JSON, OpenAPI, autorisations, migrations, associations et création
+des WorkingTimes côté Phoenix. Les templates, styles et règles responsive
+de ClockManager sont inchangés ; aucune intégration Cordova/Capacitor n'a été modifiée.
+
+### Confrontation aux sujets fournis
+
+| Exigence | Constat |
+| --- | --- |
+| Thème 01 : time, status et utilisateur obligatoires | Schéma Ecto et contraintes SQL présents ; false est accepté. |
+| Thème 01 : GET et POST /api/clocks/:userID | Routes présentes ; le POST traite arrivée et départ, ainsi que pause/reprise. |
+| Thème 02 : ClockManager et /clock/:userid | Composant et route présents, avec userId transmis en prop. |
+| Thème 02 : startDateTime, clockIn, refresh(), clock() | Présents ; startDateTime vaut null hors segment actif. |
+| Thème 02 : YYYY-MM-DD hh:mm:ss | Envoi, état du composant et réponses JSON Clock conformes ; les heures restent en UTC. |
+| Thème 02 : une vue App.vue, composants dans src/components | L'application actuelle utilise aussi src/views : écart global au sujet historique. |
+
+Aucune fonction de pointage obligatoire ne manque. La conformité littérale de
+l'organisation des vues reste à arbitrer pour une soutenance strictement limitée
+aux thèmes 01/02. Le format JSON Clock a été aligné sur le sujet après la refactorisation.
+
+### Limites déjà présentes
+
+- Le serveur reçoit toujours l'heure du client, mais refuse désormais les dates
+  futures sur le POST ordinaire comme sur le complément de départ (HTTP 422).
+  La comparaison utilise l'heure UTC du serveur.
+- Les créations/modifications manuelles de WorkingTimes ne réécrivent pas les
+  Clocks. Les chevauchements et doublons avec des périodes manuelles ne sont pas
+  empêchés. Ce point relève d'une règle commune avec le périmètre WorkingTime.
+- L'historique complet est relu à chaque actualisation ; aucune pagination ou
+  requête dédiée à l'état courant n'est prévue pour les historiques volumineux.
+- Les tests Web exécutent la logique des composants et simulent HTTP. Cette
+  intervention n'ajoute pas de parcours navigateur de bout en bout contre Phoenix.
+
+### Validation de cette refactorisation
+
+Avant modification : 147 tests Backend et 71 tests Web réussis après installation
+des dépendances verrouillées. Après modification : 149 tests Backend via
+`mix precommit`, 72 tests Web via `node --test test/*.test.js`, build Vite,
+ESLint et Oxlint sur les fichiers Web modifiés réussis. Aucun test ignoré.
+
+Quatre cas de régression ont été ajoutés : utilisateur supprimé, ordre des
+pointages à la même seconde, événement invalide et réponse d'écriture tardive
+après changement d'utilisateur. Le seul test retiré couvrait le simulateur
+inaccessible supprimé ; les tests du mode démonstration actif sont conservés.
+
+Vite signale une collision sur son port WebSocket de développement lors de
+l'exécution parallèle des suites ; les assertions passent malgré ce message.
+Les dépendances et leurs fichiers de verrouillage n'ont pas été mis à jour.
+
+### Mise en conformité du contrat Clock
+
+`ClockJSON` formate `time`, seul champ temporel exposé par cette ressource, avec
+`Calendar.strftime/2` pour GET, POST et complément de départ. Les dates restent
+des DateTime UTC en base ; les réponses n'ajoutent ni fuseau ni fractions de seconde.
+OpenAPI décrit le format de sortie strict et les deux formats d'entrée acceptés.
+
+Le contexte Clocks refuse les dates futures avant toute insertion, y compris
+pour les appels directs sans contrôleur. Les tests vérifient les quatre types
+de pointage, l'absence d'écriture sur refus, l'acceptation de la seconde courante,
+la conversion d'une entrée avec décalage horaire et le format des réponses.
+Validation Backend : `mix precommit`, 155 tests réussis.

@@ -6,7 +6,7 @@ API Phoenix (Elixir) pour la gestion des utilisateurs, de leurs pointages (clock
 
 - **User** `has_many` **WorkingTime** et **Clock** (relations one-to-many, clé étrangère `user_id`).
 - `workingtime.user_id` est en `ON DELETE CASCADE` : supprimer un user supprime ses working times.
-- `clocks.user_id` est en `ON DELETE NOTHING` et il n'existe pas de route `DELETE` pour un clock : un user ayant au moins un clock ne peut pas être supprimé via `DELETE /api/users/:id` (violation de contrainte FK).
+- `clocks.user_id` est en `ON DELETE CASCADE` depuis la migration `20261004090200` : supprimer un user supprime aussi ses clocks. Il n'existe pas de route `DELETE` pour un clock individuel.
 
 ## Prérequis
 
@@ -111,7 +111,7 @@ Ce script teste :
 | Clocks        | `GET/POST /api/clocks/:userID`                                                              | création valide, clé `"clock"` manquante (400), attrs invalides (422), user inexistant/non numérique, liste existante/inexistante                              |
 | Working Time  | `GET/POST /api/workingtime/:userID`, `GET/PUT/DELETE /api/workingtime/:id` (et `GET .../:userID/:id`) | création valide/`end<start`/attrs manquants/user inexistant, liste avec/sans filtre, show existant/inexistant, update valide/invalide/inexistant, delete existant/déjà supprimé |
 
-À la fin, le script affiche un résumé `X réussi(s), Y échoué(s)` et laisse volontairement un user avec un clock non supprimé (voir la note affichée par le script — cf. section Modèle de données ci-dessus).
+À la fin, le script affiche un résumé `X réussi(s), Y échoué(s)`. Ces scripts historiques sont à vérifier avant utilisation avec l'authentification actuelle ; leurs anciennes notes sur l'impossibilité de supprimer un utilisateur ayant des clocks ne correspondent plus aux migrations.
 
 D'autres scripts existent pour des tests ciblés :
 
