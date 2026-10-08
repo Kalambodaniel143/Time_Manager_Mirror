@@ -13,6 +13,8 @@ defmodule TimeManagerWeb.AuthController do
   use OpenApiSpex.ControllerSpecs
 
   alias TimeManager.Accounts
+  alias TimeManager.Email
+  alias TimeManager.EmailDelivery
   alias TimeManager.Token
   alias TimeManagerWeb.Authz
   alias TimeManagerWeb.Plugs.{Authenticate, RateLimit}
@@ -26,6 +28,9 @@ defmodule TimeManagerWeb.AuthController do
   plug RateLimit, [bucket: :login_email, limit: 10, by: :email] when action == :login
   plug RateLimit, [bucket: :login_ip, limit: 100] when action == :login
   plug RateLimit, [bucket: :register, limit: 20] when action == :register
+
+  plug RateLimit,
+       [bucket: :verify_email, limit: 20] when action in [:verify_email, :resend_verification]
 
   tags(["auth"])
 
@@ -74,12 +79,59 @@ defmodule TimeManagerWeb.AuthController do
     # Only these fields are read: a "role" sent by the client is ignored.
     attrs = Map.take(attrs, ["username", "email", "password"])
 
-    with {:ok, user} <- Accounts.create_user(attrs, "employee") do
-      start_session(conn, user, :created)
+    with {:ok, user} <- Accounts.create_user(attrs, "employee", nil, verify_email: false),
+         {:ok, code} <- Accounts.issue_email_verification(user),
+         :ok <- user.email |> Email.verification(code) |> EmailDelivery.send() do
+      conn
+      |> put_status(:accepted)
+      |> json(%{data: %{email: user.email, verification_required: true}})
+    else
+      {:error, :email_delivery_failed} -> {:error, :service_unavailable}
+      error -> error
     end
   end
 
   def register(_conn, _params), do: {:error, :bad_request}
+
+  operation(:verify_email,
+    summary: "Verify registration email",
+    description: "Verifies the six-digit OTP and opens a session.",
+    security: [],
+    responses: [ok: {"Verified", "application/json", SessionResponse}]
+  )
+
+  def verify_email(conn, %{"email" => email, "code" => code}) do
+    case Accounts.verify_email(email, code) do
+      {:ok, user} -> start_session(conn, user, :ok)
+      {:error, :expired_code} -> {:error, :expired_code}
+      {:error, :too_many_attempts} -> {:error, :too_many_attempts}
+      {:error, :invalid_code} -> {:error, :invalid_code}
+    end
+  end
+
+  def verify_email(_conn, _params), do: {:error, :bad_request}
+
+  operation(:resend_verification,
+    summary: "Resend registration email",
+    description: "Sends a new verification OTP to an unverified account.",
+    security: [],
+    responses: [ok: {"OTP sent", "application/json", ErrorResponse}]
+  )
+
+  def resend_verification(conn, %{"email" => email}) when is_binary(email) do
+    normalized = String.trim(email) |> String.downcase()
+
+    with {:ok, user} <- Accounts.find_unverified_user(normalized),
+         {:ok, code} <- Accounts.issue_email_verification(user),
+         :ok <- normalized |> Email.verification(code) |> EmailDelivery.send() do
+      json(conn, %{data: %{verification_required: true}})
+    else
+      {:error, :email_delivery_failed} -> {:error, :service_unavailable}
+      _ -> json(conn, %{data: %{verification_required: true}})
+    end
+  end
+
+  def resend_verification(_conn, _params), do: {:error, :bad_request}
 
   operation(:me,
     summary: "Current user",

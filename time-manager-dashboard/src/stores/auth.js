@@ -62,7 +62,15 @@ export async function login(email, password) {
 }
 
 export async function register(attrs) {
-  return startSession(await authService.register(attrs))
+  return authService.register(attrs)
+}
+
+export async function verifyEmail(email, code) {
+  return startSession(await authService.verifyEmail(email, code))
+}
+
+export async function resendVerification(email) {
+  return authService.resendVerification(email)
 }
 
 // Asks the API who is logged in. Without a CSRF token there is no usable
