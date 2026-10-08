@@ -34,7 +34,8 @@ defmodule TimeManager.Clocks do
 
   A pause or departure closes the current work segment. Resuming opens another
   segment, so breaks never enter workingtime totals. Leaving during a pause
-  ends the service without creating another period. Events cannot be backdated.
+  ends the service without creating another period. Events cannot precede the
+  latest clock or be in the future relative to the server's UTC clock.
   A period must have a positive duration. Both records are committed together.
 
   The owner comes from the supplied user, never from attrs.
@@ -64,19 +65,15 @@ defmodule TimeManager.Clocks do
       Repo.transact(fn ->
         # Lock the user even when no clocks exist yet. Concurrent clicks for the
         # same user must check the previous state one after the other.
-        case Repo.one(from user in User, where: user.id == ^user_id, lock: "FOR UPDATE") do
-          nil ->
-            {:error, :not_found}
-
-          _user ->
-            previous = latest_clock(user_id)
-
-            with :ok <- validate_completion(previous, clock, changeset, expected_clock_id),
-                 :ok <- validate_transition(previous, clock, changeset),
-                 {:ok, saved_clock} <- Repo.insert(changeset),
-                 :ok <- create_period(previous, saved_clock) do
-              {:ok, saved_clock}
-            end
+        with %User{} <-
+               Repo.one(from user in User, where: user.id == ^user_id, lock: "FOR UPDATE") ||
+                 {:error, :not_found},
+             previous = latest_clock(user_id),
+             :ok <- validate_completion(previous, clock, changeset, expected_clock_id),
+             :ok <- validate_transition(previous, clock, changeset),
+             {:ok, saved_clock} <- Repo.insert(changeset),
+             :ok <- create_period(previous, saved_clock) do
+          {:ok, saved_clock}
         end
       end)
     end
@@ -119,9 +116,12 @@ defmodule TimeManager.Clocks do
   end
 
   defp validate_transition(previous, clock, changeset) do
-    previous_kind = if previous, do: previous.kind, else: nil
+    previous_kind = previous && previous.kind
 
     cond do
+      DateTime.compare(clock.time, DateTime.utc_now()) == :gt ->
+        invalid(changeset, :time, "Le pointage ne peut pas être dans le futur.")
+
       clock.kind not in Map.fetch!(@next_kinds, previous_kind) ->
         invalid(changeset, :status, "action is not allowed after the latest clock event")
 
@@ -144,12 +144,12 @@ defmodule TimeManager.Clocks do
   defp create_period(%Clock{kind: :pause}, %Clock{kind: :departure}), do: :ok
 
   defp create_period(%Clock{status: true} = arrival, %Clock{status: false} = departure) do
-    case WorkingTimes.create_working_time(departure.user_id, %{
-           start: arrival.time,
-           end: departure.time
-         }) do
-      {:ok, _period} -> :ok
-      {:error, reason} -> {:error, reason}
+    with {:ok, _period} <-
+           WorkingTimes.create_working_time(departure.user_id, %{
+             start: arrival.time,
+             end: departure.time
+           }) do
+      :ok
     end
   end
 end
