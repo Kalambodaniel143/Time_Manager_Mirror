@@ -11,7 +11,7 @@
         <button class="btn btn-outline" type="button" @click="$emit('tour')">Revoir la prise en main</button>
       </section>
       <TransparencyPanel />
-      <section v-if="organization" class="card section"><h2 class="card-title">Votre compte d’organisation</h2><p>Votre identité est celle du compte accepté par votre administration. Dans cette démonstration, les identifiants se gèrent depuis « Mon organisation ».</p></section>
+      <section v-if="organization" class="card section"><h2 class="card-title">Votre compte d’organisation</h2><p>Votre compte est rattaché à Gotham City. Le super administrateur gère les demandes d’adhésion et les rôles depuis « Administration Gotham ».</p></section>
       <form v-if="!organization" class="card section" novalidate @submit.prevent="saveProfile">
         <h2 class="card-title">Identité</h2>
         <p class="card-subtitle">Votre rôle : <strong>{{ roleLabel }}</strong>. Seule l’administration peut le changer.</p>
@@ -63,11 +63,15 @@
       </form>
     </div>
     <section class="card section support"><h2 class="card-title">Besoin d’un accompagnement ?</h2><p>Un téléphone ou un appareil partagé suffit. Si vous ne pouvez pas utiliser l’application seul, votre responsable peut vous accompagner pour enregistrer vos horaires réels.</p><p class="field-hint">Un oubli ? Complétez votre départ. Une heure déjà enregistrée est incorrecte ? Proposez une correction depuis « Mes heures ».</p></section>
+    <section class="card section deletion-section"><div><h2 class="card-title">Supprimer mon compte</h2><p>Cette action supprime votre compte, vos pointages et vos périodes de travail. Vous serez déconnecté et ne pourrez plus utiliser ces identifiants.</p><p v-if="isSuperAdministrator" class="field-hint">Le dernier super administrateur doit transférer ses responsabilités avant de pouvoir supprimer son compte.</p></div><button class="btn btn-danger" type="button" @click="openDeletion">Supprimer mon compte</button></section>
+    <ModalDialog v-if="deletionOpen" title="Confirmer la suppression de mon compte" id="account-deletion-title" :busy="deleting" @close="closeDeletion"><p>Vous allez supprimer le compte <strong>{{ profile.email }}</strong>. Cette action est définitive.</p><form class="page-stack" novalidate @submit.prevent="deleteAccount"><label class="field"><span class="field-label">Mot de passe actuel pour confirmer</span><input v-model="deletionPassword" class="input" type="password" autocomplete="current-password" :disabled="deleting" required /></label><label class="deletion-confirmation"><input v-model="deletionConfirmed" type="checkbox" :disabled="deleting" /> Je confirme la suppression définitive de mon compte.</label><p v-if="deletionError" class="field-error" role="alert">{{ deletionError }}</p><div class="deletion-actions"><button class="btn btn-outline" type="button" :disabled="deleting" @click="closeDeletion">Annuler</button><button class="btn btn-danger" type="submit" :disabled="deleting || !deletionConfirmed || !deletionPassword">{{ deleting ? 'Suppression…' : 'Supprimer définitivement' }}</button></div></form></ModalDialog>
     <section class="card section logout-section"><div><h2 class="card-title">Quitter votre session</h2><p class="muted">Déconnectez-vous après utilisation sur un appareil partagé.</p></div><button class="btn btn-primary" type="button" @click="$emit('logout')">Se déconnecter</button></section>
   </div>
 </template>
 
 <script>
+import ModalDialog from './ui/ModalDialog.vue'
+import { deleteOwnAccount } from '../services/accountService'
 import PageHeader from './ui/PageHeader.vue'
 import TransparencyPanel from './employee/TransparencyPanel.vue'
 import { readStrongText, writeStrongText } from '../utils/session'
@@ -79,13 +83,19 @@ import { notify } from '../utils/toast'
 export default {
   name: 'Profile',
 
-  components: { PageHeader, TransparencyPanel },
+  components: { ModalDialog, PageHeader, TransparencyPanel },
 
   props: { theme: { type: String, required: true } },
-  emits: ['update:theme', 'logout', 'tour'],
+  emits: ['update:theme', 'logout', 'tour', 'deleted'],
 
   data() {
     return {
+      deletionOpen: false,
+      deletionPassword: '',
+      deletionConfirmed: false,
+      deletionError: '',
+      deleting: false,
+      deletionDisposed: false,
       strongText: readStrongText(),
       themes: [{ value: 'light', label: 'Clair' }, { value: 'night', label: 'Nuit' }, { value: 'contrast', label: 'Contraste élevé' }],
       profile: { username: auth.user.username, email: auth.user.email },
@@ -99,11 +109,13 @@ export default {
   },
 
   computed: {
+    currentUserId() { return auth.user?.id },
+    isSuperAdministrator() { return auth.user?.role === 'administrator' },
     organization() { return auth.organizationSession?.organization || null },
-    displayName() { return auth.organizationSession ? `${auth.user.first_name} ${auth.user.last_name}` : auth.user.username },
+    displayName() { if (!auth.user) return ''; return auth.organizationSession ? `${auth.user.first_name} ${auth.user.last_name}` : auth.user.username },
     initials() { return this.displayName.split(/[ ._-]+/).filter(Boolean).map(part => part[0]).join('').slice(0, 2).toUpperCase() },
     roleLabel() {
-      return ROLE_LABELS[auth.user.role] || auth.user.role
+      return ROLE_LABELS[auth.user?.role] || auth.user?.role || ''
     },
 
     profileErrors() {
@@ -118,7 +130,33 @@ export default {
     },
   },
 
+  watch: {
+    currentUserId(id, previous) {
+      if (id === previous) return
+      this.deletionOpen = false; this.deletionPassword = ''; this.deletionConfirmed = false
+      this.password = { current: '', next: '', confirmation: '' }
+      if (auth.user) this.profile = { username: auth.user.username, email: auth.user.email }
+    },
+  },
+  beforeUnmount() { this.deletionDisposed = true; this.deletionPassword = '' },
   methods: {
+    openDeletion() { this.deletionPassword = ''; this.deletionConfirmed = false; this.deletionError = ''; this.deletionOpen = true },
+    closeDeletion() { if (this.deleting) return; this.deletionOpen = false; this.deletionPassword = ''; this.deletionConfirmed = false; this.deletionError = '' },
+    async deleteAccount() {
+      if (this.deleting) return
+      if (!this.deletionConfirmed || !this.deletionPassword) { this.deletionError = 'Confirmez la suppression et saisissez votre mot de passe actuel.'; return }
+      const userId = auth.user?.id
+      this.deleting = true; this.deletionError = ''
+      try {
+        await deleteOwnAccount(this.deletionPassword)
+        this.deletionPassword = ''; this.password = { current: '', next: '', confirmation: '' }; this.deletionOpen = false
+        if (!this.deletionDisposed && auth.user?.id === userId) this.$emit('deleted')
+      } catch (error) {
+        this.deletionPassword = ''
+        if (this.deletionDisposed || auth.user?.id !== userId) return
+        this.deletionError = error.status === 409 && /last administrator|dernier super administrateur/i.test(error.message) ? 'Le dernier super administrateur ne peut pas supprimer son compte. Transférez d’abord ses responsabilités.' : error.payload?.errors?.current_password ? 'Mot de passe actuel incorrect.' : error.message
+      } finally { this.deleting = false }
+    },
     saveStrongText() { writeStrongText(this.strongText) },
     async saveProfile() {
       this.savingProfile = true
@@ -186,4 +224,11 @@ export default {
 .support { margin-top: 24px; }
 .logout-section { flex-direction: row; align-items: center; justify-content: space-between; margin-top: 24px; }
 @media (max-width: 760px) { .layout { grid-template-columns: 1fr; } .logout-section { flex-direction: column; align-items: stretch; } }
+.deletion-section { margin-top: 24px; border-color: var(--danger); align-items: flex-start; }
+.deletion-section p { margin-top: 8px; font-size: 14px; }
+.deletion-section h2 { color: var(--danger); }
+.deletion-confirmation { display: flex; align-items: flex-start; gap: 10px; font-size: 14px; }
+.deletion-confirmation input { margin-top: 4px; }
+.deletion-actions { display: flex; gap: 10px; justify-content: flex-end; flex-wrap: wrap; }
+@media (max-width: 760px) { .deletion-section > button { width: 100%; } .deletion-actions .btn { flex: 1; } }
 </style>

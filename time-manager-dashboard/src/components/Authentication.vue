@@ -25,7 +25,7 @@
 
       <p class="switch">
         Pas encore de compte ?
-        <RouterLink class="link" :to="{ name: 'register' }">Créer un compte</RouterLink>
+        <RouterLink class="link" :to="{ name: 'register' }">Rejoindre Gotham City</RouterLink>
       </p>
     </form>
   </AuthLayout>

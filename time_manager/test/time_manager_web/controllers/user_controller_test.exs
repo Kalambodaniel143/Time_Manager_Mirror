@@ -193,17 +193,84 @@ defmodule TimeManagerWeb.UserControllerTest do
       assert response(conn, 204)
     end
 
-    test "nobody else can delete, not even themselves", %{
+    test "employees and managers delete their own account with their password",
+         %{conn: conn} = ctx do
+      for user <- [ctx.member, ctx.manager] do
+        result =
+          conn
+          |> log_in(user)
+          |> delete(~p"/api/users/#{user}", current_password: valid_password())
+
+        assert response(result, 204)
+        assert result.resp_cookies["jwt"].max_age == 0
+        assert {:error, :not_found} = TimeManager.Accounts.fetch_user(user.id)
+      end
+    end
+
+    test "missing or incorrect passwords leave the user and session intact", %{
       conn: conn,
-      member: member,
-      manager: manager
+      member: member
     } do
-      assert json_response(conn |> log_in(member) |> delete(~p"/api/users/#{member}"), 403)
-      assert json_response(conn |> log_in(manager) |> delete(~p"/api/users/#{member}"), 403)
+      for password <- [nil, "incorrect password"] do
+        result =
+          conn
+          |> log_in(member)
+          |> delete(~p"/api/users/#{member}", current_password: password)
+
+        assert json_response(result, 422)["errors"]["current_password"]
+        assert {:ok, _} = TimeManager.Accounts.fetch_user(member.id)
+        refute Map.has_key?(result.resp_cookies, "jwt")
+      end
+    end
+
+    test "an employee cannot delete a colleague and a manager cannot delete a team member",
+         %{conn: conn} = ctx do
+      assert json_response(
+               conn
+               |> log_in(ctx.member)
+               |> delete(~p"/api/users/#{ctx.outsider}", current_password: valid_password()),
+               403
+             )
+
+      assert json_response(
+               conn
+               |> log_in(ctx.manager)
+               |> delete(~p"/api/users/#{ctx.member}", current_password: valid_password()),
+               403
+             )
+
+      assert {:ok, _} = TimeManager.Accounts.fetch_user(ctx.member.id)
+    end
+
+    test "deletion cascades working records and a JWT for the deleted account no longer authenticates",
+         %{conn: conn, member: member} do
+      {:ok, clock} =
+        TimeManager.Clocks.create_clock(member, %{time: ~U[2026-09-28 09:00:00Z], status: true})
+
+      {:ok, period} =
+        TimeManager.WorkingTimes.create_working_time(member.id, %{
+          start: ~U[2026-09-28 09:00:00Z],
+          end: ~U[2026-09-28 10:00:00Z]
+        })
+
+      logged = log_in(conn, member)
+
+      assert response(
+               delete(logged, ~p"/api/users/#{member}", current_password: valid_password()),
+               204
+             )
+
+      assert TimeManager.Repo.get(TimeManager.Clocks.Clock, clock.id) == nil
+      assert TimeManager.Repo.get(TimeManager.WorkingTimes.WorkingTime, period.id) == nil
+      assert json_response(get(logged, ~p"/api/auth/me"), 401)
     end
 
     test "the last administrator cannot be deleted: 409", %{conn: conn, admin: admin} do
-      conn = conn |> log_in(admin) |> delete(~p"/api/users/#{admin}")
+      conn =
+        conn
+        |> log_in(admin)
+        |> delete(~p"/api/users/#{admin}", current_password: valid_password())
+
       assert json_response(conn, 409)
     end
   end

@@ -67,7 +67,7 @@ function admin(db, organizationId) {
 }
 
 function nextId(db) {
-  return Math.max(10000, ...db.users.map((user) => user.id)) + 1
+  return Math.max(10000, db.next_user_id || 0, ...db.users.map((user) => user.id)) + 1
 }
 
 function requestView(request) {
@@ -186,4 +186,60 @@ export function mockWorkMembers() {
   const db = state()
   const session = current(db)
   return db.users.filter(user => user.organization_id === session.organization.id && (session.role !== 'employee' || user.id === session.user.id)).map(publicUser)
+}
+
+// Explicit manual provisioning for development; never called by public UI or startup.
+export async function mockProvisionSuperAdministrator({ profile, password }) {
+  const clean = cleanProfile(profile, false)
+  const record = await passwordRecord(password)
+  const db = state()
+  let organization = db.organizations.find(item => normalizeName(item.name) === normalizeName('Gotham City'))
+  if (organization && db.users.some(user => user.organization_id === organization.id && user.role === 'admin')) fail(409, 'Le super administrateur de Gotham City existe déjà.')
+  if (db.users.some(user => user.email === clean.email)) fail(409, 'Cette adresse email possède déjà un compte.')
+  if (!organization) {
+    organization = { id: crypto.randomUUID(), name: 'Gotham City', created_at: new Date().toISOString() }
+    db.organizations.push(organization)
+  }
+  const user = { ...clean, ...record, id: nextId(db), username: clean.email, organization_id: organization.id, role: 'admin', created_at: new Date().toISOString() }
+  db.users.push(user)
+  save(db)
+  return sessionFor(db, user.id)
+}
+
+export async function mockDeleteOwnAccount(currentPassword) {
+  const initial = current(state())
+  const stored = state().users.find(user => user.id === initial.user.id)
+  if (typeof currentPassword !== 'string' || !currentPassword || await digest(currentPassword, stored.password_salt) !== stored.password_hash) fail(422, 'Mot de passe actuel incorrect.', { current_password: ['Mot de passe actuel incorrect.'] })
+  // Re-read after hashing: a stale form must not remove a newly selected account.
+  const db = state()
+  const session = current(db)
+  if (session.user.id !== initial.user.id) fail(409, 'Votre session a changé. Reconnectez-vous avant de supprimer votre compte.')
+  if (session.role === 'admin' && db.users.filter(user => user.organization_id === session.organization.id && user.role === 'admin').length <= 1) fail(409, 'Le dernier super administrateur ne peut pas supprimer son compte. Transférez d’abord ses responsabilités.')
+  db.next_user_id = Math.max(db.next_user_id || 0, ...db.users.map(user => user.id))
+  db.users = db.users.filter(user => user.id !== session.user.id)
+  db.requests = db.requests.filter(item => item.organization_id !== session.organization.id || item.profile.email !== session.user.email)
+  save(db)
+  localStorage.removeItem(SESSION_KEY)
+
+  // Clean up only the deleted user's local work; preserve colleagues' records.
+  try {
+    const workKey = `tm-work-demo:${session.organization.id}`
+    const work = JSON.parse(localStorage.getItem(workKey) || 'null')
+    if (work) {
+      for (const key of ['clocks', 'periods', 'corrections']) work[key] = (work[key] || []).filter(item => item.user_id !== session.user.id)
+      localStorage.setItem(workKey, JSON.stringify(work))
+    }
+    const orgKey = `tm-org:${session.organization.id}`
+    const org = JSON.parse(localStorage.getItem(orgKey) || 'null')
+    if (org) {
+      for (const key of ['notes', 'validated']) for (const name of Object.keys(org[key] || {})) if (name.startsWith(`${session.user.username}:`)) delete org[key][name]
+      if (org.teamPlan?.rows) delete org.teamPlan.rows[session.user.username]
+      org.swapRequests = (org.swapRequests || []).filter(item => item.user_id !== session.user.id)
+      localStorage.setItem(orgKey, JSON.stringify(org))
+    }
+    localStorage.removeItem('tm-last-join-receipt')
+  } catch {
+    // The account itself was removed successfully; optional demo caches do not restore it.
+  }
+  return null
 }

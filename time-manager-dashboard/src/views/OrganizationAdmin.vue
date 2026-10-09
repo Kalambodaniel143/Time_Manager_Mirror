@@ -1,10 +1,10 @@
 <template>
   <div class="organization-admin">
-    <PageHeader :eyebrow="session.organization.name" title="Mon organisation">
+    <PageHeader :eyebrow="session.organization.name" title="Administration Gotham City">
       <button class="btn btn-outline" type="button" :disabled="loading || busy" @click="load"><AppIcon name="rotate" />Actualiser</button>
     </PageHeader>
     <InfoNote title="Le nom à communiquer à votre équipe" flat>
-      Pour vous rejoindre, les employés indiquent « {{ session.organization.name }} ». Vous examinez leur demande et fournissez leur mot de passe après acceptation.
+      Les demandes sont rattachées automatiquement à Gotham City. Le super administrateur les examine et fournit le mot de passe après acceptation.
     </InfoNote>
     <p v-if="error" class="field-error page-error" role="alert">{{ error }}</p>
     <p v-if="loading" class="loading-message" role="status">Chargement de votre organisation…</p>
@@ -30,7 +30,7 @@
         <h2 class="card-title">Membres et rôles</h2>
         <p class="card-subtitle">Les personnes acceptées sont employées par défaut. Vous pouvez les promouvoir managers ou les repasser employés.</p>
         <div class="table-wrap"><table class="table"><thead><tr><th scope="col">Membre</th><th scope="col">Email</th><th scope="col">Rôle</th><th scope="col">Action</th></tr></thead><tbody>
-          <tr v-for="member in members" :key="member.id"><th scope="row">{{ member.first_name }} {{ member.last_name }}</th><td>{{ member.email }}</td><td><span class="badge" :class="member.role === 'admin' ? 'badge-accent' : 'badge-muted'">{{ roleLabel(member.role) }}</span></td><td><button v-if="member.role !== 'admin'" class="btn btn-outline btn-sm" type="button" :disabled="busy" @click="roleTarget = member">{{ member.role === 'employee' ? 'Promouvoir manager' : 'Repasser employé' }}</button><span v-else class="muted">Créateur de l’organisation</span></td></tr>
+          <tr v-for="member in members" :key="member.id"><th scope="row">{{ member.first_name }} {{ member.last_name }}</th><td>{{ member.email }}</td><td><span class="badge" :class="member.role === 'admin' ? 'badge-accent' : 'badge-muted'">{{ roleLabel(member.role) }}</span></td><td><button v-if="member.role !== 'admin'" class="btn btn-outline btn-sm" type="button" :disabled="busy" @click="roleTarget = member">{{ member.role === 'employee' ? 'Promouvoir manager' : 'Repasser employé' }}</button><span v-else class="muted">Super administrateur · compte créé manuellement</span></td></tr>
         </tbody></table></div>
       </section>
 
@@ -116,7 +116,7 @@ export default {
     },
     date(value) { return value ? new Date(value.length === 10 ? `${value}T12:00:00` : value).toLocaleDateString('fr-FR') : '—' },
     gender(value) { return GENDERS.find((item) => item.value === value)?.label || '—' },
-    roleLabel(role) { return { admin: 'Admin', employee: 'Employé', manager: 'Manager' }[role] || role },
+    roleLabel(role) { return { admin: 'Super administrateur', employee: 'Employé', manager: 'Manager' }[role] || role },
     startReview(request, decision) { this.review = request; this.decision = decision; this.dialogError = ''; this.password = ''; this.confirmation = ''; this.reason = ''; this.showPassword = false },
     closeDialog() {
       if (this.busy) return
