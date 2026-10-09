@@ -76,6 +76,10 @@ defmodule TimeManager.Authorization do
   def can_clock?(%User{id: id}, id), do: true
   def can_clock?(_user, _target_id), do: false
 
+  @doc "Anyone can delete their own account; administrators may delete users of their organization."
+  def can_delete_account?(%User{id: id}, id), do: true
+  def can_delete_account?(user, target_id), do: administrator_of?(user, target_id)
+
   @doc "Can `user` edit the profile of `target_id`? Self or an administrator of their organization."
   def can_edit_profile?(%User{id: id}, id), do: true
   def can_edit_profile?(user, target_id), do: administrator_of?(user, target_id)

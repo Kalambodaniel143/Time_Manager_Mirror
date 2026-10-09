@@ -13,7 +13,7 @@ export default {
   emits: ['logout'],
   computed: {
     initials() { return `${this.session.user.first_name[0] || ''}${this.session.user.last_name[0] || ''}`.toUpperCase() },
-    roleLabel() { return { admin: 'Administrateur', employee: 'Employé', manager: 'Manager' }[this.session.role] },
+    roleLabel() { return { admin: 'Super administrateur', employee: 'Employé', manager: 'Manager' }[this.session.role] },
   },
 }
 </script>

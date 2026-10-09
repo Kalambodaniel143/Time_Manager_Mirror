@@ -7,7 +7,16 @@ defmodule TimeManagerWeb.UserController do
   alias TimeManager.Accounts
   alias TimeManager.Accounts.User
   alias TimeManager.Authorization
-  alias TimeManagerWeb.Schemas.{ErrorResponse, RoleRequest, UserRequest, UserResponse}
+  alias TimeManagerWeb.Plugs.Authenticate
+
+  alias TimeManagerWeb.Schemas.{
+    AccountDeletionRequest,
+    ErrorResponse,
+    RoleRequest,
+    UserRequest,
+    UserResponse
+  }
+
   alias TimeManagerWeb.Schemas.{UsersResponse, ValidationErrorResponse}
 
   action_fallback TimeManagerWeb.FallbackController
@@ -165,8 +174,14 @@ defmodule TimeManagerWeb.UserController do
   def update_role(_conn, _params), do: {:error, :bad_request}
 
   operation(:delete,
-    summary: "Delete a user of the administrator's organization",
-    description: "Also deletes their clock events and working times.",
+    summary: "Delete your own account or a user of your organization",
+    description:
+      "Self-deletion requires current_password. Administrators can delete another account " <>
+        "in their organization without its password. Also deletes clocks and working times; " <>
+        "the last administrator cannot be deleted.",
+    request_body:
+      {"Password confirmation for self-deletion", "application/json", AccountDeletionRequest,
+       required: false},
     parameters: [
       id: [in: :path, type: :integer, description: "User ID", example: 1]
     ],
@@ -174,18 +189,48 @@ defmodule TimeManagerWeb.UserController do
       no_content: "User deleted",
       forbidden: {"Not allowed", "application/json", ErrorResponse},
       not_found: {"User not found", "application/json", ErrorResponse},
-      conflict: {"Last administrator", "application/json", ErrorResponse}
+      conflict: {"Last administrator", "application/json", ErrorResponse},
+      unprocessable_entity:
+        {"Incorrect or missing current password", "application/json", ValidationErrorResponse}
     ]
   )
 
-  def delete(conn, %{"id" => id}) do
+  def delete(conn, %{"id" => id} = params) do
+    actor = current_user(conn)
+
     with {:ok, id} <- cast_id(id),
-         :ok <- authorize(Authorization.administrator_of?(current_user(conn), id)),
+         :ok <- authorize(Authorization.can_delete_account?(actor, id)),
          {:ok, %User{} = user} <- Accounts.fetch_user(id),
+         :ok <- verify_deletion_password(actor, user, params["current_password"]),
          {:ok, %User{}} <- Accounts.delete_user(user) do
+      conn =
+        if actor.id == user.id do
+          delete_resp_cookie(conn, Authenticate.cookie_name(),
+            path: "/",
+            http_only: true,
+            same_site: "Strict",
+            secure: Application.get_env(:time_manager, :auth_cookie_secure, false)
+          )
+        else
+          conn
+        end
+
       send_resp(conn, :no_content, "")
     end
   end
+
+  defp verify_deletion_password(%User{id: id}, %User{id: id} = user, password) do
+    if User.valid_password?(user, password) do
+      :ok
+    else
+      {:error,
+       user
+       |> User.changeset(%{})
+       |> Ecto.Changeset.add_error(:current_password, "is not valid")}
+    end
+  end
+
+  defp verify_deletion_password(_actor, _user, _password), do: :ok
 
   # No password in the request: nothing to change. An administrator resets
   # someone else's password; anyone changing their own must give the current one.

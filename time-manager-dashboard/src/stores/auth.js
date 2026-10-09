@@ -1,6 +1,5 @@
 import { reactive } from 'vue'
-import * as authService from '../services/authService'
-import { AUTH_USE_MOCK, getSession, logoutAccount } from '../services/organizationService'
+import { AUTH_USE_MOCK, getSession, loginAccount, logoutAccount } from '../services/organizationService'
 
 // The JWT lives in an HttpOnly cookie: page scripts can never read it. The
 // front-end only keeps the CSRF token returned at login, in memory and in
@@ -12,12 +11,13 @@ const CSRF_KEY = 'tm-csrf'
 export const ROLE_LABELS = {
   employee: 'Employé',
   manager: 'Manager',
-  administrator: 'Administrateur',
+  administrator: 'Super administrateur',
 }
 
 export const auth = reactive({
   user: null,
   organizationSession: null,
+  organization: null,
   csrfToken: readCsrf(),
   // True once we know whether a session exists (GET /auth/me answered).
   checked: false,
@@ -42,15 +42,18 @@ function writeCsrf(token) {
 }
 
 function startSession(session) {
-  writeCsrf(session.csrf_token)
-  auth.user = session.user
+  if (session.csrf_token) writeCsrf(session.csrf_token)
+  auth.organization = session.organization || null
+  auth.user = { ...session.user, role: session.user.role === 'admin' ? 'administrator' : session.user.role }
   auth.checked = true
-  return session.user
+  return auth.user
 }
 
-// Organization demos use the same role checks as backend users.
+// Keep real organization context separate from the local demo workspace.
 export function startOrganizationSession(session) {
+  if (!AUTH_USE_MOCK) { auth.organizationSession = null; return startSession(session) }
   writeCsrf(null)
+  auth.organization = session.organization
   auth.organizationSession = session
   auth.user = { ...session.user, role: session.role === 'admin' ? 'administrator' : session.role }
   auth.checked = true
@@ -58,11 +61,12 @@ export function startOrganizationSession(session) {
 }
 
 export async function login(email, password) {
-  return startSession(await authService.login(email, password))
+  return startOrganizationSession(await loginAccount({ email, password }))
 }
 
 export async function register(attrs) {
-  return startSession(await authService.register(attrs))
+  void attrs
+  throw new Error('L’inscription directe est désactivée. Envoyez une demande pour rejoindre Gotham City.')
 }
 
 // Asks the API who is logged in. Without a CSRF token there is no usable
@@ -79,7 +83,7 @@ export async function fetchMe() {
   }
 
   try {
-    auth.user = await authService.me()
+    startSession(await getSession())
   } catch {
     clearSession()
   }
@@ -90,8 +94,7 @@ export async function fetchMe() {
 
 export async function logout() {
   try {
-    if (auth.organizationSession) await logoutAccount()
-    else await authService.logout()
+    await logoutAccount()
   } finally {
     clearSession()
   }
@@ -100,6 +103,7 @@ export async function logout() {
 // Forgets the session locally (logout, or a 401 from the API).
 export function clearSession() {
   auth.organizationSession = null
+  auth.organization = null
   auth.user = null
   auth.checked = true
   writeCsrf(null)

@@ -1,45 +1,54 @@
-import { API_URL } from '../config'
-import { ApiError } from './http'
+import { request } from './http'
 import * as demo from '../mocks/organizationAuth.js'
+import { GOTHAM_NAME, isGotham } from '../utils/gotham'
 
-// Le circuit reste testable sans modifier le backend existant.
 export const AUTH_USE_MOCK = import.meta.env.VITE_AUTH_USE_MOCK !== 'false'
 
-async function authRequest(path, method = 'GET', body) {
-  const response = await fetch(`${API_URL}${path}`, {
-    method,
-    credentials: 'include',
-    headers: { 'Content-Type': 'application/json' },
-    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-  })
-  if (response.status === 204) return null
-  const payload = await response.json().catch(() => null)
-  if (!response.ok) throw new ApiError(response.status, payload)
-  if (!payload || !Object.hasOwn(payload, 'data')) throw new Error('Réponse du serveur invalide.')
-  return payload.data
-}
-
-async function call(mock, path, method, body) {
-  return AUTH_USE_MOCK ? mock() : authRequest(path, method, body)
+async function call(mock, path, method = 'GET', body, skipUnauthorizedHandler = false) {
+  if (AUTH_USE_MOCK) return mock()
+  const result = await request(path, { method, skipUnauthorizedHandler, ...(body === undefined ? {} : { body: JSON.stringify(body) }) })
+  if (result === undefined) throw new Error('Réponse du serveur invalide.')
+  return result
 }
 
 async function sessionResult(promise) {
-  const session = await promise
-  if (!Number.isInteger(session?.user?.id) || session.user.id <= 0 || !session.organization?.id || !session.organization.name || !['admin', 'employee', 'manager'].includes(session.role) || session.user.role !== session.role || session.user.organization_id !== session.organization.id || ['first_name', 'last_name', 'email', 'username'].some((key) => typeof session.user[key] !== 'string' || !session.user[key].trim())) {
-    throw new Error('Réponse de session invalide.')
-  }
-  return session
+  const result = await promise
+  const role = result?.role === 'administrator' ? 'admin' : result?.role
+  const userRole = result?.user?.role === 'administrator' ? 'admin' : result?.user?.role
+  if (!Number.isInteger(result?.user?.id) || result.user.id <= 0 || !result.organization?.id || !['admin', 'employee', 'manager'].includes(role) || userRole !== role || result.user.organization_id !== result.organization.id || ['first_name', 'last_name', 'email', 'username'].some(key => typeof result.user[key] !== 'string' || !result.user[key].trim())) throw new Error('Réponse de session invalide.')
+  if (!isGotham(result.organization)) throw new Error('Votre compte n’est pas rattaché à Gotham City. Contactez le super administrateur.')
+  return { ...result, role, user: { ...result.user, role } }
 }
 
-export const createOrganization = (body) => sessionResult(call(() => demo.mockCreateOrganization(body), '/organizations', 'POST', body))
-export const loginAccount = (body) => sessionResult(call(() => demo.mockLogin(body), '/auth/login', 'POST', body))
+export async function loginAccount(body) {
+  const session = await sessionResult(call(() => demo.mockLogin(body), '/auth/login', 'POST', body, true))
+  if (!AUTH_USE_MOCK && (typeof session.csrf_token !== 'string' || !session.csrf_token.trim())) throw new Error('Réponse de connexion invalide : jeton CSRF absent.')
+  return session
+}
 export const getSession = () => sessionResult(call(() => demo.mockSession(), '/auth/session'))
-export const logoutAccount = () => call(() => demo.mockLogout(), '/auth/logout', 'POST')
-export const lookupOrganization = (name) => call(() => demo.mockLookupOrganization(name), `/organizations/lookup?name=${encodeURIComponent(name)}`)
-export const joinOrganization = (body) => call(() => demo.mockJoinOrganization(body), '/join-requests', 'POST', body)
-export const getRequestStatus = (reference) => call(() => demo.mockRequestStatus(reference), '/join-requests/status', 'POST', { reference })
-export const listJoinRequests = (id) => call(() => demo.mockListRequests(id), `/organizations/${id}/join-requests`)
+export const logoutAccount = () => call(() => demo.mockLogout(), '/auth/logout', 'POST', undefined, true)
+
+// Resolve the one organization internally; the applicant cannot choose its name or ID.
+export async function getGothamOrganization() {
+  const organization = await call(() => demo.mockLookupOrganization(GOTHAM_NAME), `/organizations/lookup?name=${encodeURIComponent(GOTHAM_NAME)}`)
+  if (!organization?.id || !isGotham(organization)) throw new Error('Gotham City n’est pas encore configurée. Contactez le super administrateur.')
+  return organization
+}
+export async function joinOrganization({ profile }) {
+  let organization
+  try { organization = await getGothamOrganization() }
+  catch (error) { if (error.status === 404) throw new Error('Gotham City n’est pas encore configurée. Contactez le super administrateur.', { cause: error }); throw error }
+  const body = { organization_id: organization.id, profile }
+  return call(() => demo.mockJoinOrganization(body), '/join-requests', 'POST', body)
+}
+
+export async function getRequestStatus(reference) {
+  const receipt = await call(() => demo.mockRequestStatus(reference), '/join-requests/status', 'POST', { reference })
+  if (receipt.organization_name && !isGotham({ name: receipt.organization_name })) throw new Error('Cette référence ne concerne pas Gotham City.')
+  return receipt
+}
+export const listJoinRequests = id => call(() => demo.mockListRequests(id), `/organizations/${id}/join-requests`)
 export const approveJoinRequest = (orgId, id, password) => call(() => demo.mockApproveRequest(orgId, id, password), `/organizations/${orgId}/join-requests/${id}/approve`, 'POST', { password })
 export const rejectJoinRequest = (orgId, id, reason) => call(() => demo.mockRejectRequest(orgId, id, reason), `/organizations/${orgId}/join-requests/${id}/reject`, 'POST', { reason })
-export const listMembers = (id) => call(() => demo.mockListMembers(id), `/organizations/${id}/members`)
+export const listMembers = async id => (await call(() => demo.mockListMembers(id), `/organizations/${id}/members`)).map(user => ({ ...user, role: user.role === 'administrator' ? 'admin' : user.role }))
 export const setMemberRole = (orgId, id, role) => call(() => demo.mockSetRole(orgId, id, role), `/organizations/${orgId}/members/${id}`, 'PATCH', { role })

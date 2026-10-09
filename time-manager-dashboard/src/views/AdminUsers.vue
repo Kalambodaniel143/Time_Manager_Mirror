@@ -27,7 +27,8 @@
               <td>{{ user.username }}<span v-if="user.id === me.id" class="you">vous</span></td>
               <td class="email">{{ user.email }}</td>
               <td>
-                <select
+                <span v-if="user.role === 'administrator'" class="badge badge-accent">Super administrateur · compte manuel</span>
+                <select v-else
                   class="input select"
                   :value="user.role"
                   :disabled="user.id === me.id || busy === user.id"
@@ -39,6 +40,7 @@
               </td>
               <td class="actions">
                 <button
+                  v-if="user.role !== 'administrator'"
                   class="btn btn-danger btn-sm"
                   :class="{ 'is-armed': armed === user.id }"
                   type="button"
@@ -54,35 +56,7 @@
         </div>
       </section>
 
-      <form class="card create" novalidate @submit.prevent="create">
-        <h2 class="card-title">Créer un compte</h2>
-
-        <label class="field">
-          <span class="field-label">Identifiant</span>
-          <input v-model.trim="form.username" class="input" autocomplete="off" />
-        </label>
-        <label class="field">
-          <span class="field-label">Adresse e-mail</span>
-          <input v-model.trim="form.email" class="input" type="email" autocomplete="off" />
-        </label>
-        <label class="field">
-          <span class="field-label">Mot de passe provisoire</span>
-          <input v-model="form.password" class="input" type="password" autocomplete="new-password" />
-          <span class="field-hint">Au moins {{ minLength }} caractères, à changer par la personne depuis son profil.</span>
-        </label>
-        <label class="field">
-          <span class="field-label">Rôle</span>
-          <select v-model="form.role" class="input select">
-            <option v-for="role in roles" :key="role" :value="role">{{ labels[role] }}</option>
-          </select>
-        </label>
-
-        <p v-if="formError" class="field-error" role="alert">{{ formError }}</p>
-
-        <div>
-          <button class="btn btn-primary btn-sm" type="submit" :disabled="creating">Créer le compte</button>
-        </div>
-      </form>
+      <aside class="card admission"><h2 class="card-title">Nouveaux employés</h2><p>Les nouveaux comptes sont créés après acceptation d’une demande pour rejoindre Gotham City. Le super administrateur fournit le mot de passe à cette étape.</p><RouterLink class="btn btn-primary" :to="{ name: 'organization' }">Examiner les demandes</RouterLink></aside>
     </div>
   </div>
 </template>
@@ -92,29 +66,24 @@ import PageHeader from '../components/ui/PageHeader.vue'
 import { listRoles, updateRole } from '../services/authService'
 import * as userService from '../services/userService'
 import { auth, ROLE_LABELS } from '../stores/auth'
-import { EMAIL_PATTERN, PASSWORD_MIN_LENGTH } from '../utils/people'
+import { RouterLink } from 'vue-router'
 import { notify } from '../utils/toast'
 
-const EMPTY_FORM = { username: '', email: '', password: '', role: 'employee' }
 
 export default {
   name: 'AdminUsers',
 
-  components: { PageHeader },
+  components: { PageHeader, RouterLink },
 
   data() {
     return {
       users: [],
-      roles: ['employee', 'manager', 'administrator'],
+      roles: ['employee', 'manager'],
       labels: ROLE_LABELS,
       loading: true,
       error: '',
       busy: null,
       armed: null,
-      form: { ...EMPTY_FORM },
-      formError: '',
-      creating: false,
-      minLength: PASSWORD_MIN_LENGTH,
     }
   },
 
@@ -128,7 +97,7 @@ export default {
     try {
       const [users, roles] = await Promise.all([userService.listUsers(), listRoles()])
       this.users = users || []
-      this.roles = (roles || []).map((role) => role.name)
+      this.roles = (roles || []).map(role => role.name).filter(role => ['employee', 'manager'].includes(role))
     } catch (error) {
       this.error = error.message
     } finally {
@@ -138,6 +107,7 @@ export default {
 
   methods: {
     async changeRole(user, role) {
+      if (user.role === 'administrator' || !['employee', 'manager'].includes(role)) { notify('Le compte du super administrateur se gère manuellement.', 'error'); return }
       this.busy = user.id
       const previous = user.role
 
@@ -153,6 +123,7 @@ export default {
     },
 
     async remove(user) {
+      if (user.role === 'administrator') { notify('Le compte du super administrateur se gère manuellement.', 'error'); return }
       this.busy = user.id
 
       try {
@@ -167,25 +138,7 @@ export default {
       }
     },
 
-    async create() {
-      if (!this.form.username || !EMAIL_PATTERN.test(this.form.email) || this.form.password.length < PASSWORD_MIN_LENGTH) {
-        this.formError = `Identifiant, e-mail valide et mot de passe de ${PASSWORD_MIN_LENGTH} caractères minimum.`
-        return
-      }
 
-      this.creating = true
-      this.formError = ''
-
-      try {
-        this.users.push(await userService.createUser({ ...this.form }))
-        notify(`Compte ${this.form.username} créé.`)
-        this.form = { ...EMPTY_FORM }
-      } catch (error) {
-        this.formError = error.message
-      } finally {
-        this.creating = false
-      }
-    },
   },
 }
 </script>
@@ -255,7 +208,7 @@ export default {
   font-size: 13px;
 }
 
-.create {
+.admission {
   display: flex;
   flex-direction: column;
   gap: 16px;
