@@ -1,6 +1,24 @@
 import { fileURLToPath, URL } from 'node:url'
-import { defineConfig } from 'vite'
+import { defineConfig, loadEnv } from 'vite'
 import vue from '@vitejs/plugin-vue'
+
+// Le navigateur appelle /api ; Vite relaie vers le serveur de VITE_API_URL.
+// Origin et Referer sont retirés : le serveur (plug CheckOrigin) refuse les
+// écritures venant d'une autre adresse que la sienne.
+// Même valeur par défaut que src/config/api.js.
+const DEFAULT_SERVER_URL = 'http://34.155.104.175:8080/api'
+
+function apiProxy(mode) {
+  const target = new URL(loadEnv(mode, process.cwd(), 'VITE_').VITE_API_URL || DEFAULT_SERVER_URL).origin
+  if (mode === 'development') console.log(`  ➜  API : /api est relayé vers ${target}`)
+  return {
+    '/api': {
+      target,
+      changeOrigin: true,
+      configure: (proxy) => proxy.on('proxyReq', (req) => { req.removeHeader('origin'); req.removeHeader('referer') }),
+    },
+  }
+}
 
 export default defineConfig(({ mode }) => ({
   base: './',
@@ -25,9 +43,10 @@ export default defineConfig(({ mode }) => ({
     },
     dedupe: ['vue', 'vue-router'],
   },
-  build: { outDir: 'www', emptyOutDir: true },
+  // chrome69 : la syntaxe récente (?., ??=…) est convertie pour les WebView d'Android 7+.
+  build: { outDir: 'www', emptyOutDir: true, target: ['es2019', 'chrome69'] },
   server: {
     fs: { allow: [fileURLToPath(new URL('..', import.meta.url))] },
-    proxy: { '/api': { target: 'http://localhost:4000', changeOrigin: true } },
+    proxy: apiProxy(mode),
   },
 }))

@@ -1,11 +1,18 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <widget id="com.epitech.timemanager" version="0.1.0"
         xmlns="http://www.w3.org/ns/widgets"
-        xmlns:cdv="http://cordova.apache.org/ns/1.0">
+        xmlns:cdv="http://cordova.apache.org/ns/1.0"
+        xmlns:android="http://schemas.android.com/apk/res/android">
   <name>Time Manager</name>
   <description>Application mobile Time Manager</description>
   <content src="index.html" />
-  <!-- Ajouter l'origine HTTPS exacte de l'API lorsqu'elle sera connue. -->
   <access origin="https://localhost" />
   <preference name="DisallowOverscroll" value="true" />
+  <platform name="android">
+    <!-- Le serveur est en HTTP simple : Android bloque ce trafic par défaut.
+         À retirer quand le serveur passera en HTTPS. -->
+    <edit-config file="app/src/main/AndroidManifest.xml" mode="merge" target="/manifest/application">
+      <application android:usesCleartextTraffic="true" />
+    </edit-config>
+  </platform>
 </widget>

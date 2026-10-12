@@ -6,3 +6,4 @@ plugins/
 .env*
 !.env.example
 *.local
+android-env.ps1
