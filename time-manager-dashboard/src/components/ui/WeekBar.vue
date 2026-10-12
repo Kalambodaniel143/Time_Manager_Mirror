@@ -9,9 +9,9 @@
         :style="{ width: `${segment.width}%` }"
         :title="`${segment.label} · ${segment.hoursLabel}`"
       ></span>
-      <span class="target" :style="{ left: `calc(${(target / scale) * 100}% - 3px)` }" aria-hidden="true"></span>
+      <span v-if="hasTarget" class="target" :style="{ left: `calc(${(target / scale) * 100}% - 3px)` }" aria-hidden="true"></span>
     </div>
-    <p class="caption">{{ totalLabel }} confirmées · seuil d’heures supplémentaires : {{ targetLabel }} / semaine.</p>
+    <p class="caption">{{ totalLabel }} enregistrées<template v-if="hasTarget"> · seuil d’heures supplémentaires : {{ targetLabel }} / semaine.</template><template v-else> · répartition jour/nuit estimée d’après les horaires, sans calcul de paie.</template></p>
     <div class="legend">
       <HourTag v-for="segment in legend" :key="segment.kind" :kind="segment.kind" :hours="segment.hours" />
     </div>
@@ -21,6 +21,7 @@
 <script>
 import HourTag from './HourTag.vue'
 import { KIND_LABELS, formatHours } from '../../utils/hours'
+import { isDemoData } from '../../services/orgService'
 
 const ORDER = ['day', 'night', 'oncall', 'sup']
 
@@ -35,8 +36,9 @@ export default {
   },
 
   computed: {
+    hasTarget() { return Number.isFinite(this.target) && this.target > 0 },
     scale() {
-      return Math.max(this.target, this.buckets.total || 0)
+      return Math.max(this.hasTarget ? this.target : 0, this.buckets.total || 0, 1)
     },
 
     legend() {
@@ -46,7 +48,7 @@ export default {
     segments() {
       return this.legend.map((item) => ({
         ...item,
-        label: KIND_LABELS[item.kind],
+        label: isDemoData() ? KIND_LABELS[item.kind] : { day: 'Jour', night: 'Nuit', oncall: 'Astreinte', sup: 'Heures supplémentaires' }[item.kind],
         hoursLabel: formatHours(item.hours),
         width: (item.hours / this.scale) * 100,
       }))

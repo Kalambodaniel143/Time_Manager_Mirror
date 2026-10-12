@@ -10,6 +10,7 @@ let WorkingTimes
 let MissingDeparture
 let EmployeeToday
 let TeamOverview
+let store
 let team
 let org
 let isValidated
@@ -50,13 +51,17 @@ before(async () => {
   MissingDeparture = (await server.ssrLoadModule('/src/components/MissingDeparture.vue')).default
   EmployeeToday = (await server.ssrLoadModule('/src/views/EmployeeToday.vue')).default
   TeamOverview = (await server.ssrLoadModule('/src/views/TeamOverview.vue')).default
-  ;({ team, org, isValidated } = await server.ssrLoadModule('/src/services/orgService.js'))
+  ;({ org, isValidated } = await server.ssrLoadModule('/src/services/orgService.js'))
+  const { TEAM } = await server.ssrLoadModule('/src/mocks/org.js')
+  team = () => TEAM // Test fixtures only; real screens use GET /teams.
+  store = await server.ssrLoadModule('/src/stores/auth.js')
   ;({ findMissingDeparture, departureError, localDateInput } = await server.ssrLoadModule('/src/utils/missingDeparture.js'))
   ;({ durationInHours } = await server.ssrLoadModule('/src/utils/date.js'))
   ;({ formatClockDate } = await server.ssrLoadModule('/src/utils/clockDate.js'))
 })
 
 beforeEach(() => {
+  store.clearSession()
   globalThis.fetch = async () => { throw new Error('Unexpected HTTP request') }
 })
 
@@ -770,6 +775,7 @@ test('completing from home refreshes the clock; completing from hours reloads th
 })
 
 function managerComponent() {
+  store.auth.user = { id: 999, role: 'manager', username: 'responsable' }
   const vm = { ...TeamOverview.data(), now: new Date('2026-10-05T10:00:00Z'), monday: new Date('2026-09-28T00:00:00') }
   for (const [name, getter] of Object.entries(TeamOverview.computed)) {
     Object.defineProperty(vm, name, { get: () => getter.call(vm) })
@@ -780,12 +786,13 @@ function managerComponent() {
 
 function teamApi({ histories = {}, errors = [], missing = [], periods = {} } = {}) {
   const users = team().members.filter((member) => !missing.includes(member.username))
-    .map((member, index) => ({ id: 800 + index, username: member.username, email: `${member.username}@example.test` }))
+    .map((member, index) => ({ id: 800 + index, username: member.username, email: `${member.username}@example.test`, first_name: member.name.split(' ')[0], last_name: member.name.split(' ').slice(1).join(' '), role: 'employee' }))
   const requests = []
   globalThis.fetch = async (url, options) => {
     assert.equal(options.method || 'GET', 'GET')
     requests.push(url)
     const path = new URL(url, 'http://localhost').pathname
+    if (path === '/api/teams') return response([{ id: 10, name: 'Équipe réelle de test', manager: { id: 999 }, members: users }])
     if (path === '/api/users') return response(users)
     const user = users.find((item) => path.endsWith(`/${item.id}`))
     assert.ok(user, `Unexpected user in ${url}`)
@@ -829,19 +836,19 @@ test('manager refresh removes the alert after the employee completes the departu
   teamApi({ histories: { 'sara.ortiz': clocks }, periods: { 'sara.ortiz': [period] } })
   await vm.loadTeam()
   assert.equal(vm.departureAlerts.length, 0)
-  assert.equal(vm.selection.includes('sara.ortiz'), true)
+  assert.equal(vm.selection.includes('sara.ortiz'), false)
   assert.equal(vm.rows.find((row) => row.username === 'sara.ortiz').buckets.total, 8)
 })
 
-test('manager keeps other alerts when one clock request fails and reports absent profiles', async () => {
-  teamApi({ histories: { 'sara.ortiz': [managerArrival] }, errors: ['marie.dubois'], missing: ['paula.ibanez'] })
+test('manager keeps other alerts when some real clock requests fail', async () => {
+  teamApi({ histories: { 'sara.ortiz': [managerArrival] }, errors: ['marie.dubois', 'paula.ibanez'] })
   const vm = managerComponent()
   await vm.loadTeam()
   assert.equal(vm.error, '')
   assert.equal(vm.departureAlerts.length, 1)
   assert.equal(vm.clockProblems.length, 2)
-  assert.match(vm.clockProblems.join(' '), /Marie D.*pointages indisponibles/)
-  assert.match(vm.clockProblems.join(' '), /Paula I.*profil absent/)
+  assert.match(vm.clockProblems.join(' '), /Marie.*pointages indisponibles/)
+  assert.match(vm.clockProblems.join(' '), /Paula.*pointages indisponibles/)
   for (const username of ['marie.dubois', 'paula.ibanez']) {
     assert.equal(vm.selection.includes(username), false)
     vm.toggle(username)
@@ -858,7 +865,7 @@ test('invalid clocks and failed user reads cannot make a sheet appear verified',
   assert.equal(vm.selection.includes('sara.ortiz'), false)
   globalThis.fetch = async () => response(null)
   await vm.loadTeam()
-  assert.match(vm.error, /utilisateurs invalide/)
+  assert.match(vm.error, /équipes invalide/)
   assert.equal(vm.loading, false)
   assert.deepEqual(vm.selection, [])
 })
@@ -890,7 +897,7 @@ test('an open overnight service under 24 hours does not produce a manager alert'
   const vm = managerComponent()
   await vm.loadTeam()
   assert.equal(vm.departureAlerts.length, 0)
-  assert.equal(vm.selection.includes('sara.ortiz'), true)
+  assert.equal(vm.selection.includes('sara.ortiz'), false)
 })
 
 test('manager alerts survive a pause and block only the week containing the arrival', async () => {
@@ -903,14 +910,14 @@ test('manager alerts survive a pause and block only the week containing the arri
   vm.monday = new Date('2026-10-05T00:00:00')
   assert.equal(vm.departureAlerts.length, 1)
   assert.equal(vm.departureAlerts[0].departureInWeek, false)
-  assert.equal(vm.canSelect(vm.departureAlerts[0]), true)
+  assert.equal(vm.canSelect(vm.departureAlerts[0]), false)
 })
 
-test('crossing the 24-hour threshold drops an already selected incomplete sheet', async () => {
+test('real sheets cannot be selected for a local validation, before or after the 24-hour threshold', async () => {
   teamApi({ histories: { 'sara.ortiz': [{ ...managerArrival, time: '2026-10-04 11:00:00' }] } })
   const vm = managerComponent()
   await vm.loadTeam()
-  assert.equal(vm.selection.includes('sara.ortiz'), true)
+  assert.equal(vm.selection.includes('sara.ortiz'), false)
   vm.now = new Date('2026-10-05T11:00:01Z')
   TeamOverview.watch.rows.call(vm)
   assert.equal(vm.selection.includes('sara.ortiz'), false)

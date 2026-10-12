@@ -3,9 +3,10 @@
     <header class="last-week-header">
       <h2 class="card-title">{{ title }}</h2>
       <span v-if="loading" class="skeleton total-skeleton"></span>
-      <p v-else class="total serif num">{{ totalLabel }}</p>
+      <p v-else-if="!error" class="total serif num">{{ totalLabel }}</p>
     </header>
-    <WeekBar :buckets="buckets" :target="target" />
+    <p v-if="error" class="field-error" role="alert">Impossible de charger les heures : {{ error }}</p>
+    <WeekBar v-else :buckets="buckets" :target="target" />
   </section>
 </template>
 
@@ -23,6 +24,7 @@ export default {
     buckets: { type: Object, required: true },
     target: { type: Number, default: 40 },
     loading: { type: Boolean, default: false },
+    error: { type: String, default: '' },
   },
 
   computed: {

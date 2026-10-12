@@ -2,7 +2,7 @@ import { request } from './http'
 import * as demo from '../mocks/organizationAuth.js'
 import { GOTHAM_NAME, isGotham } from '../utils/gotham'
 
-export const AUTH_USE_MOCK = import.meta.env.VITE_AUTH_USE_MOCK !== 'false'
+export const AUTH_USE_MOCK = import.meta.env.VITE_AUTH_USE_MOCK === 'true'
 
 async function call(mock, path, method = 'GET', body, skipUnauthorizedHandler = false) {
   if (AUTH_USE_MOCK) return mock()
@@ -15,8 +15,15 @@ async function sessionResult(promise) {
   const result = await promise
   const role = result?.role === 'administrator' ? 'admin' : result?.role
   const userRole = result?.user?.role === 'administrator' ? 'admin' : result?.user?.role
-  if (!Number.isInteger(result?.user?.id) || result.user.id <= 0 || !result.organization?.id || !['admin', 'employee', 'manager'].includes(role) || userRole !== role || result.user.organization_id !== result.organization.id || ['first_name', 'last_name', 'email', 'username'].some(key => typeof result.user[key] !== 'string' || !result.user[key].trim())) throw new Error('Réponse de session invalide.')
-  if (!isGotham(result.organization)) throw new Error('Votre compte n’est pas rattaché à Gotham City. Contactez le super administrateur.')
+  if (!Number.isInteger(result?.user?.id) || result.user.id <= 0 || !['admin', 'employee', 'manager'].includes(role) || userRole !== role || ['email', 'username'].some(key => typeof result.user[key] !== 'string' || !result.user[key].trim())) throw new Error('Réponse de session invalide.')
+  // The API also supports legacy accounts without an organization. Never
+  // invent an organization for them: its protected routes remain unavailable.
+  if (result.organization == null) {
+    if (AUTH_USE_MOCK || result.user.organization_id != null) throw new Error('Réponse de session invalide.')
+  } else {
+    if (!result.organization.id || result.user.organization_id !== result.organization.id || ['first_name', 'last_name'].some(key => typeof result.user[key] !== 'string' || !result.user[key].trim())) throw new Error('Réponse de session invalide.')
+    if (!isGotham(result.organization)) throw new Error('Votre compte n’est pas rattaché à Gotham City. Contactez le super administrateur.')
+  }
   return { ...result, role, user: { ...result.user, role } }
 }
 

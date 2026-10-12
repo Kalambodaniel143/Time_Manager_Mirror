@@ -1,4 +1,5 @@
 import { USE_MOCK } from '../config'
+import { auth } from '../stores/auth'
 import { mocked, request } from './http'
 import { mockLogin, mockLogout, mockMe, mockRegister } from '../mocks/auth'
 
@@ -51,7 +52,7 @@ export function logout() {
 }
 
 export function listRoles() {
-  if (USE_MOCK) return mocked(() => ['employee', 'manager', 'administrator'].map((name, id) => ({ id: id + 1, name })))
+  if (USE_MOCK && !auth.user) return mocked(() => ['employee', 'manager', 'administrator'].map((name, id) => ({ id: id + 1, name })))
 
   return request('/roles')
 }

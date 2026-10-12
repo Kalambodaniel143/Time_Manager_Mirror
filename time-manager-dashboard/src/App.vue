@@ -45,6 +45,7 @@ import { getWorkingTimes } from './services/workingTimeService'
 import { auth, logout, clearSession, fetchMe, startOrganizationSession } from './stores/auth'
 import { notify } from './utils/toast'
 import { durationInHours } from './utils/date'
+import { displayName } from './utils/people'
 import { applyTheme, applyStrongText, readStrongText, readStorage, readTheme, writeStorage, writeTheme } from './utils/session'
 
 const OVERLAY_ROUTES = ['workingTimeCreate', 'workingTimeEdit']
@@ -52,8 +53,8 @@ const TOUR_KEY = 'tm-tour-seen'
 
 const TOUR_STEPS = [
   { title: 'Pointer, c’est un seul geste', text: 'Touchez le grand rond en arrivant, puis en partant. Le reste se calcule tout seul.' },
-  { title: 'Chaque heure a sa couleur', text: 'Jour, nuit ×1,5, astreinte, heures sup. ×2 : la même couleur du planning à la fiche de paie.' },
-  { title: 'Une erreur ? Signalez-la', text: 'Complétez un départ oublié ou proposez une correction depuis « Mes heures ». Votre responsable examine votre proposition avant de modifier les horaires.' },
+  { title: 'Retrouvez vos horaires', text: 'Consultez les arrivées, départs et durées enregistrés dans « Mes heures ».' },
+  { title: 'Une erreur ? Signalez-la', text: 'Complétez un départ oublié depuis « Mes heures ». Pour corriger des horaires déjà enregistrés, contactez votre responsable.' },
 ]
 
 export default {
@@ -66,6 +67,7 @@ export default {
       theme: 'light',
       workingTimes: [],
       loadingStats: false,
+      statsError: '',
       statsVersion: 0,
       tourOpen: false,
       tourSteps: TOUR_STEPS,
@@ -91,14 +93,12 @@ export default {
       return this.user ? this.user.id : null
     },
 
-    // Demo content (planning, payroll...) still comes from the mocks; the
-    // identity is the real user's.
     persona() {
       const mock = personaFor(this.user && this.user.role === 'administrator' ? 'admin' : this.user && this.user.role)
       if (!this.user) return mock
       if (this.organizationSession) return { ...mock, username: this.user.username, email: this.user.email, name: `${this.user.first_name} ${this.user.last_name}`, space: this.organizationSession.organization.name }
 
-      return { ...mock, username: this.user.username, email: this.user.email, name: this.user.username }
+      return { ...mock, username: this.user.username, email: this.user.email, name: displayName(this.user), space: auth.organization?.name || 'Mon espace' }
     },
 
     overlayUserId() {
@@ -123,7 +123,7 @@ export default {
       if (name === 'organization') return { session: this.citySession }
 
       if (name === 'overview') {
-        return { persona: this.persona, userId: this.userId, workingTimes: this.workingTimes, loading: this.loadingStats, now: this.now }
+        return { persona: this.persona, userId: this.userId, workingTimes: this.workingTimes, loading: this.loadingStats, error: this.statsError, now: this.now }
       }
       if (name === 'workingTimes') return { week: this.week, username: Number(this.$route.params.userID) === this.userId ? this.persona.username : '' }
       if (name === 'planning' || name === 'payroll' || name === 'team') return { now: this.now }
@@ -200,7 +200,7 @@ export default {
       startOrganizationSession(session)
       const redirect = this.$route.query.redirect
       if (typeof redirect === 'string' && /^\/(?!\/)/.test(redirect)) this.$router.push(redirect)
-      else this.$router.push({ name: session.role === 'admin' ? 'organization' : session.role === 'manager' ? 'team' : 'overview' })
+      else this.$router.push({ name: session.role === 'admin' ? (session.organization ? 'organization' : 'adminUsers') : session.role === 'manager' ? 'team' : 'overview' })
     },
 
     sumHours(entries) {
@@ -210,6 +210,7 @@ export default {
     async loadStats() {
       const version = this.statsVersion = (this.statsVersion || 0) + 1
       const userId = this.userId
+      this.statsError = ''
       if (!this.userId) {
         this.workingTimes = []
         this.loadingStats = false
@@ -221,8 +222,8 @@ export default {
       try {
         const entries = (await getWorkingTimes(userId)) || []
         if (version === this.statsVersion && userId === this.userId) this.workingTimes = entries
-      } catch {
-        if (version === this.statsVersion) this.workingTimes = []
+      } catch (error) {
+        if (version === this.statsVersion) { this.workingTimes = []; this.statsError = error.message }
       } finally {
         if (version === this.statsVersion) this.loadingStats = false
       }

@@ -19,7 +19,7 @@
             <td class="num">{{ day.key === pendingDay ? clock(missingDeparture.arrival.time) : '—' }}</td>
             <td>—</td>
             <td>—</td>
-            <td class="muted">{{ day.key === pendingDay ? 'À compléter' : 'Repos' }}</td>
+            <td class="muted">{{ day.key === pendingDay ? 'À compléter' : 'Aucune période' }}</td>
             <td>
               <span v-if="day.key === pendingDay">Départ non pointé</span>
               <button v-else-if="day.editable" class="btn btn-quiet btn-sm" type="button" @click="$emit('create', day.key)">Ajouter</button>
@@ -44,7 +44,7 @@
       </tbody>
     </table>
   </div>
-  <div class="mobile-hours"><article v-for="day in rows" :key="day.key" class="card day-card"><header><strong>{{ day.label }}</strong><span class="pill" :class="day.key === pendingDay ? 'pill-warn' : 'pill-ok'">{{ day.key === pendingDay ? 'À régulariser' : day.entries.length ? 'Confirmé' : 'Repos' }}</span></header><p v-if="!day.entries.length" class="muted">{{ day.key === pendingDay ? `Arrivée ${clock(missingDeparture.arrival.time)} · départ à compléter` : 'Aucune période enregistrée' }}</p><div v-for="entry in day.entries" :key="entry.id" class="mobile-entry"><div class="entry-summary"><span class="num">{{ clock(entry.start) }} → {{ clock(entry.end) }}</span><HourTag :kind="entry.kind" :hours="entry.hours" /></div><button v-if="canRequest" class="btn btn-outline btn-sm" type="button" @click="$emit('request', entry.id)">Proposer une correction</button><button v-if="entry.editable" class="btn btn-quiet btn-sm" type="button" @click="$emit('edit', entry.id)">Corriger</button></div><button v-if="!day.entries.length && day.editable" class="btn btn-quiet btn-sm" type="button" @click="$emit('create', day.key)">Ajouter une période</button></article></div>
+  <div class="mobile-hours"><article v-for="day in rows" :key="day.key" class="card day-card"><header><strong>{{ day.label }}</strong><span class="pill" :class="day.key === pendingDay ? 'pill-warn' : 'pill-ok'">{{ day.key === pendingDay ? 'À régulariser' : day.entries.length ? 'Enregistré' : 'Aucune période' }}</span></header><p v-if="!day.entries.length" class="muted">{{ day.key === pendingDay ? `Arrivée ${clock(missingDeparture.arrival.time)} · départ à compléter` : 'Aucune période enregistrée' }}</p><div v-for="entry in day.entries" :key="entry.id" class="mobile-entry"><div class="entry-summary"><span class="num">{{ clock(entry.start) }} → {{ clock(entry.end) }}</span><HourTag :kind="entry.kind" :hours="entry.hours" /></div><button v-if="canRequest" class="btn btn-outline btn-sm" type="button" @click="$emit('request', entry.id)">Proposer une correction</button><button v-if="entry.editable" class="btn btn-quiet btn-sm" type="button" @click="$emit('edit', entry.id)">Corriger</button></div><button v-if="!day.entries.length && day.editable" class="btn btn-quiet btn-sm" type="button" @click="$emit('create', day.key)">Ajouter une période</button></article></div>
   <MissingDeparture v-if="userId" :user-id="userId" :now="now" :week-start="monday" @detected="missingDeparture = $event" @completed="$emit('completed')" @refreshed="$emit('completed')" />
   </div>
 </template>
@@ -57,6 +57,7 @@ import { clockDate } from '../../utils/missingDeparture'
 import { formatClockDate } from '../../utils/clockDate'
 import { parseDateTime, toDateInput } from '../../utils/date'
 import { addDays, classifyEntry, entriesByDay, entryHours, weekdayShort, formatHours } from '../../utils/hours'
+import { isDemoData } from '../../services/orgService'
 
 const EDIT_WINDOW_MS = 7 * 86400000
 
@@ -109,6 +110,7 @@ export default {
     duration(value) { return formatHours(value) },
     isEditable(date) {
       if (!date) return false
+      if (!isDemoData()) return date <= this.now
       return this.now.getTime() - date.getTime() <= EDIT_WINDOW_MS
     },
 

@@ -1,7 +1,8 @@
 <template>
   <section class="next-shifts">
-    <h2 class="card-title">Prochaines gardes</h2><p class="field-hint">Exemple de planning · à confirmer auprès de votre responsable.</p>
-    <p v-if="shifts.length === 0" class="card-subtitle">Aucune garde de nuit ou d’astreinte prévue.</p>
+    <h2 class="card-title">Prochaines gardes</h2><p v-if="demo" class="field-hint">Exemple de planning · à confirmer auprès de votre responsable.</p>
+    <p v-if="!demo" class="card-subtitle">Le planning n’est pas encore disponible. Contactez votre responsable pour connaître vos prochaines gardes.</p>
+    <p v-else-if="shifts.length === 0" class="card-subtitle">Aucune garde de nuit ou d’astreinte prévue.</p>
     <article v-for="(shift, index) in shifts" :key="shift.date.toISOString()" class="shift card">
       <div class="shift-date">
         <span class="shift-weekday">{{ weekday(shift.date) }}</span>
@@ -23,7 +24,7 @@
 <script>
 import AppIcon from '../ui/AppIcon.vue'
 import HourTag from '../ui/HourTag.vue'
-import { nextShifts, org, planPublishedOn } from '../../services/orgService'
+import { nextShifts, org, planPublishedOn, isDemoData } from '../../services/orgService'
 import { formatDayMonthLong, weekdayUpper } from '../../utils/hours'
 
 export default {
@@ -36,6 +37,7 @@ export default {
   },
 
   computed: {
+    demo: isDemoData,
     shifts() {
       return nextShifts(this.today)
     },

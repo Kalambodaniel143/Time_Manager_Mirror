@@ -5,7 +5,10 @@ function capitalize(word) {
 }
 
 export function displayName(user) {
-  if (!user || !user.username) return ''
+  if (!user) return ''
+  const name = [user.first_name, user.last_name].filter(part => typeof part === 'string' && part.trim()).join(' ').trim()
+  if (name) return name
+  if (!user.username) return user.email || ''
 
   return user.username
     .split(/[._\-\s]+/)

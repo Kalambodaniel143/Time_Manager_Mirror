@@ -4,15 +4,16 @@
       <button class="btn btn-outline" type="button" :disabled="loading" @click="loadTeam">
         {{ loading ? 'Actualisation…' : 'Actualiser' }}
       </button>
-      <button class="btn btn-primary" type="button" :disabled="loading || !!error || selection.length === 0" @click="validate">
+      <button v-if="demo" class="btn btn-primary" type="button" :disabled="loading || !!error || selection.length === 0" @click="validate">
         <AppIcon name="check" />
         Valider {{ selection.length }} feuille{{ selection.length > 1 ? 's' : '' }}
       </button>
     </PageHeader>
 
     <label v-if="teams.length > 1" class="field team-picker"><span class="field-label">Équipe affichée</span><select v-model="selectedTeamId" class="input" :disabled="loading" @change="loadTeam"><option v-for="item in teams" :key="item.id" :value="item.id">{{ item.name }}</option></select></label>
-    <div v-if="!loading && !error" class="summary-grid"><article class="card summary-metric"><p>Agents</p><strong>{{ rows.length }}</strong><span>{{ cleanRows.length }} feuilles sans anomalie</span></article><article class="card summary-metric"><p>Heures confirmées</p><strong>{{ formatHours(totalHours) }}</strong><span>Heures enregistrées, hors propositions</span></article><article class="card summary-metric"><p>Alertes</p><strong>{{ alertCount }}</strong><span>Seuils et pointages à vérifier</span></article><article class="card summary-metric"><p>À valider</p><strong>{{ selection.length }}</strong><span>Feuilles sélectionnées</span></article></div>
-    <p class="demo-notice validation-notice">La validation des semaines est enregistrée localement. Un seuil de nuits dépassé nécessite un examen, sans effacer les heures travaillées.</p>
+    <div v-if="!loading && !error" class="summary-grid"><article class="card summary-metric"><p>Agents</p><strong>{{ rows.length }}</strong><span>{{ cleanRows.length }} sans alerte de pointage</span></article><article class="card summary-metric"><p>Heures enregistrées</p><strong>{{ formatHours(totalHours) }}</strong><span>Durées des périodes de la semaine</span></article><article class="card summary-metric"><p>Alertes</p><strong>{{ alertCount }}</strong><span>Pointages à vérifier</span></article><article v-if="demo" class="card summary-metric"><p>À valider</p><strong>{{ selection.length }}</strong><span>Feuilles sélectionnées</span></article></div>
+    <p v-if="demo" class="demo-notice validation-notice">La validation des semaines est enregistrée localement. Un seuil de nuits dépassé nécessite un examen, sans effacer les heures travaillées.</p>
+    <p v-else class="field-hint validation-notice">Les équipes, périodes et pointages viennent de votre espace. La validation des semaines et les règles de planning ne sont pas encore disponibles.</p>
     <div class="stack">
       <AlertBanner
         v-for="alert in nightAlerts"
@@ -47,15 +48,16 @@
 
       <section class="card list">
         <header class="list-header">
-          <label class="select-all">
+          <label v-if="demo" class="select-all">
             <input type="checkbox" class="check" :checked="allClean" :disabled="loading || !!error || cleanRows.length === 0" @change="toggleAll" />
             Tout sélectionner sans anomalie ({{ cleanRows.length }})
           </label>
-          <p class="list-hint">Anomalies en premier · notes des agents visibles sans clic</p>
+          <p class="list-hint">{{ demo ? 'Anomalies en premier · notes des agents visibles sans clic' : 'Pointages à vérifier en premier' }}</p>
         </header>
 
         <div v-if="loading" class="skeleton list-skeleton"></div>
         <p v-else-if="error" class="field-error list-error" role="alert">Impossible de charger l’équipe : {{ error }}</p>
+        <p v-else-if="!rows.length" class="list-error muted">Aucun membre dans l’équipe sélectionnée. La composition des équipes se gère depuis « Équipes ».</p>
         <ul v-else class="rows">
           <TeamMemberRow
             v-for="row in sortedRows"
@@ -63,11 +65,12 @@
             :row="row"
             :selected="selection.includes(row.username)"
             :max-nights="maxNights"
+            :can-validate="demo"
             @toggle="toggle"
           />
         </ul>
       </section>
-      <section v-if="!loading && !error" class="card validation-footer"><div><strong>{{ selection.length }} feuille{{ selection.length > 1 ? 's' : '' }} sélectionnée{{ selection.length > 1 ? 's' : '' }}</strong><p class="field-hint">Les départs manquants doivent être régularisés avant validation.</p></div><button class="btn btn-primary" type="button" :disabled="!selection.length" @click="validate">Valider {{ selection.length }} feuille{{ selection.length > 1 ? 's' : '' }}</button></section>
+      <section v-if="demo && !loading && !error" class="card validation-footer"><div><strong>{{ selection.length }} feuille{{ selection.length > 1 ? 's' : '' }} sélectionnée{{ selection.length > 1 ? 's' : '' }}</strong><p class="field-hint">Les départs manquants doivent être régularisés avant validation.</p></div><button class="btn btn-primary" type="button" :disabled="!selection.length" @click="validate">Valider {{ selection.length }} feuille{{ selection.length > 1 ? 's' : '' }}</button></section>
       <CorrectionPanel can-review @changed="loadTeam" />
     </div>
   </div>
@@ -77,7 +80,6 @@
 import { RouterLink } from 'vue-router'
 import CorrectionPanel from '../components/reviews/CorrectionPanel.vue'
 import { auth } from '../stores/auth'
-import { USE_MOCK } from '../config'
 import { listTeams } from '../services/teamService'
 import { workMembers } from '../mocks/organizationWork'
 import AlertBanner from '../components/ui/AlertBanner.vue'
@@ -93,6 +95,8 @@ import { formatClockDate } from '../utils/clockDate'
 import { toDateInput } from '../utils/date'
 import { addDays, formatRange, isoWeek, formatHours, nightFrequency, weekBuckets, weekFilters, weekNightRun } from '../utils/hours'
 import { notify } from '../utils/toast'
+import { displayName } from '../utils/people'
+import { isDemoData } from '../services/orgService'
 
 export default {
   name: 'TeamOverview',
@@ -123,6 +127,7 @@ export default {
   },
 
   computed: {
+    demo: isDemoData,
     totalHours() { return this.rows.reduce((total, row) => total + row.buckets.total, 0) },
     alertCount() { return this.rows.filter(row => this.hasAnomaly(row)).length },
     weekKey() {
@@ -219,7 +224,7 @@ export default {
     },
 
     canSelect(row) {
-      return !row.validated && !row.departureInWeek && !row.clockError
+      return this.demo && !row.validated && !row.departureInWeek && !row.clockError
     },
 
     arrivalLabel(row) {
@@ -247,13 +252,16 @@ export default {
           users = workMembers()
           this.teamName = auth.organizationSession.organization.name
           this.members = users.map(user => ({ username: user.username, name: `${user.first_name} ${user.last_name}`, short: user.first_name, job: user.role === 'manager' ? 'Responsable' : user.role === 'admin' ? 'Administrateur' : 'Employé', unit: this.teamName }))
-        } else if (auth.user && !USE_MOCK) {
-          this.teams = await listTeams()
+        } else if (auth.user) {
+          const teams = await listTeams()
+          if (!Array.isArray(teams)) throw new Error('Liste des équipes invalide')
+          if (version !== this.requestVersion) return
+          this.teams = auth.user.role === 'administrator' ? teams : teams.filter(item => item.manager?.id === auth.user.id)
           const selected = this.teams.find(item => item.id === Number(this.selectedTeamId)) || this.teams[0]
           this.selectedTeamId = selected?.id || null
           this.teamName = selected?.name || 'Mon équipe'
           users = selected?.members || []
-          this.members = users.map(user => ({ username: user.username, name: user.username, short: user.username, job: user.role === 'manager' ? 'Responsable' : 'Employé', unit: this.teamName }))
+          this.members = users.map(user => ({ username: user.username, name: displayName(user), short: user.first_name || user.username, job: user.role === 'manager' ? 'Responsable' : user.role === 'administrator' ? 'Administrateur' : 'Employé', unit: this.teamName }))
         } else users = await listUsers()
         if (!Array.isArray(users)) throw new Error('Liste des utilisateurs invalide')
         const records = await Promise.all(
@@ -279,7 +287,7 @@ export default {
         this.clocks = Object.fromEntries(records.map((record) => [record.username, record.clocks]))
         this.clockErrors = Object.fromEntries(records.map((record) => [record.username, record.clockError]))
         this.users = Object.fromEntries(records.map((record) => [record.username, record.user]))
-        this.selection = this.cleanRows.map((row) => row.username)
+        this.selection = this.demo ? this.cleanRows.map((row) => row.username) : []
       } catch (error) {
         if (version !== this.requestVersion) return
         this.error = error.message
@@ -305,7 +313,7 @@ export default {
     },
 
     validate() {
-      if (this.loading || this.error) return
+      if (!this.demo || this.loading || this.error) return
       const selected = this.selection.filter((username) => this.rows.some((row) => row.username === username && this.canSelect(row)))
       const count = selected.length
       if (count === 0) return
