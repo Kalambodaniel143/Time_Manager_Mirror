@@ -22,7 +22,6 @@ defmodule TimeManager.Organizations.JoinRequest do
     field :reference_hash, :binary, redact: true
     field :rejection_reason, :string
     field :reviewed_at, :utc_datetime
-    field :email_verified_at, :utc_datetime
 
     belongs_to :organization, TimeManager.Organizations.Organization, type: :binary_id
     belongs_to :reviewed_by, TimeManager.Accounts.User

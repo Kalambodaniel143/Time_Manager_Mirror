@@ -1,22 +1,20 @@
-# Contrat backend — organisations, adhésions, connexion et fusion de la maquette
+# Contrat backend — Gotham City, adhésions et super administrateur
 
-Ce document décrit les appels du front dans `time-manager-dashboard/src/services/organizationService.js` et les demandes de correction ajoutées dans `src/services/correctionService.js`. La section 9 précise les changements liés à la fusion de la maquette du 7 octobre 2026. Aucun fichier du backend Phoenix n’a été modifié.
+Ce document décrit les appels du front dans `time-manager-dashboard/src/services/organizationService.js` et les demandes de correction ajoutées dans `src/services/correctionService.js`. La section 9 précise les changements liés à la fusion de la maquette du 7 octobre 2026. La section 11 décrit l’ajout du 9 octobre 2026 : suppression personnelle du compte, avec adaptation ciblée du contrôleur et des permissions backend.
 
-## 1. Parcours implémenté
+## 1. Parcours actuel — organisation unique (8 octobre 2026)
 
-- Créer une organisation et son compte administrateur, puis ouvrir automatiquement sa session.
-- Demander à rejoindre une organisation existante après vérification de son nom.
-- Pour créer une organisation : recueillir prénom, nom et email du créateur, sans genre ni date ou lieu de naissance.
-- Pour rejoindre : recueillir prénom, nom, email, genre, date et lieu de naissance.
-- Conserver la demande en attente : aucun compte actif et aucun mot de passe avant acceptation.
-- Permettre uniquement à l’admin de l’organisation d’accepter/refuser ses demandes.
-- À l’acceptation, créer un employé avec le mot de passe fourni par l’admin.
-- Afficher une fois à l’admin l’email et le mot de passe qu’il vient de définir, pour transmission manuelle au demandeur. Le front ne prétend pas envoyer un email et n’effectue aucun envoi automatique.
-- Permettre à l’admin de promouvoir un employé en manager ou de le repasser employé.
-- Se connecter avec email/mot de passe ; le backend détermine le rôle et l’organisation.
-- Consulter le statut d’une demande grâce à une référence privée.
+- L’organisation unique est **Gotham City**, initialisée manuellement avec son super administrateur. Aucun compte privilégié et aucun mot de passe par défaut n’est créé au démarrage.
+- La page publique de création d’organisation est supprimée. L’inscription directe d’un compte actif n’est plus accessible dans le front.
+- `/inscription` ouvre « Rejoindre Gotham City ». Le demandeur fournit prénom, nom, email, genre, date et lieu de naissance ; il ne choisit ni nom/identifiant d’organisation, ni rôle, ni mot de passe.
+- Le front résout en interne Gotham City, puis envoie une demande pending à l’API existante. Une organisation non initialisée produit une erreur explicite, sans création automatique.
+- Le super administrateur accepte/refuse et fournit le mot de passe à l’acceptation. Le nouvel utilisateur est employé par défaut et pourra être promu manager.
+- Le demandeur suit sa demande par référence privée puis se connecte avec son email et le mot de passe fourni.
+- Les managers ne créent pas de super administrateur et ne décident pas des demandes d’adhésion. La promotion ne propose que employee/manager.
 
-La création d’une organisation est ouverte au public. Un compte appartient à une seule organisation dans cette version ; l’email est unique globalement. Le créateur reste admin et cette interface ne permet ni sa rétrogradation ni la création d’un autre admin.
+Le code de rôle backend reste `administrator`. « Super administrateur » est son libellé métier dans l’organisation unique ; aucun rôle supplémentaire `super_admin` n’est envoyé par le front. L’alias `admin` est normalisé par le service pour les écrans d’administration existants.
+
+**État serveur à distinguer :** les endpoints d’organisations/adhésions existent désormais dans le backend récupéré depuis main. Son routeur expose encore la création publique `POST /api/organizations` et l’inscription directe `POST /api/auth/register`. Leur suppression/refus côté serveur est nécessaire pour imposer réellement la nouvelle politique (voir section 10). L’adaptation mono-organisation du 8 octobre concernait le front et le contrat ; les seules modifications serveur ultérieures sont celles de la suppression personnelle (section 11). Aucune base de données utilisateur n’a été modifiée lors de ce développement.
 
 ## 2. Simulation et branchement réel
 
@@ -26,9 +24,9 @@ Par défaut, le nouveau circuit utilise une simulation persistante dans le navig
 VITE_AUTH_USE_MOCK=true
 ```
 
-Après intégration du commit backend d’authentification, les deux circuits sont séparés : `authService.js` et `stores/auth.js` conservent la connexion backend existante, avec `/auth/me`, cookie HttpOnly et jeton CSRF. `organizationService.js` expose le contrat d’organisations proposé ci-dessous ; ces endpoints ne sont pas encore raccordés au parcours réel.
+Le même écran LoginScreen sert désormais en mode simulation et API. `organizationService.js` utilise le transport HTTP partagé en mode réel, avec cookie HttpOnly et jeton CSRF. `stores/auth.js` restaure la session complète via `/auth/session`, et distingue le contexte réel `auth.organization` du contexte de démonstration `auth.organizationSession` pour ne jamais router les données réelles vers les mocks.
 
-Pour utiliser la connexion backend existante (les écrans de création/adhésion d’organisations restent alors désactivés) :
+Pour utiliser la connexion, l’adhésion et les décisions sur le backend existant :
 
 ```env
 VITE_AUTH_USE_MOCK=false
@@ -40,17 +38,15 @@ Redémarrer Vite après un changement de variables ; reconstruire le bundle pour
 
 En simulation, les données sont propres à ce navigateur et à cette origine. La simulation n’est pas un mécanisme de sécurité : son stockage peut être modifié par l’utilisateur. Les mots de passe sont stockés sous forme de dérivés PBKDF2 salés pour ne pas les conserver en clair, mais cela ne transforme pas le navigateur en serveur d’authentification.
 
-Les utilisateurs simulés ne sont pas créés dans le backend. Depuis la fusion, `App.userId` contient leur identifiant local et les services de pointage/périodes/corrections dirigent explicitement leurs appels vers `mocks/organizationWork.js` tant que `auth.organizationSession` existe. Ces identifiants ne sont pas envoyés à l’API. Les données sont persistées sous `tm-work-demo:<organization_id>` ; planning, droits, notes, règles et validation locale sous `tm-org:<organization_id>`. La connexion backend conserve le transport API et `auth.user.id`. Les pages d’administration des utilisateurs et équipes backend sont accessibles en mode backend, tandis que les comptes simulés se gèrent dans Mon organisation.
+Les utilisateurs simulés ne sont pas créés dans le backend. Depuis la fusion, `App.userId` contient leur identifiant local et les services de pointage/périodes/corrections dirigent explicitement leurs appels vers `mocks/organizationWork.js` tant que `auth.organizationSession` existe. Ces identifiants ne sont pas envoyés à l’API. Les données sont persistées sous `tm-work-demo:<organization_id>` ; planning, droits, notes, règles et validation locale sous `tm-org:<organization_id>`. La connexion backend conserve le transport API et `auth.user.id`. Les pages d’administration des utilisateurs et équipes backend sont accessibles en mode backend, tandis que les comptes simulés se gèrent dans Administration Gotham.
 
-Pour brancher ensuite les organisations, adapter les réponses `/auth/login` et `/auth/me` et l’état partagé pour inclure l’organisation, activer `LoginScreen` et la route `organization` en mode API, et utiliser le jeton CSRF du transport commun pour les mutations d’organisation. Les tests API du service décrivent le contrat cible ; ils ne prouvent pas sa disponibilité sur le serveur actuel.
-
-Le rôle `admin` du scénario d’organisation est converti en `administrator` dans l’état partagé pour respecter les permissions du front distant. Harmoniser ces noms lors du raccordement backend.
+Le transport commun transmet `X-CSRF-Token` aux routes protégées. Le token reçu à la connexion est conservé lors de la restauration `/auth/session`, dont la réponse n’a pas besoin de le répéter. Les réponses canonical backend `administrator` sont normalisées en alias admin pour l’écran métier, puis en administrator dans l’état partagé. Les sessions d’une autre ville ou sans organisation sont refusées par ce front ; cette validation ne remplace pas le contrôle serveur de périmètre.
 
 ## 3. Transport et enveloppes
 
 Base : `VITE_API_URL`, par défaut `/api`.
 
-Toutes les requêtes d’authentification/organisation utilisent `credentials: 'include'` et `Content-Type: application/json`. Les succès avec un corps doivent utiliser :
+Toutes les requêtes d’authentification/organisation utilisent `credentials: 'same-origin'` et `Content-Type: application/json`. Les succès avec un corps doivent utiliser :
 
 ```json
 { "data": {} }
@@ -103,7 +99,7 @@ Validation serveur obligatoire, même si le front vérifie déjà :
 | `email` | Adresse valide, maximum 254 caractères ; normalisation trim/minuscules et unicité globale |
 | `gender` | Obligatoire uniquement pour rejoindre : `female`, `male`, `non_binary`, `unspecified` ; la dernière valeur permet de ne pas préciser |
 | `birth_date` | Obligatoire uniquement pour rejoindre : date civile `YYYY-MM-DD` valide, entre `1900-01-01` et aujourd’hui |
-| Nom d’organisation | 2 à 100 caractères après trim ; espaces successifs réduits |
+| Organisation | Valeur fixe Gotham City, provisionnée manuellement ; aucun nom libre fourni par le formulaire |
 | Mot de passe | 8 à 128 caractères, pas uniquement des espaces ; ne pas modifier silencieusement la valeur |
 | Motif de refus | 1 à 500 caractères après trim |
 
@@ -114,7 +110,7 @@ Le mot de passe n’apparaît jamais dans le profil. La confirmation est vérifi
 ```json
 {
   "id": "org-uuid",
-  "name": "Atelier Gotham",
+  "name": "Gotham City",
   "created_at": "2026-10-05T12:00:00Z"
 }
 ```
@@ -139,7 +135,7 @@ L’identifiant d’organisation doit être une chaîne stable compatible avec u
 }
 ```
 
-Pour le créateur admin, les champs `gender`, `birth_date` et `birth_place` peuvent être absents ou `null` dans les réponses utilisateur/session.
+Pour le super administrateur provisionné manuellement, les champs `gender`, `birth_date` et `birth_place` peuvent être absents ou `null` dans les réponses utilisateur/session.
 
 `id` est un entier correspondant à l’utilisateur métier utilisé par les endpoints existants `/clocks/:userID` et `/workingtime/:userID`. `username` est stable, obligatoire pour l’intégration avec les composants existants ; la simulation utilise l’email initial. Ne jamais renvoyer mot de passe, hash ou sel.
 
@@ -150,7 +146,7 @@ Pour le créateur admin, les champs `gender`, `birth_date` et `birth_place` peuv
   "data": {
     "role": "employee",
     "user": { "id": 14, "username": "sara@example.com", "first_name": "Sara", "last_name": "Martin", "email": "sara@example.com", "organization_id": "org-uuid", "role": "employee", "gender": "female", "birth_date": "1999-03-12", "birth_place": "Paris", "created_at": "2026-10-05T12:30:00Z" },
-    "organization": { "id": "org-uuid", "name": "Atelier Gotham", "created_at": "2026-10-05T12:00:00Z" }
+    "organization": { "id": "org-uuid", "name": "Gotham City", "created_at": "2026-10-05T12:00:00Z" }
   }
 }
 ```
@@ -163,7 +159,7 @@ Pour le créateur admin, les champs `gender`, `birth_date` et `birth_place` peuv
 {
   "id": "request-uuid",
   "organization_id": "org-uuid",
-  "organization_name": "Atelier Gotham",
+  "organization_name": "Gotham City",
   "profile": {
     "first_name": "Sara", "last_name": "Martin", "email": "sara@example.com",
     "gender": "female", "birth_date": "1999-03-12", "birth_place": "Paris"
@@ -182,8 +178,8 @@ Pour le créateur admin, les champs `gender`, `birth_date` et `birth_place` peuv
 
 | Méthode | Chemin relatif à `/api` | Accès | Succès |
 |---|---|---|---|
-| POST | `/organizations` | Public | 201 + session + cookie |
-| GET | `/organizations/lookup?name=…` | Public | 200 + `{ id, name }` |
+| — | `/organizations` | Création publique retirée du front ; endpoint serveur à désactiver | Initialisation manuelle uniquement |
+| GET | `/organizations/lookup?name=Gotham%20City` | Public | 200 + `{ id, name }` |
 | POST | `/join-requests` | Public | 201 + reçu de suivi |
 | POST | `/join-requests/status` | Public, référence privée | 200 + statut |
 | POST | `/auth/login` | Public | 200 + session + cookie |
@@ -195,23 +191,15 @@ Pour le créateur admin, les champs `gender`, `birth_date` et `birth_place` peuv
 | GET | `/organizations/:orgId/members` | Admin de cette organisation | 200 + liste des utilisateurs publics |
 | PATCH | `/organizations/:orgId/members/:id` | Admin de cette organisation | 200 + utilisateur public actualisé |
 
-### Créer une organisation
+### Initialiser Gotham City
 
-Corps :
+Cette opération est manuelle et n’est plus proposée dans le front. Utiliser le contexte serveur `TimeManager.Organizations` depuis un terminal autorisé ; ne pas créer une nouvelle API publique de bootstrap. Voir section 10 pour la procédure.
 
-```json
-{
-  "name": "Atelier Gotham",
-  "profile": { "first_name": "Nando", "last_name": "Martin", "email": "admin@example.com" },
-  "password": "MotDePasseChoisiParAdmin!"
-}
-```
+### Résoudre Gotham City en interne
 
-Créer atomiquement l’organisation, son utilisateur admin et sa session. Le client ne fournit aucun rôle. Une organisation au nom équivalent ou un email déjà utilisé produit `409`. La comparaison des noms dans la simulation ignore casse, accents et espaces successifs ; le backend doit fournir la même recherche et la même unicité pour éviter les ambiguïtés.
+Le seul nom recherché par le front est `Gotham City`, via `GET /organizations/lookup?name=Gotham%20City`. Retourner `{ id, name }` ; cette requête n’est pas exposée comme champ ou bouton dans l’interface. L’identifiant UUID retourné est transmis ensuite à l’API existante de demande d’adhésion.
 
-### Vérifier l’organisation
-
-Chercher le nom exact normalisé, pas une recherche approximative. Retourner seulement `{ id, name }`, sans liste des membres ni coordonnées de l’admin. Un nom absent produit `404` avec un message expliquant qu’il faut vérifier le nom.
+Le service `joinOrganization({ profile })` ignore tout organization_id éventuellement fourni par un appelant et utilise celui résolu pour Gotham. Le backend doit également refuser un identifiant différent de l’organisation unique, ou résoudre lui-même l’organisation fixe. Ce dernier changement de payload éventuel devra être synchronisé avec le service.
 
 ### Envoyer une demande
 
@@ -229,7 +217,7 @@ Réponse :
   "data": {
     "id": "request-uuid",
     "reference": "reference-aleatoire-privee",
-    "organization_name": "Atelier Gotham",
+    "organization_name": "Gotham City",
     "status": "pending"
   }
 }
@@ -250,7 +238,7 @@ Réponse :
   "data": {
     "id": "request-uuid",
     "reference": "reference-aleatoire-privee",
-    "organization_name": "Atelier Gotham",
+    "organization_name": "Gotham City",
     "status": "rejected",
     "rejection_reason": "Cette demande concerne une autre organisation."
   }
@@ -309,9 +297,9 @@ Seules les valeurs `employee` et `manager` sont autorisées. Le membre doit appa
 
 Le front ne reçoit pas de bearer token. Utiliser un cookie de session `HttpOnly`, `Secure` en production, et `SameSite` adapté à un déploiement de même origine. Le proxy Vite/nginx existant expose l’API sous `/api`.
 
-Le front conserve l’utilisateur dans `stores/auth.js` et le jeton CSRF dans `sessionStorage` (`tm-csrf`). L’identité est restaurée par `/auth/me` en mode backend. La simulation restaure séparément sa session locale. Aucun état navigateur ne constitue une preuve d’identité pour le serveur.
+Le front conserve l’utilisateur dans `stores/auth.js` et le jeton CSRF dans `sessionStorage` (`tm-csrf`). L’identité et l’organisation sont restaurées par `/auth/session` en mode backend. La simulation restaure séparément sa session locale. Aucun état navigateur ne constitue une preuve d’identité pour le serveur.
 
-Le transport backend existant envoie `X-CSRF-Token`. Le service d’organisations cible utilise encore son transport isolé pour les tests de contrat ; avant raccordement, le migrer vers le transport commun et conserver la protection CSRF du backend. Valider aussi Origin/Referer, les cookies SameSite et la configuration CORS.
+Le service d’organisations utilise maintenant le transport commun avec `X-CSRF-Token`. Les décisions, membres, rôles, session et déconnexion conservent la protection CSRF du backend. Valider aussi Origin/Referer, les cookies SameSite et la configuration CORS.
 
 Ne jamais faire confiance aux identifiants d’organisation ou d’utilisateur de l’URL. Tous les endpoints admin vérifient l’appartenance et le rôle. Les endpoints métier existants doivent également appliquer les permissions de la session : les gardes Vue Router ne sécurisent pas l’API.
 
@@ -325,14 +313,14 @@ Depuis `time-manager-dashboard` :
 npm run dev
 ```
 
-1. « Créer une organisation » : saisir prénom, nom, email, nom d’organisation et mot de passe admin (aucune donnée de naissance ni de genre). La création ouvre « Mon organisation ».
-2. Se déconnecter ; choisir « Rejoindre ». Vérifier un nom inconnu : l’interface signale l’erreur.
-3. Utiliser le nom créé, saisir un autre email et envoyer la demande. Conserver la référence de suivi.
-4. Se reconnecter avec l’email admin et son mot de passe.
-5. Dans « Mon organisation », accepter la demande en définissant et confirmant le mot de passe employé. Copier les identifiants avant de fermer ; aucune notification externe n’est envoyée.
-6. Se déconnecter ; consulter le statut avec la référence ; se connecter avec les identifiants de l’employé.
-7. Se reconnecter admin ; promouvoir le membre manager. À sa prochaine connexion, le membre accède à la navigation manager.
-8. Tester aussi un refus motivé, les doublons, un mot de passe incorrect et les rechargements de page.
+1. Initialiser manuellement le super administrateur de démonstration suivant la section 10.
+2. Ouvrir `/inscription` : aucun bouton de création ni champ de nom d’organisation. Prénom, nom, email, genre, date et lieu de naissance restent présents.
+3. Envoyer une demande avec un autre email ; conserver la référence. Aucun compte actif ni session n’est créé.
+4. Se connecter avec les identifiants manuels du super administrateur et ouvrir Administration Gotham.
+5. Accepter en définissant un mot de passe de 8 caractères minimum ; copier les identifiants avant fermeture.
+6. Suivre le statut puis se connecter comme employé.
+7. Promouvoir ensuite le membre manager ; vérifier ses accès après rechargement/connexion.
+8. Tester un refus motivé, les doublons, les erreurs de connexion et une Gotham non initialisée.
 
 La simulation ne fonctionne pas entre deux navigateurs ou deux origines différentes. Utiliser des connexions successives dans le même navigateur. En mode réel, le serveur permettra les sessions et demandes depuis plusieurs postes.
 
@@ -358,6 +346,8 @@ npm run build
 
 
 ## 9. Compléments après fusion de la maquette — 7 octobre 2026
+
+Cette section décrit les fonctionnalités de la fusion ; les références au parcours multi-organisations sont remplacées par la politique mono-organisation des sections 1, 2 et 10.
 
 ### 9.1 Ce que le front réalise désormais
 
@@ -487,7 +477,7 @@ Le thème (`tm-theme`) et le renforcement des textes (`tm-strong-text`) sont sto
 
 Recette dans un même navigateur :
 
-1. Créer une organisation, faire accepter un employé et se connecter avec son email/mot de passe.
+1. Initialiser manuellement Gotham et son super administrateur (section 10), faire accepter un employé et se connecter avec son email/mot de passe.
 2. Pointer une arrivée, une pause, une reprise, un départ ; recharger et vérifier la persistance. Les pauses ne sont pas comptées.
 3. Depuis Mes heures, proposer une correction motivée. Vérifier que les totaux restent inchangés tant qu’elle est pending.
 4. Se reconnecter admin ou manager autorisé, accepter/refuser et vérifier le suivi et les heures mises à jour.
@@ -499,6 +489,138 @@ Recette dans un même navigateur :
 
 Fichiers ajoutés : `mocks/organizationWork.js`, `services/correctionService.js`, `components/reviews/CorrectionRequest.vue`, `components/reviews/CorrectionPanel.vue`, `components/ui/ModalDialog.vue`, `test/fusion-workflow.test.js`.
 
-La limite maximale de mot de passe du contrat organisations reste 128 caractères ; le modèle User du backend existant limite aujourd’hui à 72. Le raccordement doit harmoniser cette limite et le hachage, sans réduire le minimum de 8 caractères retenu.
+Le backend récupéré depuis main utilise désormais Argon2id et la même limite 8–128 caractères que le circuit d’adhésion.
 
-Point existant à corriger côté backend avant recette réelle : `AuthController.login` utilise `:unatuhorized` au lieu de `:unauthorized` en cas d’identifiants incorrects. Le backend est resté inchangé pendant cette intervention front.
+Le statut d’erreur de connexion est désormais correctement `:unauthorized` dans le backend récupéré depuis main.
+
+
+## 10. Provisionnement manuel et verrouillage de Gotham City
+
+### 10.1 Backend réel : création initiale depuis un terminal autorisé
+
+Aucune initialisation n’a été exécutée automatiquement par le front. Le super administrateur doit appartenir à Gotham City et posséder prénom, nom, email et le rôle technique administrator. Un ancien compte de seed sans organization_id ne suffit pas pour examiner les demandes.
+
+Pour une installation neuve, fournir les identifiants depuis le terminal, puis démarrer IEx dans time_manager :
+
+```bash
+read -r -p "Email du super administrateur : " ADMIN_EMAIL
+read -r -s -p "Mot de passe : " ADMIN_PASSWORD
+export ADMIN_EMAIL ADMIN_PASSWORD
+iex -S mix
+```
+
+Depuis IEx, après migrations et insertion des rôles de référence :
+
+```elixir
+TimeManager.Organizations.create_organization(
+  "Gotham City",
+  %{
+    "first_name" => "Prénom à renseigner",
+    "last_name" => "Nom à renseigner",
+    "email" => System.fetch_env!("ADMIN_EMAIL")
+  },
+  System.fetch_env!("ADMIN_PASSWORD")
+)
+```
+
+Cette fonction existante crée atomiquement Gotham et son administrator, sans ouvrir de session HTTP. Les noms sont à remplacer par ceux de la personne choisie. Ne pas relancer pour créer une seconde organisation ; une Gotham existante doit être conservée et son super administrateur existant utilisé. Pour un ancien compte global, le rattachement explicite à l’organisation doit être effectué côté serveur par un opérateur autorisé ; ne pas changer son rôle ou son organisation depuis le formulaire public.
+
+### 10.2 Démonstration locale : provisionnement explicite
+
+Sur le front en développement, la console du navigateur peut exécuter :
+
+```js
+const demo = await import('/src/mocks/organizationAuth.js')
+await demo.mockProvisionSuperAdministrator({
+  profile: {
+    first_name: 'Prénom à renseigner',
+    last_name: 'Nom à renseigner',
+    email: 'adresse du compte à renseigner'
+  },
+  password: prompt('Mot de passe du super administrateur (8 caractères minimum)')
+})
+```
+
+Aucun mot de passe prédéfini n’est livré. Cette fonction n’est appelée ni par la page ni au démarrage, n’ouvre pas de session et refuse un deuxième super administrateur de Gotham. Se connecter ensuite avec les valeurs choisies. L’organisation doit être initialisée avant les demandes d’adhésion ; l’absence de Gotham est signalée, jamais compensée par une création automatique.
+
+Le helper historique mockCreateOrganization est conservé pour les fixtures des tests de non-régression/isolement ; il n’est plus exposé par le service ni par l’interface publique. Les modules de simulation ne constituent jamais une barrière de sécurité en production.
+
+### 10.3 Mesures serveur restant nécessaires pour la politique unique
+
+- Retirer ou refuser POST /api/organizations et POST /api/auth/register publics : cacher une page ne ferme pas ces endpoints.
+- Désigner Gotham City comme organisation serveur unique et refuser les demandes pour d’autres IDs. Le front continue momentanément d’envoyer organization_id pour compatibilité avec JoinRequestController.create.
+- Garder l’approbation/refus et la promotion réservés au super administrateur de Gotham, sans possibilité publique d’obtenir administrator ou de définir son organisation. La page Utilisateurs et rôles ne propose plus administrator ni création directe de compte : les nouveaux comptes passent par l’acceptation des demandes. Aligner aussi POST /users et PUT /users/:id/role pour interdire de créer/promouvoir un autre compte privilégié via HTTP, et protéger le dernier super administrateur contre suppression/rétrogradation. La suppression personnelle reste permise après transfert des responsabilités, selon la section 11.
+- Assurer l’unicité du compte privilégié si la politique veut un seul super administrateur ; les protections du front/démo ne remplacent pas une contrainte ou une règle serveur.
+- Ne pas activer de provisionnement automatique, ne pas livrer de secret par défaut et ne pas supprimer silencieusement les anciennes données d’autres organisations. Prévoir une migration explicite si elles existent.
+
+Les endpoints protégés de décisions/membres sont conservés, et les nouveaux parcours frontend les utilisent déjà en mode API avec CSRF. Le backend n’a pas été modifié pour la fusion graphique ; la suppression personnelle est maintenant implémentée selon la section 11.
+
+
+## 11. Suppression personnelle du compte — 9 octobre 2026
+
+Le sujet project.pdf précise que tous les utilisateurs peuvent supprimer leur compte. Mon compte propose désormais une suppression directe, sans approbation administrative. Un dialogue exige le mot de passe actuel et une confirmation explicite ; Annuler/Échap ferme le dialogue sans requête. Le bouton est bloqué pendant l’opération pour éviter les doubles clics.
+
+### API implémentée
+
+La route existante `DELETE /api/users/:id` est adaptée, sans ajout de route :
+
+```http
+DELETE /api/users/14
+Content-Type: application/json
+X-CSRF-Token: <token de la session>
+```
+
+```json
+{ "current_password": "mot de passe saisi par l’utilisateur" }
+```
+
+- Le front utilise l’identifiant de la session, jamais un identifiant saisi dans le formulaire.
+- Tous les rôles peuvent supprimer leur propre compte, après vérification du mot de passe côté serveur.
+- Le super administrateur conserve son droit de supprimer un autre compte de son organisation ; le mot de passe de la personne n’est pas demandé dans ce cas. L’API reste compatible avec la page de gestion des utilisateurs.
+- Un employé ne peut pas supprimer un collègue ; un manager ne peut pas supprimer un membre de son équipe. Le contrôle est fait par `Authorization.can_delete_account?/2`, en plus de JWT/CSRF.
+- Le dernier administrator de l’organisation ne peut pas être supprimé : transférer les responsabilités auparavant.
+
+Réponses :
+
+| Code | Résultat |
+|---|---|
+| 204 | Compte supprimé. En suppression personnelle, le cookie JWT est retiré de la réponse. |
+| 422 | Mot de passe actuel absent/incorrect ; `errors.current_password` indique l’erreur. Le compte et la session restent inchangés. |
+| 409 | Dernier super administrateur : compte conservé. |
+| 403 | Suppression d’un autre utilisateur sans droit d’administration de son organisation. |
+| 401 | Session absente/expirée ou compte déjà supprimé. |
+| 404 | Compte cible introuvable dans le périmètre autorisé. |
+
+Le mot de passe est transmis uniquement dans la requête de confirmation et n’est pas enregistré dans le stockage front. Les filtres Phoenix sur les clés contenant password s’appliquent aussi à current_password. Les erreurs de validation ne doivent pas être traduites en 401 : un mot de passe de confirmation incorrect ne ferme pas la session.
+
+### Effacement et session
+
+L’API existante supprime réellement la ligne users. Les clés étrangères existantes effacent ses clocks, workingtime et liens team_members ; les équipes dont il était manager restent présentes avec manager_id null. Il ne s’agit pas d’une simple désactivation.
+
+Les demandes d’adhésion et historiques métier indépendants ne sont pas tous des dépendances de users : ne pas présenter cette action comme l’effacement universel de toute trace. La politique de conservation de ces autres éléments est distincte ; aucune nouvelle politique légale n’est définie ici.
+
+Les JWT existants de ce compte ne permettent plus d’accéder à l’API : Authenticate relit l’utilisateur en base et refuse un utilisateur supprimé. Le front attend la confirmation du serveur, efface utilisateur/contexte d’organisation/CSRF, invalide les lectures de statistiques en cours et revient à Connexion. Il ne tente pas un logout supplémentaire avec un compte déjà supprimé. Une réponse tardive après navigation ne doit pas déconnecter une autre session.
+
+### Mode démonstration
+
+`mockDeleteOwnAccount` vérifie le mot de passe PBKDF2, protège le dernier super administrateur et retire l’utilisateur du registre local. Ses pointages, périodes, demandes de correction et données locales de semaine sont nettoyés dans son organisation ; les données des collègues sont conservées. Les IDs supprimés ne sont pas réattribués à de nouveaux comptes, pour ne pas rendre une ancienne session valide pour une autre personne.
+
+La démonstration supprime aussi la demande d’adhésion associée au compte ; le backend conserve actuellement ce dossier indépendant. Cette différence n’altère ni la suppression effective du compte ni l’interdiction de se reconnecter, mais doit être harmonisée si une politique commune des dossiers est retenue.
+
+### Fichiers et vérification
+
+- `src/components/Profile.vue` : section de suppression, confirmation et gestion des erreurs.
+- `src/services/accountService.js` : transport DELETE, identifiant connecté et corps du mot de passe.
+- `src/mocks/organizationAuth.js` : suppression locale et absence de réutilisation des IDs.
+- `src/App.vue` : fermeture de la session et invalidation des lectures en attente.
+- `time_manager/lib/time_manager/authorization.ex` : permission personnelle ou administrateur du périmètre.
+- `time_manager/lib/time_manager_web/controllers/user_controller.ex` : contrôle du mot de passe et retrait du cookie.
+- `time_manager/lib/time_manager_web/schemas/account_deletion_request.ex` : schéma OpenAPI du corps de confirmation.
+
+Recette : essayer Annuler, un mot de passe incorrect, la suppression d’un employé/manager, la reconnexion refusée après suppression et le refus du dernier super administrateur. Vérifier que les collègues et leurs heures restent présents.
+
+```bash
+npm run test:account
+# Dans time_manager, avec Elixir compatible et une base de tests isolée :
+mix precommit
+```

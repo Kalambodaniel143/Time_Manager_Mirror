@@ -1,6 +1,6 @@
 <template>
   <div class="sidebar-shell">
-    <header class="mobile-header"><RouterLink class="brand" :to="homeRoute">Time Manager</RouterLink><button class="btn btn-outline btn-sm" type="button" :aria-expanded="open" aria-controls="sidebar" @click="open = !open">{{ open ? 'Fermer' : 'Menu' }}</button></header>
+    <header class="mobile-header"><RouterLink class="brand" :to="homeRoute">Time Manager</RouterLink><ThemeToggle class="mobile-theme-controls" :model-value="theme" @update:model-value="$emit('update:theme', $event)" /><button class="btn btn-outline btn-sm" type="button" :aria-expanded="open" aria-controls="sidebar" @click="open = !open">{{ open ? 'Fermer' : 'Menu' }}</button></header>
     <button v-if="open" class="menu-backdrop" type="button" aria-label="Fermer le menu" @click="open = false"></button>
     <aside id="sidebar" class="sidebar" :class="{ 'is-open': open }" @keydown.esc="open = false">
       <RouterLink class="brand" :to="homeRoute" @click="open = false">Time Manager</RouterLink>
@@ -8,7 +8,7 @@
       <nav class="nav" aria-label="Navigation principale">
         <RouterLink v-for="item in links" :key="item.label" class="nav-link" :to="item.to" active-class="is-active" @click="open = false"><AppIcon :name="item.icon" />{{ item.label }}</RouterLink>
       </nav>
-      <div class="settings"><slot /></div>
+      <div class="settings"><ThemeToggle :model-value="theme" @update:model-value="$emit('update:theme', $event)" /><slot /></div>
     </aside>
     <nav class="mobile-nav" aria-label="Navigation mobile">
       <RouterLink v-for="item in mobileLinks" :key="item.label" :to="item.to" active-class="is-active" @click="open = false"><AppIcon :name="item.icon" /><span>{{ item.label }}</span></RouterLink>
@@ -17,10 +17,11 @@
 </template>
 <script>
 import { RouterLink } from 'vue-router'
+import ThemeToggle from '../ui/ThemeToggle.vue'
 import AppIcon from '../ui/AppIcon.vue'
 export default {
-  name: 'AppSidebar', components: { AppIcon, RouterLink },
-  props: { organizationAccess: { type: Boolean, default: false }, role: { type: String, required: true }, theme: { type: String, required: true }, space: { type: String, required: true }, userId: { type: [Number, String], default: null } },
+  name: 'AppSidebar', components: { ThemeToggle, AppIcon, RouterLink },
+  props: { demo: Boolean, organizationAccess: { type: Boolean, default: false }, role: { type: String, required: true }, theme: { type: String, required: true }, space: { type: String, required: true }, userId: { type: [Number, String], default: null } },
   emits: ['update:theme'],
   data() { return { open: false } },
   watch: { '$route.fullPath'() { this.open = false } },
@@ -29,14 +30,14 @@ export default {
     hoursLink() { return { label: 'Mes heures', icon: 'clock', to: this.userId ? { name: 'workingTimes', params: { userID: this.userId } } : { name: 'overview' } } },
     primaryLinks() {
       if (this.role === 'manager') return [{ label: 'Mon équipe', icon: 'users', to: { name: 'team' } }, { label: 'Planning d’équipe', icon: 'calendar', to: { name: 'teamPlanning' } }]
-      if (this.role === 'administrator') return [this.organizationAccess ? { label: 'Mon organisation', icon: 'users', to: { name: 'organization' } } : { label: 'Paie du mois', icon: 'check-circle', to: { name: 'payroll' } }, { label: 'Équipes et droits', icon: 'shield', to: { name: 'rights' } }]
+      if (this.role === 'administrator') return [this.organizationAccess ? { label: 'Administration Gotham', icon: 'users', to: { name: 'organization' } } : { label: 'Paie du mois', icon: 'check-circle', to: { name: 'payroll' } }, { label: 'Équipes et droits', icon: 'shield', to: { name: 'rights' } }]
       return [{ label: 'Aujourd’hui', icon: 'sun', to: { name: 'overview' } }, this.hoursLink, { label: 'Mon planning', icon: 'calendar', to: { name: 'planning' } }]
     },
     links() {
       const extra = this.role === 'administrator' ? [
         ...(this.organizationAccess ? [{ label: 'Paie du mois', icon: 'check-circle', to: { name: 'payroll' } }] : []),
-        ...(!this.organizationAccess ? [{ label: 'Utilisateurs et rôles', icon: 'shield', to: { name: 'adminUsers' } }, { label: 'Équipes', icon: 'users', to: { name: 'adminTeams' } }] : []),
-      ] : this.role === 'manager' && !this.organizationAccess ? [{ label: 'Mes équipes', icon: 'users', to: { name: 'adminTeams' } }] : []
+        ...(!this.demo ? [{ label: 'Utilisateurs et rôles', icon: 'shield', to: { name: 'adminUsers' } }, { label: 'Équipes', icon: 'users', to: { name: 'adminTeams' } }] : []),
+      ] : this.role === 'manager' && !this.demo ? [{ label: 'Mes équipes', icon: 'users', to: { name: 'adminTeams' } }] : []
       if (this.role !== 'employee' && this.userId) extra.push({ label: 'Mon pointage', icon: 'clock', to: { name: 'clock', params: { userid: this.userId } } }, this.hoursLink)
       return [...this.primaryLinks, ...extra, this.accountLink]
     },
@@ -66,4 +67,6 @@ export default {
  .mobile-nav svg { width: 21px; height: 21px; }
  .mobile-nav .is-active { color: var(--title); font-weight: 700; }
 }
+.mobile-header { gap: 8px; flex-wrap: wrap; }
+@media (max-width: 450px) { .mobile-theme-controls { order: 3; width: 100%; justify-content: center; } }
 </style>

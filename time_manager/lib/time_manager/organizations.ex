@@ -77,14 +77,6 @@ defmodule TimeManager.Organizations do
 
   def lookup_organization(_name), do: {:error, organization_not_found()}
 
-  @doc "Returns the only organization available for public registration."
-  def public_organization do
-    case Repo.one(from o in Organization, order_by: o.inserted_at, limit: 1) do
-      %Organization{} = organization -> {:ok, organization}
-      nil -> {:error, organization_not_found()}
-    end
-  end
-
   ## Join requests
 
   @doc """
@@ -111,13 +103,6 @@ defmodule TimeManager.Organizations do
     end
   end
 
-  def submit_join_request(profile) when is_map(profile) do
-    with {:ok, organization} <- public_organization(),
-         {:ok, request, _reference} <- submit_join_request(organization.id, profile) do
-      {:ok, request}
-    end
-  end
-
   @doc "The request matching a private reference."
   def fetch_join_request_by_reference(reference) when is_binary(reference) do
     case Repo.get_by(JoinRequest, reference_hash: hash(reference)) do
@@ -141,9 +126,8 @@ defmodule TimeManager.Organizations do
   concurrent approvals create a single account; the second one gets a conflict.
   On any error the request stays pending and no account is created.
   """
-  def approve_join_request(organization_id, id, username, password, role_name, %User{} = reviewer)
-      when role_name in @member_roles do
-    role = Accounts.get_role_by_name(role_name)
+  def approve_join_request(organization_id, id, password, %User{} = reviewer) do
+    role = Accounts.get_role_by_name("employee")
 
     Repo.transact(fn ->
       with {:ok, request} <- lock_pending_request(organization_id, id),
@@ -155,20 +139,12 @@ defmodule TimeManager.Organizations do
                role.id,
                organization_id
              )
-             |> Changeset.put_change(:username, username || request.email)
              |> Repo.insert()
              |> conflict(:email, @email_taken),
            {:ok, request} <- request |> JoinRequest.approve_changeset(reviewer) |> Repo.update() do
-        {:ok, %{request: request, user: Repo.preload(user, [:role, :organization])}}
+        {:ok, %{request: request, user: Repo.preload(user, :role)}}
       end
     end)
-  end
-
-  def approve_join_request(_organization_id, _id, _username, _password, _role, _reviewer),
-    do: {:error, invalid_role_changeset()}
-
-  def approve_join_request(organization_id, id, password, %User{} = reviewer) do
-    approve_join_request(organization_id, id, nil, password, "employee", reviewer)
   end
 
   @doc "Rejects a pending request with a reason (1 to 500 characters)."
@@ -244,15 +220,6 @@ defmodule TimeManager.Organizations do
     do: {:error, {:forbidden, "Seuls les rôles employé et manager peuvent être modifiés ici."}}
 
   defp ensure_not_administrator(_member), do: :ok
-
-  defp invalid_role_changeset do
-    %User{}
-    |> Changeset.change()
-    |> Changeset.add_error(:role, "must be employee or manager",
-      validation: :inclusion,
-      enum: @member_roles
-    )
-  end
 
   # A unique index violated on `field` becomes a 409 instead of a 422.
   defp conflict({:error, %Changeset{errors: errors} = changeset}, field, conflict) do

@@ -1,12 +1,9 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import Authentication from '../components/Authentication.vue'
 import LoginScreen from '../views/LoginScreen.vue'
 import OrganizationAdmin from '../views/OrganizationAdmin.vue'
-import { AUTH_USE_MOCK } from '../services/organizationService'
 import ChartManager from '../components/ChartManager.vue'
 import ClockManager from '../components/ClockManager.vue'
 import Profile from '../components/Profile.vue'
-import Registration from '../components/Registration.vue'
 import WorkingTime from '../components/WorkingTime.vue'
 import WorkingTimes from '../components/WorkingTimes.vue'
 import { configureHttp } from '../services/http'
@@ -31,8 +28,8 @@ const ADMINS = ['administrator']
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
-    { path: '/connexion', name: 'login', component: AUTH_USE_MOCK ? LoginScreen : Authentication, meta: { public: true } },
-    { path: '/inscription', name: 'register', component: AUTH_USE_MOCK ? LoginScreen : Registration, meta: { public: true } },
+    { path: '/connexion', name: 'login', component: LoginScreen, meta: { public: true } },
+    { path: '/inscription', name: 'register', component: LoginScreen, props: { initialMode: 'join' }, meta: { public: true } },
     { path: '/profil', name: 'profile', component: Profile, meta: { roles: EVERYONE } },
     { path: '/', name: 'overview', component: EmployeeToday, meta: { roles: ['employee'] } },
     { path: '/planning', name: 'planning', component: EmployeePlanning, meta: { roles: ['employee'] } },
@@ -100,7 +97,7 @@ configureHttp({
 })
 
 function sessionHome(role) {
-  return auth.organizationSession && role === 'administrator' ? { name: 'organization' } : homeFor(role)
+  return auth.organization && role === 'administrator' ? { name: 'organization' } : homeFor(role)
 }
 
 function denied(role) {
@@ -123,7 +120,7 @@ router.beforeEach(async (to) => {
 
   if (to.meta.roles && !to.meta.roles.includes(user.role)) return denied(user.role)
 
-  if (to.meta.organization && !auth.organizationSession) return sessionHome(user.role)
+  if (to.meta.organization && !auth.organization) return sessionHome(user.role)
 
   if (auth.organizationSession && ['adminUsers', 'adminTeams'].includes(to.name)) return sessionHome(user.role)
 
