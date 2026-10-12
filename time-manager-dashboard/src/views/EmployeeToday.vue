@@ -3,7 +3,7 @@
     <PageHeader :eyebrow="dateLabel" :title="`${greetingText} ${firstName}`"><button class="btn btn-outline btn-sm" type="button" @click="$emit('tour')"><AppIcon name="help" />Revoir la prise en main</button></PageHeader>
     <MissingDeparture v-if="userId" ref="missingDeparture" :user-id="userId" :now="now" @completed="onDepartureCompleted" @refreshed="onDepartureCompleted" />
     <div class="layout">
-      <div class="column"><ClockManager v-if="userId" ref="clockManager" :user-id="userId" @changed="onClockChanged" /><p v-else class="card clock-waiting" role="status">Le pointage sera disponible une fois votre profil chargé.</p><InfoNote title="Vos heures vous appartiennent" flat>Un oubli ? Complétez votre départ. Une erreur dans vos heures ? Contactez votre responsable pour la faire corriger.</InfoNote></div>
+      <div class="column"><ClockManager v-if="userId" ref="clockManager" :user-id="userId" @changed="onClockChanged" /><p v-else class="card clock-waiting" role="status">Le pointage sera disponible une fois votre profil chargé.</p><InfoNote title="Vos heures vous appartiennent" flat>Un oubli ? Complétez votre départ. Une erreur dans vos heures ? Proposez une correction depuis « Mes heures » pour que votre responsable l’examine.</InfoNote></div>
       <div class="column"><LastWeekCard :title="`Semaine dernière · ${lastWeekRange}`" :buckets="buckets" :target="target" :loading="loading" :error="error" /><NextShifts :today="now" /></div>
       <TransparencyPanel />
     </div>
@@ -20,8 +20,7 @@ import LastWeekCard from '../components/employee/LastWeekCard.vue'
 import NextShifts from '../components/employee/NextShifts.vue'
 import TransparencyPanel from '../components/employee/TransparencyPanel.vue'
 import { lastWeekMonday, org } from '../services/orgService'
-import { toDateInput } from '../utils/date'
-import { addDays, formatRange, weekBuckets } from '../utils/hours'
+import { addDays, clipEntries, formatRange, weekBuckets } from '../utils/hours'
 import { greeting } from '../utils/people'
 
 export default {
@@ -78,9 +77,7 @@ export default {
     },
 
     buckets() {
-      const from = toDateInput(this.monday)
-      const to = toDateInput(addDays(this.monday, 7))
-      const entries = this.workingTimes.filter((entry) => entry.start.slice(0, 10) >= from && entry.start.slice(0, 10) < to)
+      const entries = clipEntries(this.workingTimes, this.monday, addDays(this.monday,7))
       return weekBuckets(entries, this.target)
     },
   },

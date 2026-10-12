@@ -21,11 +21,11 @@ defmodule TimeManagerWeb.Router do
     pipe_through :api
 
     post "/auth/login", AuthController, :login
-    post "/auth/register", AuthController, :register
+    post "/auth/register", AdmissionPolicyController, :registration
     post "/auth/verify-email", AuthController, :verify_email
     post "/auth/resend-verification", AuthController, :resend_verification
 
-    post "/organizations", OrganizationController, :create
+    post "/organizations", AdmissionPolicyController, :organization
     get "/organizations/lookup", OrganizationController, :lookup
     post "/join-requests", JoinRequestController, :create
     post "/join-requests/status", JoinRequestController, :status
@@ -49,6 +49,47 @@ defmodule TimeManagerWeb.Router do
 
     get "/roles", RoleController, :index
 
+    get "/workforce/context", WorkforceController, :context
+    get "/organizations/:org_id/rules", WorkforceController, :rules
+    patch "/organizations/:org_id/rules", WorkforceController, :update_rules
+    get "/teams/:id/permissions", WorkforceController, :permissions
+    patch "/teams/:id/permissions", WorkforceController, :update_permissions
+    get "/users/:user_id/week-notes/:week", WorkforceController, :notes
+    put "/users/:user_id/week-notes/:week", WorkforceController, :update_notes
+    get "/weekly-sheets", WorkforceController, :sheets
+    post "/weekly-sheets/validate", WorkforceController, :validate_sheets
+    post "/weekly-sheets/:user_id/:week/:action", WorkforceController, :transition_sheet
+    get "/correction-requests", WorkforceController, :corrections
+    post "/workingtime/:id/correction-requests", WorkforceController, :request_correction
+    patch "/correction-requests/:id", WorkforceController, :review_correction
+    get "/plans", WorkforceController, :plans
+    get "/plans/:id", WorkforceController, :plan
+    patch "/plans/:id", WorkforceController, :update_plan
+    delete "/plans/:id", WorkforceController, :delete_plan
+    post "/teams/:id/plans", WorkforceController, :create_plan
+    post "/plans/:plan_id/shifts", WorkforceController, :create_shift
+    put "/plans/:plan_id/shifts/:id", WorkforceController, :update_shift
+    delete "/plans/:plan_id/shifts/:id", WorkforceController, :delete_shift
+    post "/plans/:id/publish", WorkforceController, :publish
+    get "/shift-swaps", WorkforceController, :swaps
+    post "/shift-swaps", WorkforceController, :create_swap
+    patch "/shift-swaps/:id/consent", WorkforceController, :consent_swap
+    patch "/shift-swaps/:id", WorkforceController, :review_swap
+    get "/absence-requests", WorkforceController, :absences
+    post "/absence-requests", WorkforceController, :create_absence
+    patch "/absence-requests/:id/payment", WorkforceController, :absence_payment
+    post "/absence-requests/:id/cancel", WorkforceController, :cancel_absence
+    patch "/absence-requests/:id", WorkforceController, :review_absence
+    get "/payroll", WorkforceController, :payroll
+    get "/payroll/export", WorkforceController, :payroll_csv
+    get "/users/:id/payroll-profile", WorkforceController, :pay_profile
+    put "/users/:id/payroll-profile", WorkforceController, :update_pay_profile
+    get "/auth/preferences", WorkforceController, :preferences
+    patch "/auth/preferences", WorkforceController, :update_preferences
+    get "/audit-events", WorkforceController, :journal
+    get "/notifications", WorkforceController, :notifications
+    patch "/notifications/:id/read", WorkforceController, :read_notification
+
     resources "/teams", TeamController, except: [:new, :edit]
     post "/teams/:id/members", TeamController, :add_member
     delete "/teams/:id/members/:user_id", TeamController, :remove_member
@@ -57,7 +98,8 @@ defmodule TimeManagerWeb.Router do
     post "/clocks/:userID", ClockController, :create
     post "/clocks/:userID/:clockID/complete", ClockController, :complete
     put "/users/:id/role", UserController, :update_role
-    resources "/users", UserController, except: [:new, :edit]
+    post "/users", AdmissionPolicyController, :user
+    resources "/users", UserController, except: [:new, :edit, :create]
 
     scope "/workingtime" do
       get "/:userID", WorkingTimeController, :index

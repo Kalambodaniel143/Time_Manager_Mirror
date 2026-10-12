@@ -1,6 +1,8 @@
 <template>
   <section class="card block">
     <h2 class="card-title">Droits des managers</h2>
+    <p v-if="error" class="field-error" role="alert">{{ error }}</p>
+    <p v-if="loading" role="status">Chargement des permissions…</p>
     <div class="table-wrap">
       <table class="table">
         <thead>
@@ -20,6 +22,7 @@
                 class="check"
                 type="checkbox"
                 :checked="right[column.key]"
+                :disabled="loading || busy === right.id"
                 :aria-label="`${right.name} : ${column.label}`"
                 @change="setRight(right.id, column.key, $event.target.checked)"
               />
@@ -33,13 +36,17 @@
 </template>
 
 <script>
-import { org, setRight } from '../../services/orgService'
+import { org, setRight, isDemoData } from '../../services/orgService'
+
+import { listTeams } from '../../services/teamService'
+import { loadContext, savePermissions, workforce } from '../../services/workforceService'
 
 export default {
   name: 'RightsTable',
 
   data() {
     return {
+      teams: [], loading: false, busy: null, error: '',
       columns: [
         { key: 'validate', label: 'Valider' },
         { key: 'correct', label: 'Corriger' },
@@ -48,15 +55,21 @@ export default {
     }
   },
 
+  async created() { if (this.demo) return; this.loading = true; try { const [teams] = await Promise.all([listTeams(), loadContext()]); this.teams = teams } catch (error) { this.error = error.message } finally { this.loading = false } },
   computed: {
+    demo: isDemoData,
     rights() {
-      return org.rights
+      return this.demo ? org.rights : this.teams.filter(team => team.manager && team.manager.role !== 'administrator').map(team => ({ id: team.id, name: [team.manager.first_name, team.manager.last_name].filter(Boolean).join(' ') || team.manager.username, team: team.name, ...(workforce.permissions.find(row => row.team_id === team.id) || {}) }))
     },
   },
 
   methods: {
-    setRight(id, key, value) {
-      setRight(id, key, value)
+    async setRight(id, key, value) {
+      if (this.demo) { setRight(id, key, value); return }
+      this.busy = id; this.error = ''
+      try { await savePermissions(id, { [key]: value }); await loadContext() }
+      catch (error) { this.error = error.message }
+      finally { this.busy = null }
     },
   },
 }

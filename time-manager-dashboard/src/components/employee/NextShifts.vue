@@ -1,8 +1,9 @@
 <template>
   <section class="next-shifts">
     <h2 class="card-title">Prochaines gardes</h2><p v-if="demo" class="field-hint">Exemple de planning · à confirmer auprès de votre responsable.</p>
-    <p v-if="!demo" class="card-subtitle">Le planning n’est pas encore disponible. Contactez votre responsable pour connaître vos prochaines gardes.</p>
-    <p v-else-if="shifts.length === 0" class="card-subtitle">Aucune garde de nuit ou d’astreinte prévue.</p>
+    <p v-if="loading" role="status">Chargement des gardes…</p>
+    <p v-else-if="error" class="field-error" role="alert">{{ error }}</p>
+    <p v-else-if="shifts.length === 0" class="card-subtitle">Aucune garde publiée sur cette période.</p>
     <article v-for="(shift, index) in shifts" :key="shift.date.toISOString()" class="shift card">
       <div class="shift-date">
         <span class="shift-weekday">{{ weekday(shift.date) }}</span>
@@ -14,7 +15,7 @@
         <HourTag :kind="shift.kind" :hours="shift.shift.hours" />
         <p class="shift-published">
           <AppIcon name="calendar" />
-          Publié le {{ publishedLabel }}<template v-if="index === 0">, {{ daysAhead }} jours à l’avance</template>
+          Publié le {{ demo ? publishedLabel : shift.publishedLabel }}<template v-if="demo && index === 0">, {{ daysAhead }} jours à l’avance</template>
         </p>
       </div>
     </article>
@@ -25,6 +26,10 @@
 import AppIcon from '../ui/AppIcon.vue'
 import HourTag from '../ui/HourTag.vue'
 import { nextShifts, org, planPublishedOn, isDemoData } from '../../services/orgService'
+import { auth } from '../../stores/auth'
+import { listPlans } from '../../services/workforceService'
+import { clockDate } from '../../utils/missingDeparture'
+import { formatClockDate } from '../../utils/clockDate'
 import { formatDayMonthLong, weekdayUpper } from '../../utils/hours'
 
 export default {
@@ -36,10 +41,14 @@ export default {
     today: { type: Date, required: true },
   },
 
+  data() { return { records: [], loading: false, error: '', version: 0 } },
+  created() { if (!this.demo) this.load() },
+  beforeUnmount() { this.version += 1 },
   computed: {
     demo: isDemoData,
     shifts() {
-      return nextShifts(this.today)
+      if (this.demo) return nextShifts(this.today)
+      return this.records.filter(shift => clockDate(shift.start) > this.today).slice(0, 2).map(shift => ({ ...shift, date: clockDate(shift.start), place: shift.place || 'Lieu non renseigné', shift: { from: formatClockDate(shift.start).slice(11,16), to: formatClockDate(shift.end).slice(11,16), hours: (clockDate(shift.end)-clockDate(shift.start))/3600000 }, publishedLabel: shift.published_at.slice(0,10) }))
     },
 
     publishedLabel() {
@@ -52,6 +61,7 @@ export default {
   },
 
   methods: {
+    async load() { const version = ++this.version; this.loading = true; this.error = ''; try { const plans = await listPlans(); const rows = plans.flatMap(plan => plan.shifts.filter(shift => shift.user_id === auth.user?.id && ['day','night','oncall'].includes(shift.kind)).map(shift => ({ ...shift, published_at: plan.published_at }))).sort((a,b) => a.start.localeCompare(b.start)); if (version === this.version) this.records = rows } catch (error) { if (version === this.version) { this.records = []; this.error = error.message } } finally { if (version === this.version) this.loading = false } },
     weekday(date) {
       return `${weekdayUpper(date).replace('.', '')}.`
     },

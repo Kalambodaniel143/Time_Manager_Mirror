@@ -1,9 +1,5 @@
 <template>
-  <div v-if="!demo" class="rights">
-    <PageHeader eyebrow="Administration" title="Équipes et droits" />
-    <InfoNote title="Droits associés aux rôles"><p>L’employé consulte son compte et pointe pour lui-même. Le manager consulte et corrige les heures des membres des équipes qu’il gère. L’administration gère les comptes et les équipes de son espace.</p><p>Les droits supplémentaires, règles de planning et journal des changements ne sont pas encore disponibles.</p><RouterLink class="btn btn-outline" :to="{ name: 'adminUsers' }">Gérer les rôles</RouterLink></InfoNote>
-    <AdminTeams />
-  </div>
+  <div v-if="!demo" class="rights page-stack"><PageHeader eyebrow="Administration" title="Équipes et droits" /><RightsTable /><OrgRules /><section class="card section-card page-stack"><h2 class="card-title">Journal des modifications</h2><button class="btn btn-outline" @click="loadJournal">Actualiser le journal</button><p v-if="error" class="field-error" role="alert">{{ error }}</p><p v-if="!events.length" class="muted">Aucune modification enregistrée.</p><ol class="entries"><li v-for="entry in events" :key="entry.id" class="entry"><time>{{ entry.inserted_at }}</time><div><strong>{{ eventLabel(entry.action) }}</strong><p class="field-hint">{{ details(entry.details) }}</p></div></li></ol></section><AdminTeams /></div>
   <div v-else class="rights">
     <PageHeader eyebrow="Administration" title="Équipes et droits" />
 
@@ -40,14 +36,16 @@ import PageHeader from '../components/ui/PageHeader.vue'
 import OrgRules from '../components/admin/OrgRules.vue'
 import RightsTable from '../components/admin/RightsTable.vue'
 import AdminTeams from './AdminTeams.vue'
-import { RouterLink } from 'vue-router'
+import { getJournal } from '../services/workforceService'
 import { org, isDemoData } from '../services/orgService'
 
 export default {
   name: 'TeamsRights',
 
-  components: { AdminTeams, RouterLink, InfoNote, OrgRules, PageHeader, RightsTable },
+  components: { AdminTeams, InfoNote, OrgRules, PageHeader, RightsTable },
 
+  data() { return { events: [], error: '' } },
+  created() { if (!this.demo) this.loadJournal() },
   computed: {
     demo: isDemoData,
     journal() {
@@ -56,6 +54,9 @@ export default {
   },
 
   methods: {
+    async loadJournal() { this.error = ''; try { this.events = await getJournal() } catch (error) { this.error = error.message } },
+    eventLabel(action) { const labels = { 'team.created': 'Équipe créée', 'team.updated': 'Équipe modifiée', 'team.deleted': 'Équipe supprimée', 'team.member.added': 'Membre ajouté à une équipe', 'team.member.removed': 'Membre retiré d’une équipe', 'account.updated': 'Compte mis à jour', 'account.role.updated': 'Rôle modifié', 'account.deleted': 'Compte supprimé', 'plan.updated': 'Période du planning modifiée', 'plan.deleted': 'Planning retiré', 'rules.updated': 'Règles mises à jour', 'permissions.updated': 'Permissions modifiées', 'period.created': 'Période ajoutée', 'period.updated': 'Horaires corrigés', 'period.deleted': 'Période supprimée', 'note.updated': 'Note partagée', 'plan.created': 'Planning créé', 'plan.published': 'Planning publié', 'shift.saved': 'Garde enregistrée', 'shift.deleted': 'Garde supprimée', 'sheet.validated': 'Semaine validée', 'sheet.close': 'Semaine clôturée', 'sheet.reopen': 'Semaine rouverte', 'payroll.profile.updated': 'Taux horaire modifié', 'correction.requested': 'Correction demandée', 'correction.approved': 'Correction acceptée', 'correction.rejected': 'Correction refusée', 'absence.payment.updated': 'Heures d’absence confirmées', 'absence.cancelled': 'Absence annulée', 'absence.requested': 'Absence demandée', 'absence.approved': 'Absence acceptée', 'absence.rejected': 'Absence refusée', 'swap.requested': 'Échange demandé', 'swap.consent': 'Accord pour un échange', 'swap.approved': 'Échange effectué', 'swap.rejected': 'Échange refusé' }; return labels[action] || 'Modification enregistrée' },
+    details(value) { return [value.user_id ? `Agent ${value.user_id}` : '', value.team_id ? `Équipe ${value.team_id}` : '', value.week || '', value.reason || ''].filter(Boolean).join(' · ') },
     stamp(value) {
       const [day, time] = value.split(' ')
       const date = new Date(`${day}T00:00:00`)

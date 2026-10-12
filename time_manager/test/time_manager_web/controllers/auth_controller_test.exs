@@ -128,27 +128,20 @@ defmodule TimeManagerWeb.AuthControllerTest do
   end
 
   describe "register" do
-    test "creates an employee and logs in, whatever role is sent", %{conn: conn} do
-      attrs = %{
-        username: "eve",
-        email: "eve@example.com",
-        password: valid_password(),
-        role: "administrator"
-      }
-
-      conn = post(conn, ~p"/api/auth/register", user: attrs)
-
-      assert %{"user" => %{"role" => "employee"}, "csrf_token" => _} =
-               json_response(conn, 201)["data"]
-
-      assert conn.resp_cookies["jwt"]
-    end
-
-    test "validates the e-mail and the password", %{conn: conn} do
+    test "direct registration is disabled without creating an account", %{conn: conn} do
       conn =
-        post(conn, ~p"/api/auth/register", user: %{username: "x", email: "bad", password: "123"})
+        post(conn, ~p"/api/auth/register",
+          user: %{
+            username: "eve",
+            email: "eve@example.com",
+            password: valid_password(),
+            role: "administrator"
+          }
+        )
 
-      assert %{"email" => _, "password" => _} = json_response(conn, 422)["errors"]
+      assert json_response(conn, 403)["errors"]["detail"] =~ "désactivée"
+      refute conn.resp_cookies["jwt"]
+      assert TimeManager.Accounts.list_users(%{"email" => "eve@example.com"}) == []
     end
   end
 

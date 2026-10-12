@@ -4,7 +4,7 @@
       <button class="btn btn-outline" type="button" :disabled="loading" @click="loadTeam">
         {{ loading ? 'Actualisation…' : 'Actualiser' }}
       </button>
-      <button v-if="demo" class="btn btn-primary" type="button" :disabled="loading || !!error || selection.length === 0" @click="validate">
+      <button v-if="canValidate" class="btn btn-primary" type="button" :disabled="loading || !!error || selection.length === 0" @click="validate">
         <AppIcon name="check" />
         Valider {{ selection.length }} feuille{{ selection.length > 1 ? 's' : '' }}
       </button>
@@ -13,7 +13,7 @@
     <label v-if="teams.length > 1" class="field team-picker"><span class="field-label">Équipe affichée</span><select v-model="selectedTeamId" class="input" :disabled="loading" @change="loadTeam"><option v-for="item in teams" :key="item.id" :value="item.id">{{ item.name }}</option></select></label>
     <div v-if="!loading && !error" class="summary-grid"><article class="card summary-metric"><p>Agents</p><strong>{{ rows.length }}</strong><span>{{ cleanRows.length }} sans alerte de pointage</span></article><article class="card summary-metric"><p>Heures enregistrées</p><strong>{{ formatHours(totalHours) }}</strong><span>Durées des périodes de la semaine</span></article><article class="card summary-metric"><p>Alertes</p><strong>{{ alertCount }}</strong><span>Pointages à vérifier</span></article><article v-if="demo" class="card summary-metric"><p>À valider</p><strong>{{ selection.length }}</strong><span>Feuilles sélectionnées</span></article></div>
     <p v-if="demo" class="demo-notice validation-notice">La validation des semaines est enregistrée localement. Un seuil de nuits dépassé nécessite un examen, sans effacer les heures travaillées.</p>
-    <p v-else class="field-hint validation-notice">Les équipes, périodes et pointages viennent de votre espace. La validation des semaines et les règles de planning ne sont pas encore disponibles.</p>
+    <p v-else class="field-hint validation-notice">Les équipes, périodes et pointages viennent de votre espace. La validation enregistre votre décision et protège ensuite les périodes de la semaine.</p>
     <div class="stack">
       <AlertBanner
         v-for="alert in nightAlerts"
@@ -48,7 +48,7 @@
 
       <section class="card list">
         <header class="list-header">
-          <label v-if="demo" class="select-all">
+          <label v-if="canValidate" class="select-all">
             <input type="checkbox" class="check" :checked="allClean" :disabled="loading || !!error || cleanRows.length === 0" @change="toggleAll" />
             Tout sélectionner sans anomalie ({{ cleanRows.length }})
           </label>
@@ -65,12 +65,13 @@
             :row="row"
             :selected="selection.includes(row.username)"
             :max-nights="maxNights"
-            :can-validate="demo"
+            :can-validate="canValidate"
             @toggle="toggle"
+            @transition="transition($event)"
           />
         </ul>
       </section>
-      <section v-if="demo && !loading && !error" class="card validation-footer"><div><strong>{{ selection.length }} feuille{{ selection.length > 1 ? 's' : '' }} sélectionnée{{ selection.length > 1 ? 's' : '' }}</strong><p class="field-hint">Les départs manquants doivent être régularisés avant validation.</p></div><button class="btn btn-primary" type="button" :disabled="!selection.length" @click="validate">Valider {{ selection.length }} feuille{{ selection.length > 1 ? 's' : '' }}</button></section>
+      <section v-if="canValidate && !loading && !error" class="card validation-footer"><div><strong>{{ selection.length }} feuille{{ selection.length > 1 ? 's' : '' }} sélectionnée{{ selection.length > 1 ? 's' : '' }}</strong><p class="field-hint">Les départs manquants doivent être régularisés avant validation.</p></div><button class="btn btn-primary" type="button" :disabled="!selection.length" @click="validate">Valider {{ selection.length }} feuille{{ selection.length > 1 ? 's' : '' }}</button></section>
       <CorrectionPanel can-review @changed="loadTeam" />
     </div>
   </div>
@@ -93,10 +94,12 @@ import { getClocks } from '../services/clockService'
 import { clockDate, findMissingDeparture } from '../utils/missingDeparture'
 import { formatClockDate } from '../utils/clockDate'
 import { toDateInput } from '../utils/date'
-import { addDays, formatRange, isoWeek, formatHours, nightFrequency, weekBuckets, weekFilters, weekNightRun } from '../utils/hours'
+import { addDays, clipEntries, formatRange, isoWeek, formatHours, nightFrequency, weekBuckets, weekFilters, weekNightRun } from '../utils/hours'
 import { notify } from '../utils/toast'
 import { displayName } from '../utils/people'
 import { isDemoData } from '../services/orgService'
+
+import * as workforceApi from '../services/workforceService'
 
 export default {
   name: 'TeamOverview',
@@ -111,6 +114,7 @@ export default {
     return {
       monday: lastWeekMonday(),
       members: null,
+      sheets: {}, validationBusy: false,
       teams: [],
       selectedTeamId: null,
       teamName: team().name,
@@ -128,6 +132,7 @@ export default {
 
   computed: {
     demo: isDemoData,
+    canValidate() { return Boolean(this.demo || (workforceApi.workforce.ready && (auth.user?.role === 'administrator' || (auth.user?.role === 'manager' && workforceApi.workforce.permissions.find(row => row.team_id === this.selectedTeamId)?.validate)))) },
     totalHours() { return this.rows.reduce((total, row) => total + row.buckets.total, 0) },
     alertCount() { return this.rows.filter(row => this.hasAnomaly(row)).length },
     weekKey() {
@@ -149,6 +154,7 @@ export default {
     rows() {
       return (this.members || team().members).map((member) => {
         const entries = this.entries[member.username] || []
+        const guardEntries = entries.filter(entry => entry.start.slice(0,10) >= this.weekKey && entry.start.slice(0,10) < toDateInput(addDays(this.monday,7)))
         const missingDeparture = findMissingDeparture(this.clocks[member.username] || [], this.now)
         const day = missingDeparture ? formatClockDate(missingDeparture.arrival.time).slice(0, 10) : ''
         return {
@@ -158,12 +164,13 @@ export default {
           // La validation concerne la semaine affichée, pas un service d'une autre semaine.
           departureInWeek: !!missingDeparture && day >= this.weekKey && day < toDateInput(addDays(this.monday, 7)),
           clockError: this.clockErrors[member.username] || '',
-          buckets: weekBuckets(entries, org.rules.overtimeThreshold),
-          nightCount: nightFrequency(entries).total,
-          frequencyExceeded: (org.rules.maxNightsPerWeek > 0 && nightFrequency(entries).total > org.rules.maxNightsPerWeek) || (org.rules.maxNightsPerMonth > 0 && Object.entries(nightFrequency(this.monthEntries?.[member.username] || []).months).some(([month, count]) => Array.from({ length: 7 }, (_, offset) => toDateInput(addDays(this.monday, offset)).slice(0, 7)).includes(month) && count > org.rules.maxNightsPerMonth)),
+          buckets: weekBuckets(clipEntries(entries, this.monday, addDays(this.monday,7)), org.rules.overtimeThreshold),
+          nightCount: nightFrequency(guardEntries).total,
+          frequencyExceeded: (org.rules.maxNightsPerWeek > 0 && nightFrequency(guardEntries).total > org.rules.maxNightsPerWeek) || (org.rules.maxNightsPerMonth > 0 && Object.entries(nightFrequency(this.monthEntries?.[member.username] || []).months).some(([month, count]) => Array.from({ length: 7 }, (_, offset) => toDateInput(addDays(this.monday, offset)).slice(0, 7)).includes(month) && count > org.rules.maxNightsPerMonth)),
           nightRun: weekNightRun(entries, this.monday),
-          note: noteFor(member.username, this.weekKey),
-          validated: isValidated(member.username, this.weekKey),
+          note: this.demo ? noteFor(member.username, this.weekKey) : this.sheets[this.users[member.username]?.id]?.note || '',
+          validated: this.demo ? isValidated(member.username, this.weekKey) : ['validated', 'closed'].includes(this.sheets[this.users[member.username]?.id]?.status),
+          sheetStatus: this.sheets[this.users[member.username]?.id]?.status || 'open',
         }
       })
     },
@@ -218,13 +225,17 @@ export default {
   },
 
   methods: {
+    async transition({ row, action, reason }) {
+      try { await workforceApi.transitionSheet(row.user.id, this.weekKey, action, reason); await this.loadTeam() }
+      catch (error) { notify(error.message, 'error') }
+    },
     formatHours,
     hasAnomaly(row) {
       return row.nightRun > this.maxNights || row.frequencyExceeded || row.departureInWeek || !!row.clockError
     },
 
     canSelect(row) {
-      return this.demo && !row.validated && !row.departureInWeek && !row.clockError
+      return this.canValidate && row.user?.id !== auth.user?.id && !row.validated && !row.departureInWeek && !row.clockError
     },
 
     arrivalLabel(row) {
@@ -253,6 +264,9 @@ export default {
           this.teamName = auth.organizationSession.organization.name
           this.members = users.map(user => ({ username: user.username, name: `${user.first_name} ${user.last_name}`, short: user.first_name, job: user.role === 'manager' ? 'Responsable' : user.role === 'admin' ? 'Administrateur' : 'Employé', unit: this.teamName }))
         } else if (auth.user) {
+          await workforceApi.loadContext()
+          const sheets = await workforceApi.getSheets(this.weekKey)
+          this.sheets = Object.fromEntries(sheets.map(row => [row.user_id, row]))
           const teams = await listTeams()
           if (!Array.isArray(teams)) throw new Error('Liste des équipes invalide')
           if (version !== this.requestVersion) return
@@ -287,7 +301,7 @@ export default {
         this.clocks = Object.fromEntries(records.map((record) => [record.username, record.clocks]))
         this.clockErrors = Object.fromEntries(records.map((record) => [record.username, record.clockError]))
         this.users = Object.fromEntries(records.map((record) => [record.username, record.user]))
-        this.selection = this.demo ? this.cleanRows.map((row) => row.username) : []
+        this.selection = this.canValidate ? this.cleanRows.filter(row => this.canSelect(row)).map((row) => row.username) : []
       } catch (error) {
         if (version !== this.requestVersion) return
         this.error = error.message
@@ -312,14 +326,16 @@ export default {
         : [...new Set([...this.selection, ...clean])]
     },
 
-    validate() {
-      if (!this.demo || this.loading || this.error) return
+    async validate() {
+      if (!this.canValidate || this.loading || this.error || this.validationBusy) return
       const selected = this.selection.filter((username) => this.rows.some((row) => row.username === username && this.canSelect(row)))
       const count = selected.length
       if (count === 0) return
-      validateSheets(selected, this.weekKey)
-      this.selection = []
-      notify(`${count} feuille${count > 1 ? 's' : ''} validée${count > 1 ? 's' : ''} localement.`)
+      if (this.demo) { validateSheets(selected, this.weekKey); this.selection = []; notify(`${count} feuilles validées dans la démonstration.`); return }
+      this.validationBusy = true
+      try { await workforceApi.validateSheets(this.weekKey, selected.map(username => this.rows.find(row => row.username === username).user.id)); await this.loadTeam(); notify(`${count} feuilles validées.`) }
+      catch (error) { notify(error.message, 'error') }
+      finally { this.validationBusy = false }
     },
   },
 }

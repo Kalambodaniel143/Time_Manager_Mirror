@@ -2,15 +2,18 @@
   <section class="note card">
     <label class="note-title" for="manager-note">Note pour votre manager</label>
     <p class="note-hint">Facultatif. Pour expliquer une journée particulière.</p>
-    <textarea id="manager-note" v-model="text" class="input note-input" rows="3" @change="save"></textarea>
-    <p class="note-visible"><AppIcon name="eye" />Note enregistrée dans ce navigateur · le partage avec votre responsable reste à raccorder.</p>
+    <textarea id="manager-note" v-model="text" :disabled="loading || (!demo && (!ownNote || weekStatus !== 'open'))" class="input note-input" rows="3" @change="save"></textarea>
+    <p class="note-visible"><AppIcon name="eye" />{{ demo ? 'Note enregistrée dans ce navigateur.' : 'Note partagée avec votre responsable.' }}</p>
+    <p v-if="error" class="field-error" role="alert">{{ error }}</p>
     <p class="note-hint">Une note est facultative et ne remplace pas une demande de correction.</p>
   </section>
 </template>
 
 <script>
 import AppIcon from '../ui/AppIcon.vue'
-import { TEAM } from '../../mocks/org'
+import { auth } from '../../stores/auth'
+import { isDemoData } from '../../services/orgService'
+import { getNote, saveNote } from '../../services/workforceService'
 import { noteFor, setNote } from '../../services/orgService'
 
 export default {
@@ -19,26 +22,41 @@ export default {
   components: { AppIcon },
 
   props: {
-    username: { type: String, required: true },
+    userId: { type: Number, default: null },
+    username: { type: String, default: '' },
     weekKey: { type: String, required: true },
   },
 
   data() {
-    return { text: '', managerName: TEAM.manager.short }
+    return { text: '', error: '', loading: false, version: 0, weekStatus: 'open' }
   },
 
+  computed: { demo: isDemoData, ownNote() { return auth.user?.id === this.userId } },
+  beforeUnmount() { this.version += 1 },
   watch: {
     weekKey: {
       immediate: true,
       handler() {
-        this.text = noteFor(this.username, this.weekKey)
+        this.load()
       },
     },
   },
 
   methods: {
-    save() {
-      setNote(this.username, this.weekKey, this.text.trim())
+    async load() {
+      const version = ++this.version; this.error = ''
+      if (this.demo) { this.text = noteFor(this.username, this.weekKey); return }
+      this.loading = true
+      try { const row = await getNote(this.userId, this.weekKey); if (version === this.version) { this.text = row.note; this.weekStatus = row.status } }
+      catch (error) { if (version === this.version) this.error = error.message }
+      finally { if (version === this.version) this.loading = false }
+    },
+    async save() {
+      if (this.demo) { setNote(this.username, this.weekKey, this.text.trim()); return }
+      if (!this.ownNote) return
+      this.error = ''
+      try { await saveNote(this.userId, this.weekKey, this.text.trim()) }
+      catch (error) { this.error = error.message }
     },
   },
 }

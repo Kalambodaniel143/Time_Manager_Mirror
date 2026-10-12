@@ -2,6 +2,7 @@
   <ModalDialog v-if="step" :title="step.title" id="tour-title" @close="$emit('close')">
     <p class="tour-step">Prise en main · Étape {{ index + 1 }} sur {{ steps.length }}</p>
     <p class="tour-text">{{ step.text }}</p>
+    <button v-if="supported" class="btn btn-outline" type="button" @click="read">Écouter cette étape</button>
     <footer class="tour-footer">
       <span class="tour-dots" aria-hidden="true">
         <span v-for="(item, dot) in steps" :key="item.title" class="tour-dot" :class="{ 'is-current': dot === index }"></span>
@@ -14,6 +15,7 @@
 
 <script>
 import ModalDialog from './ModalDialog.vue'
+import { speechSupported, readAloud, stopReading } from '../../utils/speech'
 
 export default {
   name: 'OnboardingTour',
@@ -29,7 +31,9 @@ export default {
     return { index: 0 }
   },
 
+  beforeUnmount() { stopReading() },
   computed: {
+    supported: speechSupported,
     step() {
       return this.steps[this.index]
     },
@@ -40,7 +44,9 @@ export default {
   },
 
   methods: {
+    read() { readAloud(`${this.step.title}. ${this.step.text}`) },
     next() {
+      stopReading()
       if (this.isLast) this.$emit('close')
       else this.index += 1
     },

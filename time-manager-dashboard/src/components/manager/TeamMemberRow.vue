@@ -21,11 +21,13 @@
       <span v-else-if="row.departureInWeek" class="pill pill-todo"><AppIcon name="clock" />Départ à compléter</span>
       <span v-else-if="row.frequencyExceeded" class="pill pill-warn"><AppIcon name="alert" />Fréquence de nuits à examiner</span>
       <span v-else-if="row.nightRun > maxNights" class="pill pill-danger"><AppIcon name="alert" />{{ row.nightRun }} nuits d’affilée</span>
-      <span v-else-if="row.validated" class="pill pill-ok"><AppIcon name="check" />Validée</span>
+      <span v-else-if="row.validated" class="pill pill-ok"><AppIcon name="check" />{{ row.sheetStatus === 'closed' ? 'Clôturée' : 'Validée' }}</span>
       <span v-else-if="canValidate" class="pill pill-todo"><AppIcon name="clock" />À valider</span>
       <span v-else class="pill pill-ok">{{ row.buckets.total > 0 ? 'Périodes enregistrées' : 'Aucune période' }}</span>
     </p>
+    <div v-if="canTransition" class="sheet-actions"><button class="btn btn-outline btn-sm" @click="action = row.sheetStatus === 'validated' ? 'close' : 'reopen'; reason = ''">{{ row.sheetStatus === 'validated' ? 'Clôturer' : 'Rouvrir' }}</button></div>
     <p v-if="canValidate" class="note"><AppIcon name="message" />{{ row.note || 'Aucune note partagée' }}</p>
+    <ModalDialog v-if="action" :title="action === 'close' ? 'Clôturer la semaine' : 'Rouvrir la semaine'" :id="`sheet-${row.user.id}`" @close="action = ''"><label class="field"><span class="field-label">Motif</span><textarea v-model.trim="reason" class="input" maxlength="500" /></label><button class="btn btn-primary" :disabled="!reason" @click="transition">Confirmer</button></ModalDialog>
     <RouterLink v-if="row.user" class="btn btn-outline btn-sm view-link" :to="{ name: 'workingTimes', params: { userID: row.user.id } }">Voir la fiche</RouterLink>
   </li>
 </template>
@@ -33,6 +35,8 @@
 <script>
 import { RouterLink } from 'vue-router'
 import AppIcon from '../ui/AppIcon.vue'
+import ModalDialog from '../ui/ModalDialog.vue'
+import { auth } from '../../stores/auth'
 import HourTag from '../ui/HourTag.vue'
 import { formatHours } from '../../utils/hours'
 
@@ -41,7 +45,7 @@ const ORDER = ['night', 'day', 'oncall', 'sup']
 export default {
   name: 'TeamMemberRow',
 
-  components: { AppIcon, HourTag, RouterLink },
+  components: { ModalDialog, AppIcon, HourTag, RouterLink },
 
   props: {
     row: { type: Object, required: true },
@@ -50,9 +54,12 @@ export default {
     canValidate: { type: Boolean, default: true },
   },
 
-  emits: ['toggle'],
+  emits: ['toggle', 'transition'],
+  data() { return { action: '', reason: '' } },
+  methods: { transition() { this.$emit('transition', { row: this.row, action: this.action, reason: this.reason }); this.action = '' } },
 
   computed: {
+    canTransition() { return this.canValidate && this.row.user?.id !== auth.user?.id && ['validated', 'closed'].includes(this.row.sheetStatus) },
     tags() {
       const first = this.row.buckets.night > this.row.buckets.day ? ORDER : ['day', 'night', 'oncall', 'sup']
       return first.filter((kind) => this.row.buckets[kind] > 0).map((kind) => ({ kind, hours: this.row.buckets[kind] }))

@@ -12,6 +12,7 @@ defmodule TimeManagerWeb.Schemas.WorkingTime do
       id: %Schema{type: :integer, description: "Working time ID", example: 1},
       start: %Schema{type: :string, example: "2026-09-22 08:00:00"},
       end: %Schema{type: :string, example: "2026-09-22 17:00:00"},
+      kind: %Schema{type: :string, enum: ["work", "oncall", "recup"]},
       user_id: %Schema{type: :integer, description: "Owning user's ID", example: 1}
     },
     required: [:id, :start, :end, :user_id]

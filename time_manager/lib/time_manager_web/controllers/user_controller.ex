@@ -130,10 +130,22 @@ defmodule TimeManagerWeb.UserController do
          :ok <- authorize(Authorization.can_edit_profile?(me, id)),
          {:ok, %User{} = user} <- Accounts.fetch_user(id),
          {:ok, user} <-
-           Accounts.update_account(
-             user,
-             Map.take(user_params, @profile_fields),
-             password_change(me, user, user_params)
+           TimeManager.Workforce.record(
+             me,
+             "account.updated",
+             %{
+               user_id: id,
+               fields: Map.keys(Map.take(user_params, @profile_fields)),
+               password_changed:
+                 is_binary(user_params["password"]) and user_params["password"] != ""
+             },
+             fn ->
+               Accounts.update_account(
+                 user,
+                 Map.take(user_params, @profile_fields),
+                 password_change(me, user, user_params)
+               )
+             end
            ) do
       render(conn, :show, user: user, viewer: me)
     end
@@ -160,13 +172,24 @@ defmodule TimeManagerWeb.UserController do
     ]
   )
 
+  def update_role(_conn, %{"role" => "administrator"}), do: {:error, :forbidden}
+
+  def update_role(_conn, %{"role" => role}) when role not in ["employee", "manager"],
+    do: {:error, {:unprocessable_entity, "Rôle invalide."}}
+
   def update_role(conn, %{"id" => id, "role" => role}) do
     me = current_user(conn)
 
     with {:ok, id} <- cast_id(id),
          :ok <- authorize(Authorization.can_change_role?(me, id)),
          {:ok, %User{} = user} <- Accounts.fetch_user(id),
-         {:ok, user} <- Accounts.change_role(user, role) do
+         {:ok, user} <-
+           TimeManager.Workforce.record(
+             me,
+             "account.role.updated",
+             %{user_id: user.id, role: role},
+             fn -> Accounts.change_role(user, role) end
+           ) do
       render(conn, :show, user: user, viewer: me)
     end
   end
@@ -202,7 +225,10 @@ defmodule TimeManagerWeb.UserController do
          :ok <- authorize(Authorization.can_delete_account?(actor, id)),
          {:ok, %User{} = user} <- Accounts.fetch_user(id),
          :ok <- verify_deletion_password(actor, user, params["current_password"]),
-         {:ok, %User{}} <- Accounts.delete_user(user) do
+         {:ok, %User{}} <-
+           TimeManager.Workforce.record(actor, "account.deleted", %{user_id: user.id}, fn ->
+             Accounts.delete_user(user)
+           end) do
       conn =
         if actor.id == user.id do
           delete_resp_cookie(conn, Authenticate.cookie_name(),
