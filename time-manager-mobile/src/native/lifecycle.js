@@ -3,13 +3,18 @@ export function whenDeviceReady(callback) {
   else callback()
 }
 
-// À brancher après initialisation de la session et de la base.
-// online est une occasion de réessayer, pas une preuve que l'API est accessible.
+// Retour du réseau ou de l'application au premier plan : occasion de synchroniser.
+// « online » n'est pas une preuve que l'API répond : la synchro le vérifiera.
 export function onSyncOpportunity(callback) {
-  window.addEventListener('online', callback)
+  for (const target of [window, document]) target.addEventListener('online', callback)
   document.addEventListener('resume', callback)
-  return () => {
-    window.removeEventListener('online', callback)
-    document.removeEventListener('resume', callback)
-  }
+}
+
+// Bouton retour physique d'Android.
+export function onBackButton(callback) {
+  document.addEventListener('backbutton', callback)
+}
+
+export function onConnectionLost(callback) {
+  for (const target of [window, document]) target.addEventListener('offline', callback)
 }
