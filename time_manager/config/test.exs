@@ -22,6 +22,7 @@ config :time_manager, TimeManagerWeb.Endpoint,
 
 # In test we don't send emails
 config :time_manager, TimeManager.Mailer, adapter: Swoosh.Adapters.Test
+config :time_manager, :email_delivery, :mailpit
 
 # Disable swoosh api client as it is only required for production adapters
 config :swoosh, :api_client, false
