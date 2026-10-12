@@ -115,7 +115,10 @@ defmodule TimeManager.Organizations do
     do: {:error, {:not_found, "Référence de demande introuvable."}}
 
   def list_join_requests(organization_id) do
-    from(r in JoinRequest, where: r.organization_id == ^organization_id, order_by: r.inserted_at)
+    from(r in JoinRequest,
+      where: r.organization_id == ^organization_id and not is_nil(r.email_verified_at),
+      order_by: r.inserted_at
+    )
     |> Repo.all()
     |> Repo.preload(:organization)
   end

@@ -15,6 +15,7 @@ defmodule TimeManager.Accounts do
   alias TimeManager.Repo
 
   alias TimeManager.Accounts.{EmailVerification, RevokedToken, Role, User}
+  alias TimeManager.Organizations.JoinRequest
 
   @default_role "employee"
   @verification_ttl 600
@@ -284,6 +285,29 @@ defmodule TimeManager.Accounts do
     {:ok, code}
   end
 
+  def issue_email_verification(%JoinRequest{} = request) do
+    code = generate_verification_code()
+    now = DateTime.utc_now() |> DateTime.truncate(:second)
+
+    Repo.insert_all(
+      EmailVerification,
+      [
+        %{
+          join_request_id: request.id,
+          code_hash: hash_code(code),
+          expires_at: DateTime.add(now, @verification_ttl, :second),
+          attempts: 0,
+          inserted_at: now,
+          updated_at: now
+        }
+      ],
+      on_conflict: {:replace, [:code_hash, :expires_at, :attempts, :updated_at]},
+      conflict_target: :join_request_id
+    )
+
+    {:ok, code}
+  end
+
   def find_unverified_user(email) when is_binary(email) do
     case Repo.get_by(User, email: email) do
       %User{} = user when is_nil(user.email_verified_at) -> {:ok, user}
@@ -321,7 +345,70 @@ defmodule TimeManager.Accounts do
     end
   end
 
+  def find_pending_join_request(email) when is_binary(email) do
+    case Repo.one(
+           from r in JoinRequest,
+             where:
+               r.email == ^normalize_email(email) and r.status == "pending" and
+                 is_nil(r.email_verified_at),
+             preload: [:organization]
+         ) do
+      %JoinRequest{} = request -> {:ok, request}
+      nil -> {:error, :not_found}
+    end
+  end
+
+  def verify_join_request_email(email, code) when is_binary(email) and is_binary(code) do
+    request =
+      Repo.one(
+        from r in JoinRequest,
+          where: r.email == ^normalize_email(email) and r.status == "pending",
+          preload: [:organization]
+      )
+
+    verification = request && Repo.get_by(EmailVerification, join_request_id: request.id)
+    now = DateTime.utc_now() |> DateTime.truncate(:second)
+
+    cond do
+      is_nil(request) or is_nil(verification) ->
+        {:error, :invalid_code}
+
+      DateTime.compare(verification.expires_at, now) == :lt ->
+        {:error, :expired_code}
+
+      verification.attempts >= @max_verification_attempts ->
+        {:error, :too_many_attempts}
+
+      not Plug.Crypto.secure_compare(verification.code_hash, hash_code(code)) ->
+        Repo.update_all(
+          from(v in EmailVerification, where: v.id == ^verification.id),
+          inc: [attempts: 1]
+        )
+
+        {:error, :invalid_code}
+
+      true ->
+        request =
+          request
+          |> Ecto.Changeset.change(email_verified_at: now)
+          |> Repo.update!()
+
+        Repo.delete!(verification)
+        {:ok, Repo.preload(request, :organization)}
+    end
+  end
+
+  defp generate_verification_code do
+    :crypto.strong_rand_bytes(4)
+    |> :binary.decode_unsigned()
+    |> rem(1_000_000)
+    |> Integer.to_string()
+    |> String.pad_leading(6, "0")
+  end
+
   defp hash_code(code), do: :crypto.hash(:sha256, code) |> Base.encode16(case: :lower)
+
+  defp normalize_email(email), do: email |> String.trim() |> String.downcase()
 
   @doc """
   Updates the profile fields (username, email).

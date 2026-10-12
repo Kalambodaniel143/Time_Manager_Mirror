@@ -48,6 +48,8 @@ export async function joinOrganization({ profile }) {
   const body = { organization_id: organization.id, profile }
   return call(() => demo.mockJoinOrganization(body), '/join-requests', 'POST', body)
 }
+export const verifyJoinRequestEmail = (email, code) => call(() => demo.mockRequestStatus(email), '/join-requests/verify-email', 'POST', { email, code })
+export const resendJoinRequestVerification = email => call(() => demo.mockRequestStatus(email), '/join-requests/resend-verification', 'POST', { email })
 
 export async function getRequestStatus(reference) {
   const receipt = await call(() => demo.mockRequestStatus(reference), '/join-requests/status', 'POST', { reference })
