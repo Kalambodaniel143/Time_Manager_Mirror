@@ -142,7 +142,7 @@ defmodule TimeManager.Organizations do
              |> Repo.insert()
              |> conflict(:email, @email_taken),
            {:ok, request} <- request |> JoinRequest.approve_changeset(reviewer) |> Repo.update() do
-        {:ok, %{request: request, user: Repo.preload(user, :role)}}
+        {:ok, %{request: request, user: Repo.preload(user, [:role, :organization])}}
       end
     end)
   end
@@ -200,9 +200,10 @@ defmodule TimeManager.Organizations do
     with {:ok, id} <- Ecto.UUID.cast(id),
          %JoinRequest{} = request <-
            Repo.one(
-             from r in JoinRequest,
+             from(r in JoinRequest,
                where: r.id == ^id and r.organization_id == ^organization_id,
                lock: "FOR UPDATE"
+             )
            ) do
       if request.status == "pending",
         do: {:ok, Repo.preload(request, :organization)},

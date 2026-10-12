@@ -12,7 +12,7 @@ defmodule TimeManagerWeb.JoinRequestController do
 
   import TimeManagerWeb.Authz
 
-  alias TimeManager.{Authorization, Organizations}
+  alias TimeManager.{Authorization, Email, EmailDelivery, Organizations}
   alias TimeManagerWeb.Plugs.RateLimit
   alias TimeManagerWeb.Schemas.{ApproveRequest, ApproveResponse, ConflictResponse}
   alias TimeManagerWeb.Schemas.{ErrorResponse, JoinRequestCreateRequest, JoinRequestReceipt}
@@ -25,10 +25,10 @@ defmodule TimeManagerWeb.JoinRequestController do
 
   alias TimeManagerWeb.Schemas.{RejectRequest, ValidationErrorResponse}
 
-  action_fallback TimeManagerWeb.FallbackController
+  action_fallback(TimeManagerWeb.FallbackController)
 
-  plug RateLimit, [bucket: :join_request, limit: 10] when action == :create
-  plug RateLimit, [bucket: :join_request_status, limit: 30] when action == :status
+  plug(RateLimit, [bucket: :join_request, limit: 10] when action == :create)
+  plug(RateLimit, [bucket: :join_request_status, limit: 30] when action == :status)
 
   tags(["join requests"])
 
@@ -122,7 +122,8 @@ defmodule TimeManagerWeb.JoinRequestController do
   def approve(conn, %{"org_id" => org_id, "id" => id, "password" => password}) do
     with {:ok, me} <- organization_admin(conn, org_id),
          {:ok, result} <-
-           Organizations.approve_join_request(me.organization_id, id, password, me) do
+           Organizations.approve_join_request(me.organization_id, id, password, me),
+         :ok <- deliver_credentials(result.user, password, result.user.organization) do
       render(conn, :approved, result)
     end
   end
@@ -151,6 +152,13 @@ defmodule TimeManagerWeb.JoinRequestController do
   end
 
   def reject(_conn, _params), do: {:error, :bad_request}
+
+  defp deliver_credentials(user, password, organization) do
+    case user.email |> Email.credentials(user, password, organization) |> EmailDelivery.send() do
+      :ok -> :ok
+      {:error, _reason} -> {:error, :service_unavailable}
+    end
+  end
 
   defp organization_admin(conn, org_id) do
     me = current_user(conn)
