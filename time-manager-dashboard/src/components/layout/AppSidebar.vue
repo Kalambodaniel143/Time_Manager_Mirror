@@ -30,13 +30,13 @@ export default {
     hoursLink() { return { label: 'Mes heures', icon: 'clock', to: this.userId ? { name: 'workingTimes', params: { userID: this.userId } } : { name: 'overview' } } },
     primaryLinks() {
       if (this.role === 'manager') return [{ label: 'Mon équipe', icon: 'users', to: { name: 'team' } }, { label: 'Planning d’équipe', icon: 'calendar', to: { name: 'teamPlanning' } }]
-      if (this.role === 'administrator') return [this.organizationAccess ? { label: 'Administration Gotham', icon: 'users', to: { name: 'organization' } } : { label: 'Paie du mois', icon: 'check-circle', to: { name: 'payroll' } }, { label: 'Équipes et droits', icon: 'shield', to: { name: 'rights' } }]
+      if (this.role === 'administrator') return [this.organizationAccess ? { label: 'Administration Gotham', icon: 'users', to: { name: 'organization' } } : { label: 'Utilisateurs et rôles', icon: 'users', to: { name: 'adminUsers' } }, { label: 'Équipes et droits', icon: 'shield', to: { name: 'rights' } }]
       return [{ label: 'Aujourd’hui', icon: 'sun', to: { name: 'overview' } }, this.hoursLink, { label: 'Mon planning', icon: 'calendar', to: { name: 'planning' } }]
     },
     links() {
       const extra = this.role === 'administrator' ? [
-        ...(this.organizationAccess ? [{ label: 'Paie du mois', icon: 'check-circle', to: { name: 'payroll' } }] : []),
-        ...(!this.demo ? [{ label: 'Utilisateurs et rôles', icon: 'shield', to: { name: 'adminUsers' } }, { label: 'Équipes', icon: 'users', to: { name: 'adminTeams' } }] : []),
+        { label: this.demo ? 'Paie du mois' : 'Heures du mois', icon: 'check-circle', to: { name: 'payroll' } },
+        ...(!this.demo ? [...(this.organizationAccess ? [{ label: 'Utilisateurs et rôles', icon: 'shield', to: { name: 'adminUsers' } }] : []), { label: 'Équipes', icon: 'users', to: { name: 'adminTeams' } }, { label: 'Vue des heures', icon: 'clock', to: { name: 'team' } }] : []),
       ] : this.role === 'manager' && !this.demo ? [{ label: 'Mes équipes', icon: 'users', to: { name: 'adminTeams' } }] : []
       if (this.role !== 'employee' && this.userId) extra.push({ label: 'Mon pointage', icon: 'clock', to: { name: 'clock', params: { userid: this.userId } } }, this.hoursLink)
       return [...this.primaryLinks, ...extra, this.accountLink]

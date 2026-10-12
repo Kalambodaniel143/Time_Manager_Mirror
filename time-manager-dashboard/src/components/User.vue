@@ -2,7 +2,7 @@
   <div class="user-card">
     <RouterLink class="avatar" :to="{ name: 'profile' }" :aria-label="`Profil de ${user.username}`">{{ badge }}</RouterLink>
     <div class="user-text">
-      <RouterLink class="user-name" :to="{ name: 'profile' }">{{ user.username }}</RouterLink>
+      <RouterLink class="user-name" :to="{ name: 'profile' }">{{ name }}</RouterLink>
       <p class="user-job">{{ roleLabel }}</p>
       <button class="user-logout" type="button" @click="$emit('logout')">Se déconnecter</button>
     </div>
@@ -12,6 +12,7 @@
 <script>
 import { RouterLink } from 'vue-router'
 import { ROLE_LABELS } from '../stores/auth'
+import { displayName } from '../utils/people'
 
 // The logged-in user, shown on every page. Logging in, registering and editing
 // the profile are the Authentication, Registration and Profile components.
@@ -27,6 +28,7 @@ export default {
   emits: ['logout'],
 
   computed: {
+    name() { return displayName(this.user) },
     badge() {
       const parts = this.user.username.split(/[\s._-]+/).filter(Boolean)
       return parts.map((part) => part[0]).join('').slice(0, 2).toUpperCase()

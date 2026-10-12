@@ -12,12 +12,13 @@
       <li v-for="item in never" :key="item"><AppIcon name="eye-off" />{{ item }}</li>
     </ul>
 
-    <p class="footer">Vos demandes de correction et leurs décisions restent visibles. Les horaires réels sont distingués des heures proposées.</p>
+    <p class="footer">Votre responsable consulte les heures des membres des équipes qu’il gère. L’administration consulte les comptes de son organisation.</p>
   </section>
 </template>
 
 <script>
 import AppIcon from '../ui/AppIcon.vue'
+import { isDemoData } from '../../services/orgService'
 
 export default {
   name: 'TransparencyPanel',
@@ -26,13 +27,12 @@ export default {
 
   data() {
     return {
-      visible: [
-        'Vos heures d’arrivée et de départ',
-        'Le type de chaque heure (jour, nuit, astreinte…)',
-        'Les notes que vous choisissez de partager',
-      ],
       never: ['Votre activité sur l’ordinateur ou le téléphone', 'Votre position', 'Les sites et applications que vous utilisez'],
     }
+  },
+
+  computed: {
+    visible() { return isDemoData() ? ['Vos heures d’arrivée et de départ', 'Le type de chaque heure (jour, nuit, astreinte…)', 'Les notes que vous choisissez de partager'] : ['Vos heures d’arrivée et de départ', 'Vos périodes travaillées et leurs durées', 'Votre identifiant, votre nom et votre e-mail'] },
   },
 }
 </script>

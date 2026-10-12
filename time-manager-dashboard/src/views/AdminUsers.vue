@@ -56,7 +56,8 @@
         </div>
       </section>
 
-      <aside class="card admission"><h2 class="card-title">Nouveaux employés</h2><p>Les nouveaux comptes sont créés après acceptation d’une demande pour rejoindre Gotham City. Le super administrateur fournit le mot de passe à cette étape.</p><RouterLink class="btn btn-primary" :to="{ name: 'organization' }">Examiner les demandes</RouterLink></aside>
+      <aside v-if="organization" class="card admission"><h2 class="card-title">Nouveaux employés</h2><p>Les nouveaux comptes sont créés après acceptation d’une demande pour rejoindre Gotham City. Le super administrateur fournit le mot de passe à cette étape.</p><RouterLink class="btn btn-primary" :to="{ name: 'organization' }">Examiner les demandes</RouterLink></aside>
+      <aside v-else class="card admission"><h2 class="card-title">Compte sans organisation</h2><p>Ce compte accède uniquement aux utilisateurs et équipes de son espace actuel. Pour traiter les demandes d’adhésion à Gotham City, son rattachement doit être effectué par l’équipe qui gère le serveur.</p></aside>
     </div>
   </div>
 </template>
@@ -88,6 +89,7 @@ export default {
   },
 
   computed: {
+    organization() { return auth.organization },
     me() {
       return auth.user
     },

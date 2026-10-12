@@ -1,5 +1,6 @@
 <template>
-  <div class="team-planning">
+  <div v-if="!demo" class="team-planning"><PageHeader title="Planning d’équipe" /><UnavailableFeature title="Planning indisponible" text="La préparation, les échanges et la publication des gardes ne sont pas encore disponibles. Les équipes et leurs membres se gèrent depuis « Mes équipes »." /></div>
+  <div v-else class="team-planning">
     <PageHeader :eyebrow="`${published ? 'Publié' : 'À publier'} · ${rangeLabel}`" title="Planning d’équipe">
       <button class="btn btn-primary" type="button" :disabled="!publishable" :title="blockReason" @click="publish">
         <AppIcon name="calendar" />
@@ -44,8 +45,10 @@ import AppIcon from '../components/ui/AppIcon.vue'
 import HourTag from '../components/ui/HourTag.vue'
 import PageHeader from '../components/ui/PageHeader.vue'
 import PlanGrid from '../components/manager/PlanGrid.vue'
+import UnavailableFeature from '../components/ui/UnavailableFeature.vue'
 import {
   canPublish,
+  isDemoData,
   resolveShiftSwap,
   org,
   planAlerts,
@@ -68,10 +71,11 @@ function dayMonth(date) {
 export default {
   name: 'TeamPlanning',
 
-  components: { AlertBanner, AppIcon, HourTag, PageHeader, PlanGrid },
+  components: { UnavailableFeature, AlertBanner, AppIcon, HourTag, PageHeader, PlanGrid },
 
   data() { return { selectedWeek: 0, selectedAgent: '' } },
   computed: {
+    demo: isDemoData,
     frequencyAlerts() {
       return this.rows.flatMap(row => {
         const messages = []

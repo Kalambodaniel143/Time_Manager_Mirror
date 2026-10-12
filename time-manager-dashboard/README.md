@@ -1,44 +1,46 @@
-# time-manager-dashboard
+# Time Manager — frontend Vue
 
-This template should help get you started developing with Vue 3 in Vite.
+La documentation des écrans, des routes utilisées et des fonctions restant sans backend est dans [docs/FRONTEND.md](../docs/FRONTEND.md). Le parcours d’adhésion et les compléments serveur sont décrits dans [le contrat backend](../docs/CONTRAT_BACKEND_ORGANISATIONS.md).
 
-## Recommended IDE Setup
+## Démarrage
 
-[VS Code](https://code.visualstudio.com/) + [Vue (Official)](https://marketplace.visualstudio.com/items?itemName=Vue.volar) (and disable Vetur).
+Utiliser Node `^22.18.0` ou `>=24.12.0`.
 
-## Recommended Browser Setup
-
-- Chromium-based browsers (Chrome, Edge, Brave, etc.):
-  - [Vue.js devtools](https://chromewebstore.google.com/detail/vuejs-devtools/nhdogjmejiglipccpnnnanhbledajbpd)
-  - [Turn on Custom Object Formatter in Chrome DevTools](http://bit.ly/object-formatters)
-- Firefox:
-  - [Vue.js devtools](https://addons.mozilla.org/en-US/firefox/addon/vue-js-devtools/)
-  - [Turn on Custom Object Formatter in Firefox DevTools](https://fxdx.dev/firefox-devtools-custom-object-formatters/)
-
-## Customize configuration
-
-See [Vite Configuration Reference](https://vite.dev/config/).
-
-## Project Setup
-
-```sh
+```bash
 npm install
 ```
 
-### Compile and Hot-Reload for Development
+Créer `.env.local` :
 
-```sh
+```env
+VITE_AUTH_USE_MOCK=false
+VITE_USE_MOCK=false
+VITE_API_URL=/api
+VITE_BACKEND_URL=http://34.155.104.175:4000
+```
+
+```bash
 npm run dev
 ```
 
-### Compile and Minify for Production
+Le proxy Vite appelle le backend déployé. Pour utiliser Phoenix local, remplacer `VITE_BACKEND_URL` par `http://localhost:4000` et démarrer le serveur local. Ne pas inscrire de mot de passe dans les variables `VITE_*`.
 
-```sh
+Les identifiants doivent exister dans la base de ce backend. Un compte sans organisation peut accéder à son espace historique ; les adhésions Gotham exigent un administrateur rattaché à Gotham côté serveur.
+
+## Simulation explicite
+
+```bash
+npm run dev:demo
+```
+
+Cette commande active les mocks d’authentification et de données. Les comptes simulés sont indépendants de la base réelle ; aucun mot de passe par défaut n’est fourni.
+
+## Vérifications
+
+```bash
 npm run build
+npx eslint src dev test vite.config.js
+node --test test/*.test.js
 ```
 
-### Lint with [ESLint](https://eslint.org/)
-
-```sh
-npm run lint
-```
+Les écrans réels utilisent les comptes, équipes, pointages et périodes de l’API. Graphiques et relevés CSV sont calculés depuis ces périodes. Les fonctions sans endpoint restent indisponibles : aucun planning ou relevé de paie fictif n’est utilisé en cas d’échec serveur.

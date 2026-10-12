@@ -25,6 +25,11 @@
           </button>
         </header>
 
+        <form v-if="isAdmin" class="add" @submit.prevent="rename(team)">
+          <input v-model.trim="names[team.id]" class="input" :aria-label="`Nom de ${team.name}`" required maxlength="100" />
+          <button class="btn btn-outline btn-sm" type="submit" :disabled="!names[team.id] || names[team.id] === team.name">Renommer</button>
+        </form>
+
         <label v-if="isAdmin" class="field">
           <span class="field-label">Manager</span>
           <select class="input select" :value="team.manager ? team.manager.id : ''" @change="setManager(team, $event.target.value)">
@@ -85,7 +90,7 @@ export default {
   components: { InfoNote, PageHeader, RouterLink },
 
   data() {
-    return { teams: [], users: [], loading: true, error: '', armed: null, adding: {}, newName: '' }
+    return { teams: [], users: [], loading: true, error: '', armed: null, adding: {}, names: {}, newName: '' }
   },
 
   computed: {
@@ -102,6 +107,7 @@ export default {
     try {
       const [teams, users] = await Promise.all([teamService.listTeams(), this.isAdmin ? listUsers() : []])
       this.teams = teams || []
+      this.names = Object.fromEntries(this.teams.map(team => [team.id, team.name]))
       this.users = users || []
     } catch (error) {
       this.error = error.message
@@ -122,6 +128,7 @@ export default {
 
     replace(team) {
       this.teams = this.teams.map((other) => (other.id === team.id ? team : other))
+      this.names[team.id] = team.name
     },
 
     async run(action, success) {
@@ -135,6 +142,11 @@ export default {
 
     setManager(team, value) {
       return this.run(async () => this.replace(await teamService.updateTeam(team.id, { manager_id: value ? Number(value) : null })), 'Manager mis à jour.')
+    },
+
+    rename(team) {
+      if (!this.names[team.id] || this.names[team.id] === team.name) return
+      return this.run(async () => this.replace(await teamService.updateTeam(team.id, { name: this.names[team.id] })), 'Équipe renommée.')
     },
 
     addMember(team) {
@@ -159,7 +171,9 @@ export default {
 
     create() {
       return this.run(async () => {
-        this.teams.push(await teamService.createTeam({ name: this.newName }))
+        const team = await teamService.createTeam({ name: this.newName })
+        this.teams.push(team)
+        this.names[team.id] = team.name
         this.newName = ''
       }, 'Équipe créée.')
     },
