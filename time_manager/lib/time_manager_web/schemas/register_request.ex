@@ -4,17 +4,21 @@ defmodule TimeManagerWeb.Schemas.RegisterRequest do
 
   OpenApiSpex.schema(%{
     title: "RegisterRequest",
-    description: "Self-registration. The account is always created with the employee role.",
+    description:
+      "Registration details. The account is created only after administrator approval.",
     type: :object,
     properties: %{
       user: %Schema{
         type: :object,
         properties: %{
-          username: %Schema{type: :string, example: "alice"},
+          first_name: %Schema{type: :string, example: "Alice"},
+          last_name: %Schema{type: :string, example: "Martin"},
           email: %Schema{type: :string, format: :email, example: "alice@gotham.gov"},
-          password: %Schema{type: :string, format: :password, minLength: 8}
+          gender: %Schema{type: :string},
+          birth_date: %Schema{type: :string, format: :date},
+          birth_place: %Schema{type: :string}
         },
-        required: [:username, :email, :password]
+        required: [:first_name, :last_name, :email, :gender, :birth_date, :birth_place]
       }
     },
     required: [:user]

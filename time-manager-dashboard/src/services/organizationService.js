@@ -39,7 +39,7 @@ export const lookupOrganization = (name) => call(() => demo.mockLookupOrganizati
 export const joinOrganization = (body) => call(() => demo.mockJoinOrganization(body), '/join-requests', 'POST', body)
 export const getRequestStatus = (reference) => call(() => demo.mockRequestStatus(reference), '/join-requests/status', 'POST', { reference })
 export const listJoinRequests = (id) => call(() => demo.mockListRequests(id), `/organizations/${id}/join-requests`)
-export const approveJoinRequest = (orgId, id, password) => call(() => demo.mockApproveRequest(orgId, id, password), `/organizations/${orgId}/join-requests/${id}/approve`, 'POST', { password })
+export const approveJoinRequest = (orgId, id, credentials) => call(() => demo.mockApproveRequest(orgId, id, credentials), `/organizations/${orgId}/join-requests/${id}/approve`, 'POST', credentials)
 export const rejectJoinRequest = (orgId, id, reason) => call(() => demo.mockRejectRequest(orgId, id, reason), `/organizations/${orgId}/join-requests/${id}/reject`, 'POST', { reason })
 export const listMembers = (id) => call(() => demo.mockListMembers(id), `/organizations/${id}/members`)
 export const setMemberRole = (orgId, id, role) => call(() => demo.mockSetRole(orgId, id, role), `/organizations/${orgId}/members/${id}`, 'PATCH', { role })

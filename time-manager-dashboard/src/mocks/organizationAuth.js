@@ -134,7 +134,7 @@ export function mockListRequests(organizationId) {
   return db.requests.filter((item) => item.organization_id === organizationId).map(requestView)
 }
 
-export async function mockApproveRequest(organizationId, id, password) {
+export async function mockApproveRequest(organizationId, id, { username, password, role = 'employee' }) {
   admin(state(), organizationId)
   const record = await passwordRecord(password)
   const db = state()
@@ -143,7 +143,9 @@ export async function mockApproveRequest(organizationId, id, password) {
   if (!request) fail(404, 'Demande introuvable.')
   if (request.status !== 'pending') fail(409, 'Cette demande a déjà été traitée.')
   if (db.users.some((user) => user.email === request.profile.email)) fail(409, 'Cette adresse possède déjà un compte.')
-  const user = { ...request.profile, ...record, id: nextId(db), username: request.profile.email, organization_id: organizationId, role: 'employee', created_at: new Date().toISOString() }
+  if (!username?.trim()) fail(422, 'Saisissez un nom d’utilisateur.')
+  if (!['employee', 'manager'].includes(role)) fail(422, 'Rôle invalide.')
+  const user = { ...request.profile, ...record, id: nextId(db), username: username.trim(), organization_id: organizationId, role, created_at: new Date().toISOString() }
   db.users.push(user)
   request.status = 'approved'
   request.reviewed_at = new Date().toISOString()

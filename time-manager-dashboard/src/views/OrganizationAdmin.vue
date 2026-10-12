@@ -47,11 +47,12 @@
           <header class="dialog-header"><div><p class="eyebrow">{{ session.organization.name }}</p><h2 id="review-title" class="card-title">{{ dialogTitle }}</h2></div><button class="btn btn-quiet btn-icon" type="button" aria-label="Fermer" :disabled="busy" @click="closeDialog"><AppIcon name="close" /></button></header>
           <div class="dialog-body">
             <template v-if="credentials">
-              <p>Le compte employé est créé. Transmettez ces identifiants à {{ credentials.name }}.</p>
+              <p>Le compte est créé et les identifiants ont été envoyés par e-mail à {{ credentials.name }}.</p>
+              <label class="field"><span class="field-label">Nom d'utilisateur</span><input class="input" :value="credentials.username" readonly /></label>
               <label class="field"><span class="field-label">Email de connexion</span><input class="input" :value="credentials.email" readonly /></label>
               <label class="field"><span class="field-label">Mot de passe défini par vous</span><input class="input" :type="showPassword ? 'text' : 'password'" :value="credentials.password" readonly /></label>
               <button class="link" type="button" @click="showPassword = !showPassword">{{ showPassword ? 'Masquer' : 'Afficher' }} le mot de passe</button>
-              <p class="field-hint">Le mot de passe ne sera plus affiché après fermeture de cette fenêtre. Aucun email n’est envoyé automatiquement par cette interface.</p>
+              <p class="field-hint">Le mot de passe ne sera plus affiché après fermeture de cette fenêtre.</p>
               <button class="btn btn-outline" type="button" @click="copyCredentials">{{ copied ? 'Identifiants copiés' : 'Copier les identifiants' }}</button>
             </template>
             <template v-else-if="roleTarget">
@@ -61,7 +62,9 @@
             <template v-else-if="review">
               <p><strong>{{ review.profile.first_name }} {{ review.profile.last_name }}</strong><br>{{ review.profile.email }}</p>
               <template v-if="decision === 'approve'">
-                <p>Définissez le mot de passe que vous fournirez à cet employé.</p>
+                <p>Définissez le nom d'utilisateur, le rôle et le mot de passe qui seront envoyés par e-mail.</p>
+                <label class="field"><span class="field-label">Nom d'utilisateur</span><input v-model.trim="username" class="input" autocomplete="username" maxlength="100" required /></label>
+                <label class="field"><span class="field-label">Rôle</span><select v-model="role" class="input"><option value="employee">Employé</option><option value="manager">Manager</option></select></label>
                 <label class="field"><span id="employee-password-label" class="field-label">Mot de passe employé</span><input v-model="password" aria-labelledby="employee-password-label" class="input" :type="showPassword ? 'text' : 'password'" autocomplete="new-password" minlength="8" maxlength="128" required /><span class="field-hint">Entre 8 et 128 caractères.</span></label>
                 <button class="link" type="button" @click="showPassword = !showPassword">{{ showPassword ? 'Masquer' : 'Afficher' }} le mot de passe</button>
                 <label class="field"><span class="field-label">Confirmer le mot de passe</span><input v-model="confirmation" class="input" type="password" autocomplete="new-password" required /></label>
@@ -90,7 +93,7 @@ export default {
   name: 'OrganizationAdmin',
   components: { CorrectionPanel, AppIcon, InfoNote, PageHeader },
   props: { session: { type: Object, required: true } },
-  data() { return { requests: [], members: [], loading: false, busy: false, error: '', review: null, decision: '', password: '', confirmation: '', reason: '', dialogError: '', credentials: null, showPassword: false, copied: false, roleTarget: null, returnFocus: null } },
+  data() { return { requests: [], members: [], loading: false, busy: false, error: '', review: null, decision: '', username: '', role: 'employee', password: '', confirmation: '', reason: '', dialogError: '', credentials: null, showPassword: false, copied: false, roleTarget: null, returnFocus: null } },
   computed: {
     pending() { return this.requests.filter((request) => request.status === 'pending') },
     history() { return this.requests.filter((request) => request.status !== 'pending') },
@@ -117,10 +120,10 @@ export default {
     date(value) { return value ? new Date(value.length === 10 ? `${value}T12:00:00` : value).toLocaleDateString('fr-FR') : '—' },
     gender(value) { return GENDERS.find((item) => item.value === value)?.label || '—' },
     roleLabel(role) { return { admin: 'Admin', employee: 'Employé', manager: 'Manager' }[role] || role },
-    startReview(request, decision) { this.review = request; this.decision = decision; this.dialogError = ''; this.password = ''; this.confirmation = ''; this.reason = ''; this.showPassword = false },
+    startReview(request, decision) { this.review = request; this.decision = decision; this.dialogError = ''; this.username = ''; this.role = 'employee'; this.password = ''; this.confirmation = ''; this.reason = ''; this.showPassword = false },
     closeDialog() {
       if (this.busy) return
-      this.review = null; this.roleTarget = null; this.credentials = null; this.password = ''; this.confirmation = ''; this.reason = ''; this.dialogError = ''; this.showPassword = false; this.copied = false
+      this.review = null; this.roleTarget = null; this.credentials = null; this.username = ''; this.password = ''; this.confirmation = ''; this.reason = ''; this.dialogError = ''; this.showPassword = false; this.copied = false
     },
     trapFocus(event) {
       if (event.key === 'Escape') { event.preventDefault(); this.closeDialog() }
@@ -135,6 +138,7 @@ export default {
       this.dialogError = ''
       if (this.review && this.decision === 'approve') {
         const message = passwordError(this.password)
+        if (!this.username) { this.dialogError = 'Saisissez un nom d’utilisateur.'; return }
         if (message || this.password !== this.confirmation) { this.dialogError = message || 'Les mots de passe ne correspondent pas.'; return }
       } else if (this.review && !this.reason.trim()) { this.dialogError = 'Indiquez un motif de refus.'; return }
       this.busy = true
@@ -145,10 +149,11 @@ export default {
           this.roleTarget = null
           notify('Rôle mis à jour.')
         } else if (this.decision === 'approve') {
-          const result = await approveJoinRequest(orgId, this.review.id, this.password)
-          this.credentials = { email: result.user.email, password: this.password, name: `${result.user.first_name} ${result.user.last_name}` }
-          this.password = ''; this.confirmation = ''; this.review = null
-          notify('Demande acceptée. Le compte employé est créé.')
+          const credentials = { username: this.username, password: this.password, role: this.role }
+          const result = await approveJoinRequest(orgId, this.review.id, credentials)
+          this.credentials = { email: result.user.email, username: result.user.username, password: this.password, name: `${result.user.first_name} ${result.user.last_name}` }
+          this.password = ''; this.confirmation = ''; this.username = ''; this.review = null
+          notify('Demande acceptée. Les identifiants ont été envoyés par e-mail.')
         } else {
           await rejectJoinRequest(orgId, this.review.id, this.reason)
           this.review = null; this.reason = ''
@@ -159,7 +164,7 @@ export default {
       finally { this.busy = false }
     },
     async copyCredentials() {
-      try { await navigator.clipboard.writeText(`Organisation : ${this.session.organization.name}\nEmail : ${this.credentials.email}\nMot de passe : ${this.credentials.password}`); this.copied = true }
+      try { await navigator.clipboard.writeText(`Organisation : ${this.session.organization.name}\nNom d'utilisateur : ${this.credentials.username}\nEmail : ${this.credentials.email}\nMot de passe : ${this.credentials.password}`); this.copied = true }
       catch { this.dialogError = 'Copie indisponible. Vous pouvez sélectionner les identifiants manuellement.' }
     },
   },
