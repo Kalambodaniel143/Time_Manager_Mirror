@@ -52,7 +52,8 @@ defmodule TimeManagerWeb.FallbackController do
     |> json(%{errors: Map.put(fields, :detail, detail)})
   end
 
-  def call(conn, {:error, {status, detail}}) when status in [:not_found, :forbidden] do
+  def call(conn, {:error, {status, detail}})
+      when status in [:not_found, :forbidden, :conflict, :unprocessable_entity] do
     conn
     |> put_status(status)
     |> json(%{errors: %{detail: detail}})

@@ -1,3 +1,5 @@
+> Les nouvelles routes métier, les restrictions de création directe et leurs payloads sont décrits dans la [section 13 du contrat](CONTRAT_BACKEND_ORGANISATIONS.md#13-implementation-complete-des-workflows--12-octobre-2026). OpenAPI `/api/openapi` est généré depuis le routeur actuellement exécuté.
+
 # API du Time Manager
 
 L'API REST du Time Manager gère les **utilisateurs** et leurs **rôles**, les **équipes**, les **pointages** (arrivées et départs) et les **temps de travail** (périodes avec un début et une fin). Elle est écrite en Elixir avec Phoenix, et stocke ses données dans PostgreSQL.

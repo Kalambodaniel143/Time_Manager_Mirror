@@ -23,13 +23,14 @@ defmodule TimeManagerWeb.WorkingTimeController do
         in: :query,
         type: :string,
         required: false,
-        description: "Only include slots starting on/after this ISO 8601 timestamp"
+        description: "Window start: include periods ending strictly after this UTC timestamp"
       ],
       end: [
         in: :query,
         type: :string,
         required: false,
-        description: "Only include slots ending on/before this ISO 8601 timestamp"
+        description:
+          "Window end: include periods starting on/before this UTC timestamp; periods are returned uncut"
       ]
     ],
     responses: [
@@ -91,7 +92,11 @@ defmodule TimeManagerWeb.WorkingTimeController do
     with {:ok, user_id} <- cast_id(user_id),
          :ok <- authorize(Authorization.can_edit_hours?(current_user(conn), user_id)),
          {:ok, %WorkingTime{} = working_time} <-
-           WorkingTimes.create_working_time(user_id, working_time_params(params)) do
+           WorkingTimes.create_working_time(
+             user_id,
+             working_time_params(params),
+             current_user(conn)
+           ) do
       conn
       |> put_status(:created)
       |> put_resp_header("location", ~p"/api/workingtime/#{user_id}/#{working_time.id}")
@@ -119,7 +124,11 @@ defmodule TimeManagerWeb.WorkingTimeController do
          :ok <-
            authorize(Authorization.can_edit_hours?(current_user(conn), working_time.user_id)),
          {:ok, %WorkingTime{} = working_time} <-
-           WorkingTimes.update_working_time(working_time, working_time_params(params)) do
+           WorkingTimes.update_working_time(
+             working_time,
+             working_time_params(params),
+             current_user(conn)
+           ) do
       render(conn, :show, working_time: working_time)
     end
   end
@@ -140,7 +149,8 @@ defmodule TimeManagerWeb.WorkingTimeController do
     with {:ok, working_time} <- WorkingTimes.get_working_time(id),
          :ok <-
            authorize(Authorization.can_edit_hours?(current_user(conn), working_time.user_id)),
-         {:ok, %WorkingTime{}} <- WorkingTimes.delete_working_time(working_time) do
+         {:ok, %WorkingTime{}} <-
+           WorkingTimes.delete_working_time(working_time, current_user(conn)) do
       send_resp(conn, :no_content, "")
     end
   end

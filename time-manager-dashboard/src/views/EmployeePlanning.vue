@@ -1,5 +1,5 @@
 <template>
- <div v-if="!demo" class="planning page-stack"><PageHeader title="Mon planning" /><UnavailableFeature title="Planning indisponible" text="Vos affectations ne sont pas encore disponibles dans l’application. Contactez votre responsable pour connaître vos prochaines gardes." /></div>
+ <EmployeePlan v-if="!demo" />
  <div v-else class="planning page-stack">
   <PageHeader :eyebrow="rangeLabel" title="Mon planning"><button class="btn btn-outline" type="button" @click="swapOpen = true">Demander un échange de garde</button></PageHeader>
   <p class="demo-notice">Planning d’exemple · vos affectations réelles et les dates de publication restent à confirmer auprès de votre responsable.</p>
@@ -14,13 +14,13 @@
 import HourTag from '../components/ui/HourTag.vue'
 import PageHeader from '../components/ui/PageHeader.vue'
 import ModalDialog from '../components/ui/ModalDialog.vue'
-import UnavailableFeature from '../components/ui/UnavailableFeature.vue'
+import EmployeePlan from '../components/workforce/EmployeePlan.vue'
 import { employeePlan, org, requestShiftSwap, isDemoData } from '../services/orgService'
 import { auth } from '../stores/auth'
 import { toDateInput } from '../utils/date'
 import { formatRange } from '../utils/hours'
 export default {
- name: 'EmployeePlanning', components: { UnavailableFeature, HourTag, PageHeader, ModalDialog }, props: { now: { type: Date, required: true } }, emits: ['tour'],
+ name: 'EmployeePlanning', components: { EmployeePlan, HourTag, PageHeader, ModalDialog }, props: { now: { type: Date, required: true } }, emits: ['tour'],
  data() { return { selectedWeek: 0, swapOpen: false, swapDay: '', swapReason: '', swapError: '', statuses: { pending: 'En attente', accepted: 'Examinée · échange à organiser', rejected: 'Refusée' } } },
  computed: {
   demo: isDemoData,

@@ -35,11 +35,11 @@ export default {
     },
     links() {
       const extra = this.role === 'administrator' ? [
-        { label: this.demo ? 'Paie du mois' : 'Heures du mois', icon: 'check-circle', to: { name: 'payroll' } },
+        { label: 'Paie du mois', icon: 'check-circle', to: { name: 'payroll' } },
         ...(!this.demo ? [...(this.organizationAccess ? [{ label: 'Utilisateurs et rôles', icon: 'shield', to: { name: 'adminUsers' } }] : []), { label: 'Équipes', icon: 'users', to: { name: 'adminTeams' } }, { label: 'Vue des heures', icon: 'clock', to: { name: 'team' } }] : []),
       ] : this.role === 'manager' && !this.demo ? [{ label: 'Mes équipes', icon: 'users', to: { name: 'adminTeams' } }] : []
       if (this.role !== 'employee' && this.userId) extra.push({ label: 'Mon pointage', icon: 'clock', to: { name: 'clock', params: { userid: this.userId } } }, this.hoursLink)
-      return [...this.primaryLinks, ...extra, this.accountLink]
+      return [...this.primaryLinks, ...extra, ...(!this.demo ? [{ label: 'Notifications', icon: 'message', to: { name: 'notifications' } }] : []), this.accountLink]
     },
     mobileLinks() { return [...this.primaryLinks, this.accountLink] },
     homeRoute() { return this.primaryLinks[0].to },

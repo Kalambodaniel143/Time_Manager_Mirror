@@ -1,10 +1,19 @@
-# Frontend : raccordement au backend
+# Frontend — Time Manager
 
-État du raccordement après vérification du routeur Phoenix du dépôt et de la spécification `/api/openapi` du serveur `http://34.155.104.175:4000`, le 12 octobre 2026. Le code frontend est modifié localement ; aucun déploiement ni changement de base distante n’a été effectué.
+Le frontend Vue utilise désormais les API des comptes, équipes, pointages, corrections, feuilles hebdomadaires, plannings, échanges, absences, paie, permissions, journal et notifications. La lecture vocale utilise le navigateur ; ses préférences sont enregistrées dans le compte.
 
-## Démarrer en mode réel
+Ces changements sont présents dans le dépôt local. Le 12 octobre 2026, la spécification du serveur `http://34.155.104.175:4000/api/openapi` ne contenait pas encore les nouvelles routes `/workforce/context`, `/plans`, `/payroll`, `/correction-requests` et `/auth/preferences`. Le [déploiement](DEPLOIEMENT_WORKFLOWS.md) du nouveau backend et de ses migrations est nécessaire pour les utiliser sur ce serveur.
 
-Dans `time-manager-dashboard/.env.local` :
+## Démarrage
+
+Node `^22.18.0` ou `>=24.12.0` est requis. Dans `time-manager-dashboard` :
+
+```bash
+npm install
+npm run dev
+```
+
+Le fichier `.env.local` sélectionne la connexion :
 
 ```env
 VITE_AUTH_USE_MOCK=false
@@ -13,71 +22,80 @@ VITE_API_URL=/api
 VITE_BACKEND_URL=http://34.155.104.175:4000
 ```
 
-Puis `npm run dev` depuis `time-manager-dashboard`. Redémarrer Vite après modification des variables. Le navigateur appelle `/api` sur son origine Vite ; le proxy transmet au backend distant. Un serveur Phoenix local n’est pas nécessaire dans cette configuration.
+Pour tester le nouveau code avant son déploiement, remplacer seulement `VITE_BACKEND_URL` par `http://localhost:4000`, appliquer les migrations dans `time_manager` puis lancer ce backend local. Le compte doit exister dans cette base. Pour un backend déjà lancé, il n’est pas nécessaire d’en démarrer un second. Redémarrer Vite après changement de configuration.
 
-`VITE_BACKEND_URL` configure seulement le proxy de développement. En production, `.env.production` conserve `/api` et le serveur web doit assurer ce proxy. Les variables `VITE_*` sont publiques et ne doivent contenir aucun secret.
+Le navigateur appelle `/api` sur son origine Vite. Le proxy transmet au backend sélectionné et conserve les cookies. En production, Nginx transmet `/api` au service Phoenix ; `VITE_BACKEND_URL` concerne seulement le développement. Les variables `VITE_*` sont publiques et ne doivent contenir aucun secret.
 
-## Fonctionnalités réellement raccordées
+## Architecture
 
-| Écran/fonction | API utilisée | Comportement |
+- `main.js` crée Vue, installe le routeur et monte `App.vue`.
+- `App.vue` fournit la session, le thème, les préférences serveur et le contexte de l’utilisateur aux pages.
+- `router/index.js` applique les règles de navigation. Les autorisations réelles sont répétées dans les contrôleurs et contextes Phoenix.
+- `stores/auth.js` conserve l’utilisateur et le jeton CSRF. Le JWT reste dans un cookie HttpOnly.
+- `services/http.js` ajoute `X-CSRF-Token`, transmet le cookie et traduit les erreurs API. Il supporte les réponses JSON et le CSV texte.
+- `services/workforceService.js` fournit les nouvelles opérations et le contexte réactif des règles/permissions/préférences. Les listes ou rapports malformés sont refusés.
+- Les composants de `components/workforce` gèrent les formulaires du planning, des échanges, des absences et les commandes vocales.
+- `utils/speech.js` sélectionne une voix de l’appareil, gère la vitesse, l’arrêt et l’annulation des lectures précédentes.
+
+## Écrans et routes
+
+Toutes les routes du tableau sont préfixées par `/api`.
+
+| Écran | API | Fonction |
 |---|---|---|
-| Connexion, restauration, déconnexion | `POST /auth/login`, `GET /auth/session`, `POST /auth/logout` | Cookie JWT HttpOnly ; jeton CSRF transmis par le transport partagé. Aucun utilisateur fictif en cas d’erreur. |
-| Rejoindre Gotham | `GET /organizations/lookup?name=Gotham%20City`, `POST /join-requests` | Profil réel, organisation résolue par le front ; aucun choix libre d’organisation/rôle et aucun compte actif avant acceptation. |
-| Suivi d’adhésion | `POST /join-requests/status` | Référence privée de la demande. |
-| Administration Gotham | `/organizations/:id/join-requests`, `/:request/approve`, `/:request/reject`, `/members` | Demandes et membres réels ; acceptation avec mot de passe fourni par l’administrateur. Nécessite un compte rattaché à Gotham. |
-| Rôle des membres | `PATCH /organizations/:id/members/:userId` | Promotion employé/manager contrôlée par le serveur. |
-| Utilisateurs et rôles | `GET /users`, `GET /roles`, `PUT /users/:id/role`, `DELETE /users/:id` | Comptes du périmètre de l’administrateur ; compte privilégié protégé dans l’interface. |
-| Mon compte : identité et mot de passe | `PUT /users/:id` | Identifiant, email, prénom/nom ; changement de mot de passe avec mot de passe actuel. Disponible aussi pour les comptes réels de Gotham. |
-| Suppression personnelle | `DELETE /users/:id` | Confirmation par mot de passe ; déconnexion uniquement après succès. Le backend refuse le dernier administrateur. |
-| Équipes et droits / Mes équipes | `GET/POST /teams`, `PUT/DELETE /teams/:id`, `POST /teams/:id/members`, `DELETE /teams/:id/members/:userId` | Composition et manager réels ; écriture réservée à l’administration. L’écran des droits réutilise cette gestion réelle. |
-| Mon équipe / Vue des heures | `GET /teams`, `GET /workingtime/:id`, `GET /clocks/:id` | Membres des équipes réellement gérées ; sélection d’équipe ; durées et alertes de départ manquant. Les managers n’affichent pas les membres d’une équipe qu’ils ne gèrent pas. |
-| Pointage | `GET/POST /clocks/:id` | Arrivée, pause, reprise et départ personnels. Les périodes enregistrées sont rechargées après succès. |
-| Départ oublié | `POST /clocks/:userId/:clockId/complete` | Complète son propre départ selon les validations du backend. |
-| Mes heures / fiche d’un agent | `GET /workingtime/:userId`, `GET /workingtime/:userId/:id` | Tableau et cartes depuis l’API ; accès aux fiches et aux graphiques. Une journée sans période n’est pas déclarée en repos. |
-| Ajout/correction/suppression d’une période | `POST /workingtime/:userId`, `PUT/DELETE /workingtime/:id` | Édition directe par les responsables autorisés, selon les contrôles du serveur. Aucun faux workflow d’approbation. |
-| Graphiques | `GET /workingtime/:userId` | Histogramme, évolution et répartition par jour de la semaine ; valeurs fixes supprimées. |
-| Heures du mois / CSV | `GET /users`, `GET /teams`, `GET /workingtime/:userId` | Durées réelles par agent, liste de ses équipes, total et export CSV. Aucun calcul de salaire. |
+| Connexion/session | `/auth/login`, `/auth/session`, `/auth/logout` | Authentification réelle, restauration et déconnexion. |
+| Rejoindre Gotham | `/organizations/lookup`, `/join-requests`, `/join-requests/status` | Demande d’adhésion et suivi par référence privée. |
+| Administration Gotham | `/organizations/:id/join-requests`, `/:request/approve`, `/:request/reject`, `/members` | Décisions et gestion des membres ; le mot de passe est fourni par l’administrateur. |
+| Utilisateurs et rôles | `/users`, `/roles`, `/users/:id/role` | Lecture des comptes et promotion employé/manager ; création directe interdite. |
+| Mon compte | `/users/:id`, `/auth/preferences` | Identité, mot de passe, suppression personnelle, thème, textes renforcés, guide et voix. |
+| Équipes | `/teams`, `/teams/:id`, `/teams/:id/members` | Création, renommage, suppression, manager et composition. |
+| Équipes et droits | `/teams/:id/permissions`, `/organizations/:id/rules`, `/audit-events` | Permissions réelles, règles de l’organisation et historique. |
+| Pointage | `/clocks/:id`, `/clocks/:id/:clockId/complete` | Arrivée, pause, reprise, départ et départ oublié. |
+| Mes heures / fiches | `/workingtime/:id`, `/workingtime/:userId/:periodId`, `/users/:id/week-notes/:week` | Périodes réelles et note partagée. Les périodes traversant minuit sont réparties sur leurs journées sans changer l’objet original. |
+| Correction des heures | `/workingtime/:id/correction-requests`, `/correction-requests`, `/correction-requests/:id` | Proposition, examen, refus motivé, acceptation et historique. |
+| Mon équipe | `/teams`, `/workingtime/:id`, `/clocks/:id`, `/weekly-sheets` | Agents autorisés, heures, alertes de départ, notes, validation groupée et état des semaines. |
+| Validation/clôture | `/weekly-sheets/validate`, `/weekly-sheets/:userId/:week/:action` | Validation, clôture ou réouverture motivée. Les semaines verrouillées bloquent les mutations serveur. |
+| Planning d’équipe | `/plans`, `/teams/:id/plans`, `/plans/:id`, `/plans/:id/shifts`, `/plans/:id/publish` | Brouillons, gardes, modification du brouillon vide, retrait futur et publication versionnée. |
+| Mon planning / prochaines gardes | `/plans` | Affectations publiées, dates et lieux réels. |
+| Échanges | `/shift-swaps`, `/shift-swaps/:id/consent`, `/shift-swaps/:id` | Proposition, accord du collègue et décision du responsable. |
+| Congés et absences | `/absence-requests`, `/absence-requests/:id`, `/:id/cancel`, `/:id/payment` | Demande, examen, annulation et confirmation des heures rémunérables. |
+| Paie du mois | `/payroll`, `/payroll/export`, `/users/:id/payroll-profile` | Catégories calculées côté serveur, taux horaire, montant, état de validation et CSV. |
+| Notifications | `/notifications`, `/notifications/:id/read` | Publications et décisions reçues dans l’application. |
+| Graphiques | `/workingtime/:id` | Histogramme, évolution et répartition calculés depuis les périodes réelles. |
 
-Toutes les routes sont préfixées par `/api`. Les autorisations réelles restent celles du serveur, même si un bouton est masqué dans l’interface.
+## Permissions et comportements importants
 
-## Comptes historiques sans organisation
+- L’employé pointe pour lui-même, consulte ses heures et envoie ses demandes. Il peut lire les gardes publiées des équipes auxquelles il appartient pour proposer un échange.
+- Le manager intervient uniquement sur les membres des équipes qu’il gère. Ses permissions `correct`, `validate` et `publish` sont vérifiées sur le serveur et reflétées dans les boutons.
+- L’administration reste limitée à son organisation. Les permissions fines s’appliquent aux managers, pas à l’administrateur.
+- Aucun responsable ne valide ou n’accepte sa propre correction/absence. L’édition directe de ses propres périodes est également interdite ; le pointage personnel reste disponible.
+- Une rétrogradation invalide l’accès aux brouillons et aux opérations de manager dès les requêtes suivantes, même si l’ancien identifiant reste affecté comme manager d’une équipe.
+- Une validation groupée est atomique. Un départ manquant ou une correction en attente bloque la validation.
+- Une semaine validée ou clôturée doit être rouverte avant modification de ses heures, notes ou données de paie liées aux absences. Les horaires initiaux et les décisions sont conservés dans le suivi et le journal.
+- Les modifications de planning transmettent sa `revision`. Un formulaire périmé produit une erreur explicite. Les employés voient la dernière publication pendant la préparation d’un nouveau brouillon.
+- Un échange nécessite le consentement du collègue puis un responsable autorisé à valider et publier. La permutation et la mise à jour publiée sont atomiques. Modifier/supprimer une garde invalide ses échanges en attente.
 
-La réponse backend peut légitimement contenir `organization: null`, `user.organization_id: null` et des noms absents. Ces comptes peuvent se connecter avec leur identifiant/email réels. Ils accèdent aux utilisateurs, équipes et heures de l’espace sans organisation que le backend autorise, sans être transformés en membres de Gotham. Le compte doit être rattaché côté serveur pour ouvrir Administration Gotham ou traiter les demandes d’adhésion.
+Les comptes historiques sans organisation restent accessibles dans leur espace autorisé. Aucune organisation fictive n’est créée pour eux. Les réglages d’organisation et les adhésions Gotham nécessitent un rattachement réel.
 
-Les incohérences d’identifiants d’organisation, de rôle ou d’identifiant utilisateur restent refusées. Une organisation différente de Gotham reste refusée par ce parcours.
+## Calcul des heures et de la paie
 
-## Durées et limites des statistiques
+Le fuseau de calcul de cette version est `Etc/UTC`. Les formulaires de planning et d’absence le précisent. Les API rendent les instants en UTC.
 
-- Le backend fournit les périodes terminées avec `start`, `end` et `user_id`. Les pauses ne sont pas comptées lorsque les périodes fournies les excluent.
-- Les graphiques et le relevé mensuel découpent les périodes aux limites des jours/mois en UTC, y compris les services traversant minuit. Le changement d’heure local ne modifie pas la durée UTC.
-- Un agent membre de plusieurs équipes n’est compté qu’une fois dans le total mensuel. Les lignes restent par agent : additionner plusieurs totaux d’équipes pourrait compter ses heures plusieurs fois.
-- Le relevé charge les périodes par lots de quatre utilisateurs. Une lecture en erreur bloque l’export ; elle n’est pas remplacée par zéro ou par une donnée fictive.
-- L’API n’a pas de route d’agrégation mensuelle ni de pagination dans ce contrat. Pour de gros volumes, prévoir une agrégation serveur plutôt que récupérer tout l’historique de chaque compte.
-- Les catégories jour/nuit des cartes sont des estimations frontend à partir des horaires. Sans règles serveur, aucun seuil d’heures supplémentaires ni multiplicateur de paie n’est appliqué en réel.
+Le serveur découpe les périodes aux limites des heures, jours, semaines et mois. Il tient compte des heures de la semaine précédant le début du mois pour calculer correctement le seuil hebdomadaire. Les pauses sont exclues par les périodes distinctes créées lors des pointages.
 
-## Ce qui reste sans backend
+Les catégories sont distinctes : travail de jour, nuit hors heures supplémentaires, heures supplémentaires, travail donnant droit à récupération, astreinte. Les heures supplémentaires utilisent leur propre coefficient ; elles ne cumulent pas le coefficient de nuit. Les valeurs initiales du scénario sont nuit ×1,5 et heures supplémentaires ×2 après 40 heures hebdomadaires, modifiables par l’administration.
 
-| Fonction manquante | Affichage en mode réel | Travail serveur nécessaire |
-|---|---|---|
-| Planning employé et équipe, prochaines gardes, publication | Message d’indisponibilité ; pas de gardes fictives. | Affectations persistantes, horaires/lieux, état brouillon/publié et versions. |
-| Demandes d’échange de garde | Actions indisponibles. | Demandes, décisions et permutation transactionnelle des gardes. |
-| Demandes de correction avec examen/raison/historique | Actions de demande indisponibles ; indication de contacter le responsable. | Routes de `correctionService.js` : liste, création et décision ; contrôle de périmètre et conservation des horaires initiaux. Ces routes n’existent pas dans le routeur vérifié. L’édition directe des périodes est, elle, raccordée. |
-| Notes hebdomadaires partagées | Formulaire masqué. | Stockage lié à utilisateur/semaine, visibilité salarié/responsable autorisé. |
-| Validation groupée, clôture ou réouverture des semaines | Boutons et états de validation indisponibles. | Feuilles persistantes, états/dates/validateur, validation atomique, contrôle des anomalies et interdiction d’auto-validation. |
-| Permissions fines valider/corriger/publier | Pas de cases à cocher de démonstration. | Permissions distinctes par utilisateur/équipe et contrôle backend. Les rôles et la composition des équipes sont déjà réels. |
-| Règles d’organisation : quotas de nuits, seuils, délai de publication | Aucun quota de démonstration appliqué aux comptes réels. | Lecture/écriture de règles effectives par organisation. |
-| Journal métier et notifications de ces changements | Historique fictif masqué. | Événements d’audit, notifications et états d’envoi. |
-| Paie : salaire, majorations, récupération, astreintes, congés/arrêts | Relevé de durées réelles seulement. | Catégories et politiques contractuelles, calculs persistants, clôture et intégration paie. |
-| Lecture vocale | Non implémentée. | Une première lecture avec synthèse vocale du navigateur peut être réalisée sans API backend. |
-| Préférences d’affichage et progression du guide synchronisées | Conservées dans ce navigateur. | Préférences de compte serveur si une synchronisation entre appareils est souhaitée. |
+Les absences de congé/maladie sont suivies séparément. Leur rémunération doit être activée dans les règles et leurs heures rémunérables confirmées par un responsable. Une absence de plusieurs jours ne devient pas automatiquement une durée travaillée continue. Pour une absence traversant un mois, la quantité confirmée est répartie proportionnellement à son intervalle ; les heures réellement travaillées en chevauchement sont déduites et signalées comme une régularisation nécessaire.
 
-Le backend expose encore la création publique d’organisation et l’inscription directe. Le frontend ne les propose pas ; leur restriction côté serveur reste nécessaire pour garantir la politique Gotham unique et administrateur créé manuellement.
+La récupération prise est distincte du travail donnant droit à récupération et n’augmente pas le total travaillé. Un montant n’est fourni que si le taux horaire est renseigné et les heures d’absence rémunérables connues. Les calculs monétaires utilisent Decimal et un arrondi final à deux décimales. Ce calcul correspond au scénario du projet, sans charges, retenues, déclarations ou transfert vers un logiciel de paie externe.
 
-## Simulation et stockage local
+Les catégories de couleur des cartes hebdomadaires restent une estimation de présentation ; les catégories et montants du relevé financier sont ceux calculés par le serveur.
 
-`npm run dev:demo` active explicitement les deux indicateurs de simulation. Les mocks sont conservés pour cette utilisation ; ils ne sont pas un stockage de secours lorsque l’API échoue. Les écrans des équipes/users backend sont réservés au mode réel.
+## Stockage et simulation
 
-En réel, le frontend ignore les anciens stocks métier `tm-org` et les jeux de gardes/paie/membres de démonstration. Il conserve seulement les préférences d’affichage et l’état du guide dans `localStorage`, et le jeton CSRF dans `sessionStorage`. Le cookie JWT est géré par le navigateur et n’est pas lisible en JavaScript.
+`npm run dev:demo` active explicitement les deux indicateurs de simulation. Les mocks restent utilisables pour cette démonstration et ne sont jamais un stockage de secours lorsque l’API échoue.
+
+En réel, les données métier sont dans PostgreSQL. Les anciens stocks `tm-org` et les membres/plannings/paies fictifs sont ignorés. Le navigateur conserve un cache de thème/guide et le jeton CSRF dans `sessionStorage` ; les préférences du compte viennent de l’API après connexion. Les préférences vocales sont synchronisées, mais les voix disponibles dépendent de l’appareil. La lecture est déclenchée par l’utilisateur, et s’arrête à la fermeture du guide ou du lecteur.
 
 ## Vérification
 
@@ -87,4 +105,17 @@ npx eslint src dev test vite.config.js
 node --test test/*.test.js
 ```
 
-Les tests couvrent les comptes sans organisation, le maintien du périmètre des managers, les données locales ignorées, les erreurs sans repli sur des mocks, les limites de mois/minuit/changement d’heure, la déduplication du relevé, le CSV et les origines du proxy. Ils complètent les tests de connexion, pointage, départ oublié et suppression existants.
+Depuis `time_manager` avec un Elixir compatible et la base de tests :
+
+```bash
+mix precommit
+```
+
+Les tests couvrent les accès entre organisations, la rétrogradation, les validations atomiques, les propositions périmées, les appels concurrents, les publications et échanges, les frontières semaine/mois, les absences rémunérables, le CSV, le transport CSRF, les préférences, les voix et les réponses serveur malformées.
+
+## Limites qui restent hors du plan livré
+
+- Publication et décisions produisent des notifications dans l’application ; les envois automatiques par email/SMS et rappels programmés ne sont pas ajoutés.
+- La lecture vocale dépend du support du navigateur et des voix de l’appareil.
+- Le fuseau configurable au-delà d’UTC, les charges/net fiscal, les déclarations et l’intégration d’un logiciel de paie nécessitent un contrat métier supplémentaire.
+- Journal et notifications sont limités aux 200/100 dernières entrées ; une pagination complète et l’archivage des anciens plans seraient utiles pour un usage à grande échelle.

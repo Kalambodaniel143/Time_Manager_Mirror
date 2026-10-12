@@ -85,6 +85,8 @@ test('monthly reports deduplicate users across teams and reject partial server f
   globalThis.fetch = async url => {
     paths.push(url)
     if (url === '/api/users') return response([user, user])
+    if (url === '/api/workforce/context') return response({ rules: { maxConsecutiveNights: 3, maxNightsPerWeek: 0, maxNightsPerMonth: 0, overtimeThreshold: 40 }, preferences: {}, permissions: [{team_id:1,manager_id:99,validate:false,correct:true,publish:false}] })
+    if (url.startsWith('/api/weekly-sheets')) return response([])
     if (url === '/api/teams') return response([{ id: 1, name: 'Première', members: [user] }, { id: 2, name: 'Seconde', members: [user] }])
     assert.equal(url, '/api/workingtime/17')
     return response([{ start: '2026-10-03 08:00:00', end: '2026-10-03 10:30:00' }])
@@ -102,11 +104,13 @@ test('CSV quotes personal labels and prevents spreadsheet formulas', () => {
   assert.ok(csv.includes('"\'=1+1"')); assert.ok(csv.includes('"a""b@example.test"')); assert.ok(csv.includes('"Une;Deux"')); assert.ok(csv.includes('"2,50"'))
 })
 
-test('only managed teams populate the manager overview; unavailable validation and correction APIs are never called', async () => {
+test('only managed teams populate the overview; effective server permissions control validation', async () => {
   store.auth.user = { id: 99, role: 'manager', username: 'manager' }
   const calls = []
   globalThis.fetch = async url => {
     calls.push(url)
+    if (url === '/api/workforce/context') return response({ rules: { maxConsecutiveNights: 3, maxNightsPerWeek: 0, maxNightsPerMonth: 0, overtimeThreshold: 40 }, preferences: {}, permissions: [{team_id:1,manager_id:99,validate:false,correct:true,publish:false}] })
+    if (url.startsWith('/api/weekly-sheets')) return response([])
     if (url === '/api/teams') return response([{ id: 1, name: 'Mon équipe', manager: { id: 99 }, members: [{ ...user, role: 'employee' }] }, { id: 2, name: 'Autre équipe', manager: { id: 98 }, members: [{ id: 20, username: 'foreign' }] }])
     assert.ok(url.includes('/17'))
     return response([])
@@ -120,7 +124,7 @@ test('only managed teams populate the manager overview; unavailable validation a
   vm.selection = ['admin']; vm.validate(); assert.deepEqual(org.org.validated, {})
   let correctionReads = 0
   CorrectionPanel.watch.userId.handler.call({ demo: false, load() { correctionReads += 1 } })
-  assert.equal(correctionReads, 0)
+  assert.equal(correctionReads, 1)
   assert.equal(calls.some(url => url.includes('correction-requests')), false)
 })
 

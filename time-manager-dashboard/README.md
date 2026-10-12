@@ -43,4 +43,4 @@ npx eslint src dev test vite.config.js
 node --test test/*.test.js
 ```
 
-Les écrans réels utilisent les comptes, équipes, pointages et périodes de l’API. Graphiques et relevés CSV sont calculés depuis ces périodes. Les fonctions sans endpoint restent indisponibles : aucun planning ou relevé de paie fictif n’est utilisé en cas d’échec serveur.
+Les écrans réels utilisent les comptes, équipes, pointages et périodes de l’API. Graphiques et relevés CSV sont calculés depuis ces périodes. Les nouveaux parcours (planning, corrections, validations, absences, paie et notifications) nécessitent le nouveau backend et ses migrations. Voir [le déploiement](../docs/DEPLOIEMENT_WORKFLOWS.md). Aucun résultat fictif n’est utilisé en cas d’échec serveur.

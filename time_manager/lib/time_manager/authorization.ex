@@ -69,7 +69,7 @@ defmodule TimeManager.Authorization do
   but never for themselves (no one validates their own hours); employees never.
   """
   def can_edit_hours?(%User{} = user, target_id) do
-    administrator_of?(user, target_id) or (user.id != target_id and manages?(user, target_id))
+    TimeManager.Workforce.allowed?(user, target_id, :correct)
   end
 
   @doc "Clocking in or out is personal: everyone clocks for themselves only."

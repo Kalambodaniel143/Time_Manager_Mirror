@@ -23,19 +23,19 @@
             </span>
           </div>
           <p class="card-subtitle">
-            {{ canEdit ? 'Corrigez les périodes enregistrées dans votre périmètre.' : demo ? 'Une erreur ? Proposez une correction : votre responsable l’examine avant toute modification.' : 'Une erreur ? Contactez votre responsable pour corriger vos horaires.' }}
+            {{ canEdit ? 'Corrigez les périodes enregistrées dans votre périmètre.' : 'Une erreur ? Proposez une correction : votre responsable l’examine avant toute modification.' }}
           </p>
         </header>
 
         <p v-if="error" class="field-error" role="alert">Impossible de charger vos heures : {{ error }}</p>
         <div v-else-if="loading && workingTimes.length === 0" class="skeleton table-skeleton"></div>
         <!-- Seul l'agent lui-même peut compléter son départ : l'API refuse les autres. -->
-        <WeekTable v-else :monday="monday" :entries="workingTimes" :now="now" :user-id="isSelf ? userId : null" :can-edit="canEdit" :can-request="isSelf && demo" @edit="openEdit" @create="openCreate" @completed="onDepartureCompleted" @request="openRequest" />
+        <WeekTable v-else :monday="monday" :entries="workingTimes" :now="now" :user-id="isSelf ? userId : null" :can-edit="canEdit && weekStatus === 'open'" :can-request="isSelf && weekStatus === 'open'" @edit="openEdit" @create="openCreate" @completed="onDepartureCompleted" @request="openRequest" />
       </section>
 
       <aside class="side">
         <LastWeekCard title="Total de la semaine" :buckets="buckets" :target="target" :loading="loading" :error="error" />
-        <ManagerNote v-if="username && demo" :username="username" :week-key="weekKey" />
+        <ManagerNote v-if="username || !demo" :user-id="userId" :username="username" :week-key="weekKey" />
       </aside>
     </div>
     <CorrectionPanel :user-id="userId" :can-review="!isSelf && canEdit" :refresh-key="correctionVersion" @changed="onDepartureCompleted" />
@@ -54,9 +54,10 @@ import ManagerNote from './hours/ManagerNote.vue'
 import WeekTable from './hours/WeekTable.vue'
 import { lastWeekMonday, org, isDemoData } from '../services/orgService'
 import { getWorkingTimes } from '../services/workingTimeService'
-import { canEditHours, isSelf } from '../stores/auth'
+import { getNote } from '../services/workforceService'
+import { auth, canEditHours, isSelf } from '../stores/auth'
 import { toDateInput } from '../utils/date'
-import { addDays, formatRange, isoWeek, mondayOf, weekBuckets, weekFilters } from '../utils/hours'
+import { addDays, clipEntries, formatRange, isoWeek, mondayOf, weekBuckets, weekFilters } from '../utils/hours'
 
 export default {
   name: 'WorkingTimes',
@@ -73,9 +74,11 @@ export default {
 
   data() {
     return {
+      requestVersion: 0,
       userId: Number(this.userID),
       requestEntry: null,
       correctionVersion: 0,
+      weekStatus: 'open',
       workingTimes: [],
       loading: false,
       error: '',
@@ -122,7 +125,7 @@ export default {
     },
 
     buckets() {
-      return weekBuckets(this.workingTimes, this.target)
+      return weekBuckets(clipEntries(this.workingTimes, this.monday, addDays(this.monday,7)), this.target)
     },
   },
 
@@ -148,6 +151,7 @@ export default {
   },
 
   beforeUnmount() {
+    this.requestVersion += 1
     clearInterval(this.minuteTimer)
   },
 
@@ -158,17 +162,15 @@ export default {
       this.$emit('changed')
     },
     async getWorkingTimes() {
-      this.loading = true
-      this.error = ''
-
+      const version = this.requestVersion = (this.requestVersion || 0) + 1
+      const userId = this.userId, filters = this.filters, weekKey = this.weekKey
+      this.loading = true; this.error = ''
       try {
-        this.workingTimes = (await getWorkingTimes(this.userId, this.filters)) || []
+        const [entries, note] = await Promise.all([getWorkingTimes(userId, filters), auth.user && !this.demo ? getNote(userId, weekKey) : { status: 'open' }])
+        if (version === this.requestVersion) { this.workingTimes = entries || []; this.weekStatus = note.status }
       } catch (error) {
-        this.error = error.message
-        this.workingTimes = []
-      } finally {
-        this.loading = false
-      }
+        if (version === this.requestVersion) { this.error = error.message; this.workingTimes = [] }
+      } finally { if (version === this.requestVersion) this.loading = false }
     },
 
     shiftWeek(days) {

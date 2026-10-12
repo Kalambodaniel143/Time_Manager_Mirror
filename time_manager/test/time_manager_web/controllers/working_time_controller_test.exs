@@ -55,7 +55,9 @@ defmodule TimeManagerWeb.WorkingTimeControllerTest do
       conn = log_in(conn, ctx.member)
 
       assert json_response(
-               post(conn, ~p"/api/workingtime/#{ctx.member.id}", workingtime: @period),
+               post(conn, ~p"/api/workingtime/#{ctx.member.id}",
+                 workingtime: %{start: "2026-09-23T08:00:00Z", end: "2026-09-23T09:00:00Z"}
+               ),
                403
              )
 
@@ -71,7 +73,9 @@ defmodule TimeManagerWeb.WorkingTimeControllerTest do
       conn = log_in(conn, ctx.manager)
 
       assert json_response(
-               post(conn, ~p"/api/workingtime/#{ctx.member.id}", workingtime: @period),
+               post(conn, ~p"/api/workingtime/#{ctx.member.id}",
+                 workingtime: %{start: "2026-09-23T08:00:00Z", end: "2026-09-23T09:00:00Z"}
+               ),
                201
              )
 

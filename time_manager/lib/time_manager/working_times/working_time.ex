@@ -5,6 +5,7 @@ defmodule TimeManager.WorkingTimes.WorkingTime do
   schema "workingtime" do
     field :start, :utc_datetime
     field :end, :utc_datetime
+    field :kind, :string, default: "work"
 
     belongs_to :user, TimeManager.Accounts.User
 
@@ -13,9 +14,15 @@ defmodule TimeManager.WorkingTimes.WorkingTime do
 
   def changeset(working_time, attrs) do
     working_time
-    |> cast(attrs, [:start, :end])
+    |> cast(attrs, [:start, :end, :kind])
+    |> validate_inclusion(:kind, ["work", "oncall", "recup"])
     |> validate_required([:start, :end, :user_id])
     |> validate_end_after_start()
+    |> validate_change(:end, fn :end, date ->
+      if DateTime.compare(date, DateTime.utc_now()) == :gt,
+        do: [end: "must not be in the future"],
+        else: []
+    end)
     |> foreign_key_constraint(:user_id)
     |> check_constraint(:end, name: :end_after_start, message: "must be after start")
   end

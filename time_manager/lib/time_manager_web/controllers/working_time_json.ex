@@ -14,7 +14,8 @@ defmodule TimeManagerWeb.WorkingTimeJSON do
       id: working_time.id,
       start: format_datetime(working_time.start),
       end: format_datetime(working_time.end),
-      user_id: working_time.user_id
+      user_id: working_time.user_id,
+      kind: working_time.kind
     }
   end
 
