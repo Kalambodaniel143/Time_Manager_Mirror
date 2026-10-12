@@ -5,7 +5,7 @@
 
   <div v-else class="shell">
     <a class="skip-link" href="#main-content">Aller au contenu</a>
-    <AppSidebar :role="user.role" :theme="theme" :space="persona.space" :user-id="userId" :organization-access="Boolean(organizationSession)" @update:theme="setTheme">
+    <AppSidebar :role="user.role" :theme="theme" :space="persona.space" :user-id="userId" :organization-access="Boolean(citySession)" :demo="Boolean(organizationSession)" @update:theme="setTheme">
       <AccountIdentity v-if="organizationSession" :session="organizationSession" @logout="logout" />
       <User v-else :user="user" @logout="logout" />
     </AppSidebar>
@@ -37,13 +37,13 @@ import { RouterView } from 'vue-router'
 import ToastStack from './components/ToastStack.vue'
 import User from './components/User.vue'
 import AccountIdentity from './components/auth/AccountIdentity.vue'
-import { AUTH_USE_MOCK } from './services/organizationService'
 import WorkingTimes from './components/WorkingTimes.vue'
 import AppSidebar from './components/layout/AppSidebar.vue'
 import OnboardingTour from './components/ui/OnboardingTour.vue'
 import { personaFor } from './services/orgService'
 import { getWorkingTimes } from './services/workingTimeService'
-import { auth, logout, fetchMe, startOrganizationSession } from './stores/auth'
+import { auth, logout, clearSession, fetchMe, startOrganizationSession } from './stores/auth'
+import { notify } from './utils/toast'
 import { durationInHours } from './utils/date'
 import { applyTheme, applyStrongText, readStrongText, readStorage, readTheme, writeStorage, writeTheme } from './utils/session'
 
@@ -66,6 +66,7 @@ export default {
       theme: 'light',
       workingTimes: [],
       loadingStats: false,
+      statsVersion: 0,
       tourOpen: false,
       tourSteps: TOUR_STEPS,
       now: new Date(),
@@ -80,8 +81,10 @@ export default {
 
     organizationSession() { return auth.organizationSession },
 
+    citySession() { return auth.organizationSession || (auth.organization ? { organization: auth.organization, user: auth.user, role: auth.user?.role === 'administrator' ? 'admin' : auth.user?.role } : null) },
+
     publicBindings() {
-      return AUTH_USE_MOCK ? { theme: this.theme, onLogin: this.loginOrganization, 'onUpdate:theme': this.setTheme } : {}
+      return { theme: this.theme, onLogin: this.loginOrganization, 'onUpdate:theme': this.setTheme }
     },
 
     userId() {
@@ -117,7 +120,7 @@ export default {
     routeProps() {
       const name = this.$route.name
       if (name === 'profile') return { theme: this.theme }
-      if (name === 'organization') return { session: this.organizationSession }
+      if (name === 'organization') return { session: this.citySession }
 
       if (name === 'overview') {
         return { persona: this.persona, userId: this.userId, workingTimes: this.workingTimes, loading: this.loadingStats, now: this.now }
@@ -129,7 +132,7 @@ export default {
     },
 
     routeListeners() {
-      if (this.$route.name === 'profile') return { 'onUpdate:theme': this.setTheme, onLogout: this.logout, onTour: this.openTour }
+      if (this.$route.name === 'profile') return { 'onUpdate:theme': this.setTheme, onLogout: this.logout, onTour: this.openTour, onDeleted: this.onAccountDeleted }
       if (this.$route.name === 'clock') return { onChanged: this.onPeriodsChanged }
 
       if (this.$route.name === 'workingTimes') return { onChanged: this.loadStats, onTour: this.openTour }
@@ -185,7 +188,7 @@ export default {
 
   methods: {
     async refreshOrganizationSession() {
-      if (!this.organizationSession) return
+      if (!this.citySession) return
       await fetchMe()
       if (!this.user) this.$router.push({ name: 'login' })
       else if (this.$route.meta.roles && !this.$route.meta.roles.includes(this.user.role)) {
@@ -195,7 +198,9 @@ export default {
 
     loginOrganization(session) {
       startOrganizationSession(session)
-      this.$router.push({ name: session.role === 'admin' ? 'organization' : session.role === 'manager' ? 'team' : 'overview' })
+      const redirect = this.$route.query.redirect
+      if (typeof redirect === 'string' && /^\/(?!\/)/.test(redirect)) this.$router.push(redirect)
+      else this.$router.push({ name: session.role === 'admin' ? 'organization' : session.role === 'manager' ? 'team' : 'overview' })
     },
 
     sumHours(entries) {
@@ -203,19 +208,23 @@ export default {
     },
 
     async loadStats() {
+      const version = this.statsVersion = (this.statsVersion || 0) + 1
+      const userId = this.userId
       if (!this.userId) {
         this.workingTimes = []
+        this.loadingStats = false
         return
       }
 
       this.loadingStats = true
 
       try {
-        this.workingTimes = (await getWorkingTimes(this.userId)) || []
+        const entries = (await getWorkingTimes(userId)) || []
+        if (version === this.statsVersion && userId === this.userId) this.workingTimes = entries
       } catch {
-        this.workingTimes = []
+        if (version === this.statsVersion) this.workingTimes = []
       } finally {
-        this.loadingStats = false
+        if (version === this.statsVersion) this.loadingStats = false
       }
     },
 
@@ -228,6 +237,16 @@ export default {
       this.theme = theme
       applyTheme(theme)
       writeTheme(theme)
+    },
+
+    onAccountDeleted() {
+      this.statsVersion += 1
+      this.tourOpen = false
+      this.workingTimes = []
+      this.loadingStats = false
+      clearSession()
+      notify('Votre compte a été supprimé.')
+      this.$router.replace({ name: 'login' })
     },
 
     async logout() {

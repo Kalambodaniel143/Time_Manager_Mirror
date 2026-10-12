@@ -1,11 +1,12 @@
 <template>
   <div class="login">
+    <div class="auth-theme-controls"><ThemeToggle :model-value="theme" @update:model-value="$emit('update:theme', $event)" /></div>
     <section class="intro">
       <span class="deco deco-a" aria-hidden="true"></span>
       <span class="deco deco-b" aria-hidden="true"></span>
       <div class="intro-body">
         <h1 class="intro-title">Time Manager</h1>
-        <p class="intro-eyebrow">Votre organisation, vos équipes</p>
+        <p class="intro-eyebrow">Gotham City · Services municipaux</p>
         <ul class="intro-list">
           <li v-for="point in points" :key="point.icon"><AppIcon :name="point.icon" />{{ point.text }}</li>
         </ul>
@@ -24,8 +25,8 @@
         <div v-if="receipt" class="card receipt" role="status">
           <span class="pill" :class="statusClass">{{ statusLabel }}</span>
           <h2 class="card-title">{{ receipt.organization_name }}</h2>
-          <p v-if="receipt.status === 'pending'">Votre demande attend la décision de l’admin. Aucun compte n’est encore actif.</p>
-          <p v-else-if="receipt.status === 'approved'">Votre demande a été acceptée. L’admin vous fournit votre mot de passe ; utilisez votre email pour vous connecter.</p>
+          <p v-if="receipt.status === 'pending'">Votre demande attend la décision du super administrateur. Aucun compte n’est encore actif.</p>
+          <p v-else-if="receipt.status === 'approved'">Votre demande a été acceptée. Le super administrateur vous fournit votre mot de passe ; utilisez votre email pour vous connecter.</p>
           <p v-else>Votre demande a été refusée. {{ receipt.rejection_reason }}</p>
           <label class="field"><span class="field-label">Référence de suivi à conserver</span><input class="input num" :value="receipt.reference" readonly /></label>
           <div class="actions"><button class="btn btn-outline" type="button" :disabled="busy" @click="refreshStatus">Actualiser le statut</button><button class="btn btn-quiet" type="button" @click="dismissReceipt">Fermer</button></div>
@@ -33,7 +34,7 @@
 
         <form v-if="mode === 'login'" novalidate :aria-busy="busy" @submit.prevent="submitLogin">
           <h2 class="page-title">Connexion</h2>
-          <p class="lede">Votre email et le mot de passe fourni par votre admin vous donnent accès à votre organisation.</p>
+          <p class="lede">Votre email et le mot de passe fourni par le super administrateur vous donnent accès aux services de Gotham City.</p>
           <label class="field"><span class="field-label">Adresse email</span><input v-model.trim="email" class="input" type="email" autocomplete="username" required /></label>
           <label class="field"><span class="field-label">Mot de passe</span><span class="password-control"><input v-model="password" class="input" :type="showLoginPassword ? 'text' : 'password'" autocomplete="current-password" required /><button class="password-toggle" type="button" :aria-label="showLoginPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'" :aria-pressed="showLoginPassword" @click="showLoginPassword = !showLoginPassword"><AppIcon :name="showLoginPassword ? 'eye-off' : 'eye'" /></button></span></label>
           <p v-if="error" class="field-error" role="alert">{{ error }}</p>
@@ -41,26 +42,13 @@
           <p class="field-hint">Demande en attente ? Utilisez « Suivre ma demande » ci-dessous.</p>
         </form>
 
-        <form v-else-if="mode === 'create' || mode === 'join'" novalidate :aria-busy="busy" @submit.prevent="submitRegistration">
-          <div><p class="eyebrow">{{ mode === 'create' ? 'Un nouvel espace' : 'Votre équipe vous attend' }}</p><h2 class="page-title">{{ mode === 'create' ? 'Créer une organisation' : 'Rejoindre une organisation' }}</h2></div>
-          <p class="lede">{{ mode === 'create' ? 'Vous devenez l’admin de votre organisation. Vous pourrez accepter les demandes et nommer les managers.' : 'L’admin examine votre demande. Après acceptation, vous rejoignez l’organisation en tant qu’employé.' }}</p>
-          <label class="field">
-            <span id="organization-label" class="field-label">Nom de l’organisation</span>
-            <input v-model.trim="organizationName" aria-labelledby="organization-label" class="input" autocomplete="organization" maxlength="100" required :aria-invalid="Boolean(errors.organization_name || errors.name)" aria-describedby="organization-error" @input="organizationChanged" />
-            <span v-if="errors.organization_name || errors.name" id="organization-error" class="field-error">{{ errors.organization_name || errors.name }}</span>
-          </label>
-          <div v-if="mode === 'join'" class="organization-check">
-            <button class="btn btn-outline btn-sm" type="button" :disabled="busy || checking || !organizationName" @click="verifyOrganization">{{ checking ? 'Vérification…' : 'Vérifier l’organisation' }}</button>
-            <span v-if="organization" class="pill pill-ok"><AppIcon name="check" />{{ organization.name }}</span>
-          </div>
-          <ProfileFields v-model="profile" :errors="errors" :personal-details="mode === 'join'" />
-          <template v-if="mode === 'create'">
-            <label class="field"><span id="admin-password-label" class="field-label">Votre mot de passe admin</span><input v-model="password" aria-labelledby="admin-password-label" class="input" type="password" autocomplete="new-password" minlength="8" maxlength="128" required :aria-invalid="Boolean(errors.password)" aria-describedby="password-hint" /><span id="password-hint" :class="errors.password ? 'field-error' : 'field-hint'">{{ errors.password || 'Entre 8 et 128 caractères.' }}</span></label>
-            <label class="field"><span class="field-label">Confirmer le mot de passe</span><input v-model="passwordConfirmation" class="input" type="password" autocomplete="new-password" required :aria-invalid="Boolean(errors.password_confirmation)" /><span v-if="errors.password_confirmation" class="field-error">{{ errors.password_confirmation }}</span></label>
-          </template>
-          <InfoNote v-else title="Le mot de passe vient de votre admin" flat>Vous n’avez pas de mot de passe à choisir ici. Si votre demande est acceptée, l’admin définit votre mot de passe et vous transmet vos identifiants.</InfoNote>
+        <form v-else-if="mode === 'join'" novalidate :aria-busy="busy" @submit.prevent="submitRegistration">
+          <div><p class="eyebrow">Services municipaux de Gotham City</p><h2 class="page-title">Rejoindre Gotham City</h2></div>
+          <p class="lede">Votre demande est adressée au super administrateur de Gotham City. Après son accord, vous rejoignez les services municipaux en tant qu’employé.</p>
+          <ProfileFields v-model="profile" :errors="errors" personal-details />
+          <InfoNote title="Votre mot de passe vient du super administrateur" flat>Vous n’avez pas de mot de passe à choisir ici. Après acceptation, le super administrateur définit votre mot de passe et vous transmet vos identifiants.</InfoNote>
           <p v-if="error" class="field-error" role="alert">{{ error }}</p>
-          <button class="btn btn-primary btn-login" type="submit" :disabled="busy || checking">{{ busy ? 'Enregistrement…' : mode === 'create' ? 'Créer mon organisation' : 'Envoyer ma demande' }}</button>
+          <button class="btn btn-primary btn-login" type="submit" :disabled="busy">{{ busy ? 'Envoi…' : 'Envoyer ma demande' }}</button>
         </form>
 
         <form v-else novalidate :aria-busy="busy" @submit.prevent="refreshStatus">
@@ -72,11 +60,7 @@
         </form>
 
         <button v-if="mode !== 'status'" class="link follow-link" type="button" :disabled="busy" @click="changeMode('status')">Suivre ma demande</button>
-        <fieldset class="themes"><legend class="field-label">Choisissez votre affichage</legend><div class="theme-grid">
-          <button v-for="option in themes" :key="option.value" class="theme-card" :class="{ 'is-active': option.value === theme }" type="button" :aria-pressed="option.value === theme" @click="$emit('update:theme', option.value)">
-            <span class="swatch" aria-hidden="true"><span v-for="color in option.colors" :key="color" :style="{ background: color }"></span></span><span class="theme-name">{{ option.label }}</span><span class="theme-text">{{ option.text }}</span>
-          </button>
-        </div></fieldset>
+
         <p v-if="mock" class="field-hint">Simulation locale : les comptes et demandes restent dans ce navigateur. Aucun email n’est envoyé.</p>
       </div>
     </main>
@@ -84,33 +68,29 @@
 </template>
 
 <script>
+import ThemeToggle from '../components/ui/ThemeToggle.vue'
 import AppIcon from '../components/ui/AppIcon.vue'
 import InfoNote from '../components/ui/InfoNote.vue'
 import ProfileFields from '../components/auth/ProfileFields.vue'
-import { AUTH_USE_MOCK, createOrganization, getRequestStatus, joinOrganization, loginAccount, lookupOrganization } from '../services/organizationService'
-import { emptyProfile, errorFields, organizationError, passwordError, profileErrors, profilePayload } from '../utils/registration'
+import { AUTH_USE_MOCK, getRequestStatus, joinOrganization, loginAccount } from '../services/organizationService'
+import { emptyProfile, errorFields, profileErrors, profilePayload } from '../utils/registration'
 import { readJson, writeJson } from '../utils/session'
 
-const THEMES = [
-  { value: 'light', label: 'Clair', text: 'Pour le bureau et la journée.', colors: ['#24584f', '#f7f6f2', '#e4eee8'] },
-  { value: 'night', label: 'Nuit', text: 'Moins d’éblouissement.', colors: ['#203f33', '#121b17', '#a7d5c2'] },
-  { value: 'contrast', label: 'Contraste élevé', text: 'Textes renforcés.', colors: ['#123c2e', '#ffffff', '#000000'] },
-]
+
 const RECEIPT_KEY = 'tm-last-join-receipt'
 
 export default {
   name: 'LoginScreen',
-  components: { AppIcon, InfoNote, ProfileFields },
-  props: { theme: { type: String, required: true } },
+  components: { ThemeToggle, AppIcon, InfoNote, ProfileFields },
+  props: { theme: { type: String, required: true }, initialMode: { type: String, default: 'login' } },
   emits: ['login', 'update:theme'],
   data() {
     return {
-      showLoginPassword: false, mode: 'login', email: '', password: '', passwordConfirmation: '', organizationName: '', organization: null,
-      profile: emptyProfile(), errors: {}, error: '', busy: false, checking: false, lookupVersion: 0,
+      showLoginPassword: false, mode: this.initialMode === 'join' ? 'join' : 'login', email: '', password: '',
+      profile: emptyProfile(), errors: {}, error: '', busy: false,
       receipt: null, reference: readJson(RECEIPT_KEY, null)?.reference || '', mock: AUTH_USE_MOCK,
-      themes: THEMES,
-      modes: [{ value: 'login', label: 'Connexion', icon: 'login' }, { value: 'create', label: 'Créer une organisation', icon: 'shield' }, { value: 'join', label: 'Rejoindre', icon: 'users' }],
-      points: [{ icon: 'users', text: 'Créez votre organisation ou rejoignez votre équipe.' }, { icon: 'shield', text: 'Votre admin accepte les demandes et définit les accès.' }, { icon: 'clock', text: 'Retrouvez vos heures, votre planning et votre équipe.' }],
+      modes: [{ value: 'login', label: 'Connexion', icon: 'login' }, { value: 'join', label: 'Rejoindre Gotham City', icon: 'users' }],
+      points: [{ icon: 'users', text: 'Rejoignez les services municipaux de Gotham City.' }, { icon: 'shield', text: 'Le super administrateur examine votre demande et définit vos accès.' }, { icon: 'clock', text: 'Retrouvez vos heures, votre planning et votre équipe.' }],
       pixels: 'llllddllllllolllddllo'.split('').map((code) => ({ l: 'light', d: 'dark', o: 'orange' })[code]),
     }
   },
@@ -118,31 +98,18 @@ export default {
     statusLabel() { return { pending: 'En attente', approved: 'Acceptée', rejected: 'Refusée' }[this.receipt?.status] || '' },
     statusClass() { return { pending: 'pill-warn', approved: 'pill-ok', rejected: 'pill-danger' }[this.receipt?.status] || '' },
   },
+  watch: { initialMode(mode) { this.changeMode(mode === 'join' ? 'join' : 'login') } },
   methods: {
     changeMode(mode) {
+      if (!['login', 'join', 'status'].includes(mode)) return
       this.mode = mode
+      if (this.$router && ['login', 'join'].includes(mode)) {
+        const name = mode === 'join' ? 'register' : 'login'
+        if (this.$route.name !== name) this.$router.replace({ name, query: this.$route.query })
+      }
       this.error = ''
       this.errors = {}
       this.password = ''
-      this.passwordConfirmation = ''
-    },
-    organizationChanged() { this.organization = null; this.lookupVersion += 1; this.checking = false; this.errors = { ...this.errors, organization_name: '', name: '' } },
-    async verifyOrganization() {
-      const message = organizationError(this.organizationName)
-      if (message) { this.errors = { ...this.errors, organization_name: message }; return false }
-      const version = ++this.lookupVersion
-      this.checking = true
-      this.organization = null
-      try {
-        const found = await lookupOrganization(this.organizationName)
-        if (version !== this.lookupVersion) return false
-        this.organization = found
-        this.errors = { ...this.errors, organization_name: '' }
-        return true
-      } catch (error) {
-        if (version === this.lookupVersion) this.errors = { ...this.errors, organization_name: error.message }
-        return false
-      } finally { if (version === this.lookupVersion) this.checking = false }
     },
     async submitLogin() {
       if (this.busy) return
@@ -159,32 +126,16 @@ export default {
     async submitRegistration() {
       if (this.busy) return
       this.error = ''
-      this.errors = profileErrors(this.profile, this.mode === 'join')
-      const nameError = organizationError(this.organizationName)
-      if (nameError) this.errors.organization_name = nameError
-      if (this.mode === 'create') {
-        const message = passwordError(this.password)
-        if (message) this.errors.password = message
-        if (this.password !== this.passwordConfirmation) this.errors.password_confirmation = 'Les mots de passe ne correspondent pas.'
-      }
+      this.errors = profileErrors(this.profile, true)
       if (Object.keys(this.errors).length) return
       this.busy = true
       try {
-        if (this.mode === 'create') {
-          const session = await createOrganization({ name: this.organizationName, profile: profilePayload(this.profile, false), password: this.password })
-          this.password = ''
-          this.passwordConfirmation = ''
-          this.$emit('login', session)
-        } else {
-          if (!this.organization && !await this.verifyOrganization()) return
-          // Re-vérifier côté service/API protège aussi contre une organisation supprimée entre-temps.
-          this.receipt = await joinOrganization({ organization_id: this.organization.id, profile: this.profile })
-          this.reference = this.receipt.reference
-          writeJson(RECEIPT_KEY, { reference: this.reference })
-          this.email = this.profile.email
-          this.profile = emptyProfile()
-          this.changeMode('login')
-        }
+        this.receipt = await joinOrganization({ profile: profilePayload(this.profile, true) })
+        this.reference = this.receipt.reference
+        writeJson(RECEIPT_KEY, { reference: this.reference })
+        this.email = this.profile.email
+        this.profile = emptyProfile()
+        this.changeMode('login')
       } catch (error) { this.error = error.message; this.errors = { ...this.errors, ...errorFields(error) } }
       finally { this.busy = false }
     },
@@ -346,56 +297,11 @@ export default {
   font-size: 16px;
 }
 
-.themes {
-  margin: 0;
-  padding: 0;
-  border: none;
-}
 
-.theme-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 14px;
-  margin: 10px 0 10px;
-}
 
-.theme-card {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 12px 12px 14px;
-  background: var(--surface);
-  border: 2px solid var(--input-border);
-  border-radius: var(--radius-sm);
-  color: var(--text);
-  text-align: left;
-}
 
-.theme-card.is-active {
-  border-color: var(--brand);
-  box-shadow: inset 0 0 0 2px var(--brand);
-}
 
-.swatch {
-  display: grid;
-  grid-template-columns: 1fr 2fr 1fr;
-  height: 46px;
-  margin-bottom: 6px;
-  overflow: hidden;
-  border: 1px solid var(--border);
-  border-radius: 3px;
-}
 
-.theme-name {
-  font-size: 16px;
-  font-weight: 700;
-}
-
-.theme-text {
-  font-size: 14px;
-  line-height: 1.5;
-  color: var(--text-muted);
-}
 
 .btn-login {
   padding: 16px 36px;
@@ -437,18 +343,16 @@ export default {
 }
 
 @media (max-width: 560px) {
-  .theme-grid {
-    grid-template-columns: 1fr;
-  }
+
 }
 
 .form > form { display: flex; flex-direction: column; gap: 20px; }
-.access-nav { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.access-nav { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 .access-choice { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; padding: 14px 10px; background: var(--surface); border: 1.5px solid var(--border); border-radius: var(--radius-sm); color: var(--text); text-align: left; font-weight: 600; }
 .access-choice svg { width: 22px; height: 22px; color: var(--title); }
 .access-choice.active { border-color: var(--brand); background: var(--brand-soft); box-shadow: inset 0 -3px var(--brand); }
 .access-choice:hover:not(:disabled) { border-color: var(--brand); }
-.organization-check, .actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
 .receipt { display: flex; flex-direction: column; align-items: flex-start; gap: 14px; padding: 22px; }
 .receipt .field { width: 100%; }
 .receipt .input { font-size: 13px; }
@@ -472,4 +376,7 @@ export default {
  .panel { padding: 28px 20px; }
 }
 
+.login { position: relative; }
+.auth-theme-controls { position: absolute; z-index: 1; top: 16px; right: 20px; }
+@media (max-width: 760px) { .auth-theme-controls { position: static; display: flex; justify-content: flex-end; padding: 12px 16px; background: var(--bg); } }
 </style>

@@ -4,13 +4,12 @@ defmodule TimeManagerWeb.Schemas.ApproveRequest do
 
   OpenApiSpex.schema(%{
     title: "ApproveRequest",
-    description: "Credentials and initial role chosen by the administrator.",
+    description:
+      "The password the administrator chose for the new employee (8 to 128 characters)",
     type: :object,
     properties: %{
-      username: %Schema{type: :string, minLength: 1, maxLength: 100},
-      password: %Schema{type: :string, format: :password, minLength: 8, maxLength: 128},
-      role: %Schema{type: :string, enum: ["employee", "manager"], default: "employee"}
+      password: %Schema{type: :string, format: :password, minLength: 8, maxLength: 128}
     },
-    required: [:username, :password]
+    required: [:password]
   })
 end

@@ -15,7 +15,6 @@ defmodule TimeManagerWeb.AuthController do
   alias TimeManager.Accounts
   alias TimeManager.Email
   alias TimeManager.EmailDelivery
-  alias TimeManager.Organizations
   alias TimeManager.Token
   alias TimeManagerWeb.Authz
   alias TimeManagerWeb.Plugs.{Authenticate, RateLimit}
@@ -64,28 +63,28 @@ defmodule TimeManagerWeb.AuthController do
   end
 
   operation(:register,
-    summary: "Submit an email-verified registration request",
+    summary: "Create an account and log in",
     description:
-      "Creates a pending request. An administrator creates the account after approval.",
+      "Self-registration, outside any organization. The account always starts with the " <>
+        "employee role. To join an organization, use POST /api/join-requests.",
     security: [],
     request_body: {"Account", "application/json", RegisterRequest},
     responses: [
-      accepted: {"Verification required", "application/json", ErrorResponse},
+      created: {"Account created", "application/json", SessionResponse},
       unprocessable_entity: {"Validation errors", "application/json", ValidationErrorResponse}
     ]
   )
 
   def register(conn, %{"user" => attrs}) when is_map(attrs) do
     # Only these fields are read: a "role" sent by the client is ignored.
-    attrs =
-      Map.take(attrs, ["first_name", "last_name", "email", "gender", "birth_date", "birth_place"])
+    attrs = Map.take(attrs, ["username", "email", "password"])
 
-    with {:ok, request} <- Organizations.submit_join_request(attrs),
-         {:ok, code} <- Accounts.issue_email_verification(request),
-         :ok <- request.email |> Email.verification(code) |> EmailDelivery.send() do
+    with {:ok, user} <- Accounts.create_user(attrs, "employee", nil, verify_email: false),
+         {:ok, code} <- Accounts.issue_email_verification(user),
+         :ok <- user.email |> Email.verification(code) |> EmailDelivery.send() do
       conn
       |> put_status(:accepted)
-      |> json(%{data: %{email: request.email, verification_required: true}})
+      |> json(%{data: %{email: user.email, verification_required: true}})
     else
       {:error, :email_delivery_failed} -> {:error, :service_unavailable}
       error -> error
@@ -96,24 +95,17 @@ defmodule TimeManagerWeb.AuthController do
 
   operation(:verify_email,
     summary: "Verify registration email",
-    description: "Verifies the six-digit OTP and submits the request for administrator review.",
+    description: "Verifies the six-digit OTP and opens a session.",
     security: [],
-    responses: [ok: {"Verified", "application/json", ErrorResponse}]
+    responses: [ok: {"Verified", "application/json", SessionResponse}]
   )
 
   def verify_email(conn, %{"email" => email, "code" => code}) do
-    case Accounts.verify_join_request_email(email, code) do
-      {:ok, _request} ->
-        json(conn, %{data: %{request_submitted: true, verification_required: false}})
-
-      {:error, :expired_code} ->
-        {:error, :expired_code}
-
-      {:error, :too_many_attempts} ->
-        {:error, :too_many_attempts}
-
-      {:error, :invalid_code} ->
-        {:error, :invalid_code}
+    case Accounts.verify_email(email, code) do
+      {:ok, user} -> start_session(conn, user, :ok)
+      {:error, :expired_code} -> {:error, :expired_code}
+      {:error, :too_many_attempts} -> {:error, :too_many_attempts}
+      {:error, :invalid_code} -> {:error, :invalid_code}
     end
   end
 
@@ -129,8 +121,8 @@ defmodule TimeManagerWeb.AuthController do
   def resend_verification(conn, %{"email" => email}) when is_binary(email) do
     normalized = String.trim(email) |> String.downcase()
 
-    with {:ok, request} <- Accounts.find_pending_join_request(normalized),
-         {:ok, code} <- Accounts.issue_email_verification(request),
+    with {:ok, user} <- Accounts.find_unverified_user(normalized),
+         {:ok, code} <- Accounts.issue_email_verification(user),
          :ok <- normalized |> Email.verification(code) |> EmailDelivery.send() do
       json(conn, %{data: %{verification_required: true}})
     else
