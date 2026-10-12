@@ -47,11 +47,11 @@
           <header class="dialog-header"><div><p class="eyebrow">{{ session.organization.name }}</p><h2 id="review-title" class="card-title">{{ dialogTitle }}</h2></div><button class="btn btn-quiet btn-icon" type="button" aria-label="Fermer" :disabled="busy" @click="closeDialog"><AppIcon name="close" /></button></header>
           <div class="dialog-body">
             <template v-if="credentials">
-              <p>Le compte employé est créé. Transmettez ces identifiants à {{ credentials.name }}.</p>
+              <p>Le compte employé est créé. Les identifiants ont été envoyés par e-mail à {{ credentials.name }}.</p>
               <label class="field"><span class="field-label">Email de connexion</span><input class="input" :value="credentials.email" readonly /></label>
               <label class="field"><span class="field-label">Mot de passe défini par vous</span><input class="input" :type="showPassword ? 'text' : 'password'" :value="credentials.password" readonly /></label>
               <button class="link" type="button" @click="showPassword = !showPassword">{{ showPassword ? 'Masquer' : 'Afficher' }} le mot de passe</button>
-              <p class="field-hint">Le mot de passe ne sera plus affiché après fermeture de cette fenêtre. Aucun email n’est envoyé automatiquement par cette interface.</p>
+              <p class="field-hint">Le mot de passe ne sera plus affiché après fermeture de cette fenêtre.</p>
               <button class="btn btn-outline" type="button" @click="copyCredentials">{{ copied ? 'Identifiants copiés' : 'Copier les identifiants' }}</button>
             </template>
             <template v-else-if="roleTarget">
@@ -159,8 +159,31 @@ export default {
       finally { this.busy = false }
     },
     async copyCredentials() {
-      try { await navigator.clipboard.writeText(`Organisation : ${this.session.organization.name}\nEmail : ${this.credentials.email}\nMot de passe : ${this.credentials.password}`); this.copied = true }
-      catch { this.dialogError = 'Copie indisponible. Vous pouvez sélectionner les identifiants manuellement.' }
+      const text = `Organisation : ${this.session.organization.name}\nEmail : ${this.credentials.email}\nMot de passe : ${this.credentials.password}`
+
+      try {
+        if (navigator.clipboard?.writeText) {
+          await navigator.clipboard.writeText(text)
+        } else {
+          this.copyTextFallback(text)
+        }
+        this.copied = true
+        this.dialogError = ''
+      } catch {
+        this.dialogError = 'Copie indisponible. Vous pouvez sélectionner les identifiants manuellement.'
+      }
+    },
+    copyTextFallback(text) {
+      const textarea = document.createElement('textarea')
+      textarea.value = text
+      textarea.setAttribute('readonly', '')
+      textarea.style.position = 'fixed'
+      textarea.style.opacity = '0'
+      document.body.appendChild(textarea)
+      textarea.select()
+      const copied = document.execCommand('copy')
+      textarea.remove()
+      if (!copied) throw new Error('copy_failed')
     },
   },
 }
