@@ -3,7 +3,7 @@ defmodule TimeManagerWeb.JoinRequestControllerTest do
 
   import TimeManager.AccountsFixtures
 
-  alias TimeManager.Accounts
+  alias TimeManager.{Accounts, Repo}
 
   setup do
     admin = organization_admin_fixture(name: "Atelier Gotham")
@@ -97,6 +97,14 @@ defmodule TimeManagerWeb.JoinRequestControllerTest do
   describe "review" do
     setup %{admin: admin, org: org} do
       {request, reference} = join_request_fixture(org, %{"email" => "sara@example.com"})
+
+      request =
+        request
+        |> Ecto.Changeset.change(
+          email_verified_at: DateTime.utc_now() |> DateTime.truncate(:second)
+        )
+        |> Repo.update!()
+
       %{request: request, reference: reference, admin_conn: log_in(build_conn(), admin)}
     end
 
