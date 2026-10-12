@@ -4,7 +4,7 @@
       class="check"
       type="checkbox"
       :checked="selected"
-      :disabled="row.validated || row.departureInWeek || !!row.clockError"
+      :disabled="!canValidate || row.validated || row.departureInWeek || !!row.clockError"
       :aria-label="`Sélectionner ${row.name}`"
       @change="$emit('toggle', row.username)"
     />
@@ -22,9 +22,10 @@
       <span v-else-if="row.frequencyExceeded" class="pill pill-warn"><AppIcon name="alert" />Fréquence de nuits à examiner</span>
       <span v-else-if="row.nightRun > maxNights" class="pill pill-danger"><AppIcon name="alert" />{{ row.nightRun }} nuits d’affilée</span>
       <span v-else-if="row.validated" class="pill pill-ok"><AppIcon name="check" />Validée</span>
-      <span v-else class="pill pill-todo"><AppIcon name="clock" />À valider</span>
+      <span v-else-if="canValidate" class="pill pill-todo"><AppIcon name="clock" />À valider</span>
+      <span v-else class="pill pill-ok">{{ row.buckets.total > 0 ? 'Périodes enregistrées' : 'Aucune période' }}</span>
     </p>
-    <p class="note"><AppIcon name="message" />{{ row.note || 'Aucune note partagée' }}</p>
+    <p v-if="canValidate" class="note"><AppIcon name="message" />{{ row.note || 'Aucune note partagée' }}</p>
     <RouterLink v-if="row.user" class="btn btn-outline btn-sm view-link" :to="{ name: 'workingTimes', params: { userID: row.user.id } }">Voir la fiche</RouterLink>
   </li>
 </template>
@@ -46,6 +47,7 @@ export default {
     row: { type: Object, required: true },
     selected: { type: Boolean, default: false },
     maxNights: { type: Number, required: true },
+    canValidate: { type: Boolean, default: true },
   },
 
   emits: ['toggle'],

@@ -1,6 +1,7 @@
 <template>
   <div class="hours">
     <PageHeader :eyebrow="`Semaine ${weekNumber} · ${rangeLabel}`" :title="isSelf ? 'Mes heures' : `Heures de l’agent n° ${userID}`">
+      <RouterLink class="btn btn-outline" :to="{ name: 'chartManager', params: { userid: userID } }">Graphiques</RouterLink>
       <button class="btn btn-outline" type="button" @click="$emit('tour')">
         <AppIcon name="help" />
         Revoir la prise en main
@@ -22,19 +23,19 @@
             </span>
           </div>
           <p class="card-subtitle">
-            {{ canEdit ? 'Chaque journée se corrige pendant 7 jours.' : 'Une erreur ? Proposez une correction : votre responsable l’examine avant toute modification.' }}
+            {{ canEdit ? 'Corrigez les périodes enregistrées dans votre périmètre.' : demo ? 'Une erreur ? Proposez une correction : votre responsable l’examine avant toute modification.' : 'Une erreur ? Contactez votre responsable pour corriger vos horaires.' }}
           </p>
         </header>
 
         <p v-if="error" class="field-error" role="alert">Impossible de charger vos heures : {{ error }}</p>
         <div v-else-if="loading && workingTimes.length === 0" class="skeleton table-skeleton"></div>
         <!-- Seul l'agent lui-même peut compléter son départ : l'API refuse les autres. -->
-        <WeekTable v-else :monday="monday" :entries="workingTimes" :now="now" :user-id="isSelf ? userId : null" :can-edit="canEdit" :can-request="isSelf" @edit="openEdit" @create="openCreate" @completed="onDepartureCompleted" @request="openRequest" />
+        <WeekTable v-else :monday="monday" :entries="workingTimes" :now="now" :user-id="isSelf ? userId : null" :can-edit="canEdit" :can-request="isSelf && demo" @edit="openEdit" @create="openCreate" @completed="onDepartureCompleted" @request="openRequest" />
       </section>
 
       <aside class="side">
-        <LastWeekCard title="Total de la semaine" :buckets="buckets" :target="target" :loading="loading" />
-        <ManagerNote v-if="username" :username="username" :week-key="weekKey" />
+        <LastWeekCard title="Total de la semaine" :buckets="buckets" :target="target" :loading="loading" :error="error" />
+        <ManagerNote v-if="username && demo" :username="username" :week-key="weekKey" />
       </aside>
     </div>
     <CorrectionPanel :user-id="userId" :can-review="!isSelf && canEdit" :refresh-key="correctionVersion" @changed="onDepartureCompleted" />
@@ -44,13 +45,14 @@
 
 <script>
 import AppIcon from './ui/AppIcon.vue'
+import { RouterLink } from 'vue-router'
 import CorrectionRequest from './reviews/CorrectionRequest.vue'
 import CorrectionPanel from './reviews/CorrectionPanel.vue'
 import PageHeader from './ui/PageHeader.vue'
 import LastWeekCard from './employee/LastWeekCard.vue'
 import ManagerNote from './hours/ManagerNote.vue'
 import WeekTable from './hours/WeekTable.vue'
-import { lastWeekMonday, org } from '../services/orgService'
+import { lastWeekMonday, org, isDemoData } from '../services/orgService'
 import { getWorkingTimes } from '../services/workingTimeService'
 import { canEditHours, isSelf } from '../stores/auth'
 import { toDateInput } from '../utils/date'
@@ -59,7 +61,7 @@ import { addDays, formatRange, isoWeek, mondayOf, weekBuckets, weekFilters } fro
 export default {
   name: 'WorkingTimes',
 
-  components: { CorrectionRequest, CorrectionPanel, AppIcon, LastWeekCard, ManagerNote, PageHeader, WeekTable },
+  components: { RouterLink, CorrectionRequest, CorrectionPanel, AppIcon, LastWeekCard, ManagerNote, PageHeader, WeekTable },
 
   props: {
     userID: { type: [Number, String], required: true },
@@ -82,6 +84,7 @@ export default {
   },
 
   computed: {
+    demo: isDemoData,
     isSelf() {
       return isSelf(this.userID)
     },

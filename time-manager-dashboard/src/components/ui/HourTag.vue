@@ -9,6 +9,7 @@
 <script>
 import AppIcon from './AppIcon.vue'
 import { KIND_ICONS, KIND_LABELS, KIND_SHORT, formatHours } from '../../utils/hours'
+import { isDemoData } from '../../services/orgService'
 
 export default {
   name: 'HourTag',
@@ -23,6 +24,7 @@ export default {
 
   computed: {
     label() {
+      if (!isDemoData() && !this.short) return { night: 'Nuit', sup: 'Heures supplémentaires', recup: 'Récupération' }[this.kind] || KIND_LABELS[this.kind]
       return this.short ? KIND_SHORT[this.kind] : KIND_LABELS[this.kind]
     },
 

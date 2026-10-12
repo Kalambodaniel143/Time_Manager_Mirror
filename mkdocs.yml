@@ -5,6 +5,7 @@ nav:
   - Accueil: index.md
   - DevOps: DEVOPS.md
   - API: API.md
+  - Frontend: FRONTEND.md
 
 markdown_extensions:
   - admonition

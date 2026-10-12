@@ -3,12 +3,14 @@
     <header class="card-header">
       <div>
         <h3 class="card-title">Tendances</h3>
-        <p class="card-subtitle">Trois regards sur votre temps de travail</p>
+        <p class="card-subtitle">Heures enregistrées cette semaine · jours en UTC</p>
       </div>
-      <span class="mockup-tag">Maquette · Jonas</span>
+      <button class="btn btn-outline btn-sm" type="button" :disabled="loading" @click="load">Actualiser</button>
     </header>
 
-    <div class="card-body">
+    <p v-if="loading" class="card-body" role="status">Chargement des heures…</p>
+    <p v-else-if="error" class="card-body field-error" role="alert">{{ error }}</p>
+    <div v-else class="card-body">
       <div class="segmented" role="tablist" aria-label="Type de graphique">
         <button
           v-for="chart in charts"
@@ -24,7 +26,8 @@
         </button>
       </div>
 
-      <div class="chart-placeholder" role="img" :aria-label="`Emplacement du graphique ${activeLabel}`">
+      <p class="card-subtitle">{{ hours(total) }} enregistrées</p>
+      <div class="chart-placeholder" role="img" :aria-label="`${activeLabel} : ${days.map(day => `${label(day.date)} ${hours(day.hours)}`).join(', ')}`">
         <svg v-if="activeChart === 'bar'" viewBox="0 0 320 140" preserveAspectRatio="none">
           <rect
             v-for="(height, index) in barHeights"
@@ -52,23 +55,29 @@
 
         <svg v-else viewBox="0 0 140 140">
           <circle cx="70" cy="70" r="50" fill="none" stroke="var(--track)" stroke-width="20" />
-          <circle
+          <circle v-for="(slice, index) in slices" :key="index"
             cx="70"
             cy="70"
             r="50"
             fill="none"
-            stroke="var(--series-3)"
+            :stroke="['var(--series-1)', 'var(--series-2)', 'var(--series-3)'][index % 3]"
             stroke-width="20"
-            stroke-dasharray="210 314"
+            :stroke-dasharray="`${slice.length} ${circumference}`"
+            :stroke-dashoffset="-slice.offset"
             transform="rotate(-90 70 70)"
           />
         </svg>
       </div>
+      <ul class="daily-values"><li v-for="day in days" :key="day.key">{{ label(day.date) }} : {{ hours(day.hours) }}</li></ul>
     </div>
   </section>
 </template>
 
 <script>
+import { getWorkingTimes } from '../services/workingTimeService'
+import { dailyHours } from '../services/reportService'
+import { formatHours, mondayOf } from '../utils/hours'
+
 export default {
   name: 'ChartManager',
 
@@ -84,21 +93,38 @@ export default {
         { key: 'line', label: 'Évolution' },
         { key: 'pie', label: 'Répartition' },
       ],
-      barHeights: [64, 92, 48, 108, 76, 88, 56],
-      linePoints: '10,110 60,72 110,88 160,40 210,58 260,28 310,44',
+      entries: [], loading: false, error: '', version: 0, monday: mondayOf(), circumference: 2 * Math.PI * 50,
     }
   },
 
   computed: {
+    days() { return dailyHours(this.entries, this.monday) },
+    total() { return this.days.reduce((sum, day) => sum + day.hours, 0) },
+    barHeights() { const max = Math.max(1, ...this.days.map(day => day.hours)); return this.days.map(day => day.hours / max * 120) },
+    linePoints() { return this.barHeights.map((height, index) => `${index * 44 + 14},${130 - height}`).join(' ') },
+    slices() { let offset = 0; return this.days.map(day => { const length = this.total ? day.hours / this.total * this.circumference : 0; const slice = { length, offset }; offset += length; return slice }) },
     activeLabel() {
       const chart = this.charts.find((item) => item.key === this.activeChart)
       return chart ? chart.label : ''
+    },
+  },
+  watch: { userId: { immediate: true, handler() { this.load() } } },
+  beforeUnmount() { this.version += 1 },
+  methods: {
+    hours: formatHours,
+    label(date) { return date.toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric' }) },
+    async load() {
+      const version = ++this.version; this.loading = true; this.error = ''; this.entries = []; this.monday = mondayOf()
+      try { const entries = await getWorkingTimes(this.userId); if (!Array.isArray(entries)) throw new Error('Liste des heures invalide.'); dailyHours(entries, this.monday); if (version === this.version) this.entries = entries }
+      catch (error) { if (version === this.version) this.error = error.message }
+      finally { if (version === this.version) this.loading = false }
     },
   },
 }
 </script>
 
 <style scoped>
+.daily-values { display: flex; gap: 14px; flex-wrap: wrap; padding: 0; list-style: none; font-size: 13px; }
 .chart-manager {
   --series-1: #2a78d6;
   --series-2: #eb6834;
