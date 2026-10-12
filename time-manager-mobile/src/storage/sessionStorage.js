@@ -1,6 +1,7 @@
-import { notImplemented } from '@/services/notImplemented.js'
+import { read, write, remove } from './database.js'
 
-// Stockage protégé à brancher par Jonas ; PAS window.sessionStorage ni localStorage. Aucun mot de passe.
-export async function readSession() { return notImplemented('Lecture de session protégée') }
-export async function saveSession() { return notImplemented('Écriture de session protégée') }
-export async function clearSession() { return notImplemented('Suppression de session protégée') }
+// Session = utilisateur + jeton CSRF renvoyé par /auth/login.
+// Le JWT reste dans le cookie HttpOnly ; le mot de passe n'est JAMAIS stocké.
+export const readSession = () => read('session')
+export const saveSession = (session) => write('session', session)
+export const clearSession = () => remove('session')

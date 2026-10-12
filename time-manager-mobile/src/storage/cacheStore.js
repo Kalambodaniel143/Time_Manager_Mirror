@@ -1,5 +1,14 @@
-import { notImplemented } from '@/services/notImplemented.js'
+import { read, write } from './database.js'
 
-// Jonas : indexer chaque ressource par compte propriétaire.
-export async function readCache() { return notImplemented('Lecture du cache') }
-export async function writeCache() { return notImplemented('Écriture du cache') }
+// Dernières données reçues du serveur, rangées par utilisateur.
+const key = (userId, name) => `${userId}:cache:${name}`
+
+export function readCache(userId, name) {
+  return read(key(userId, name))
+}
+
+export function writeCache(userId, name, data) {
+  const entry = { data, updatedAt: new Date().toISOString() }
+  write(key(userId, name), entry)
+  return entry
+}
