@@ -4,12 +4,14 @@ defmodule TimeManager.WorkingTimes do
 
   alias TimeManager.Accounts.User
   alias TimeManager.WorkingTimes.WorkingTime
+  alias TimeManager.Workforce
 
   def list_working_times(user_id, filters \\ %{}) do
     with {:ok, user_id} <- cast_id(user_id),
          :ok <- ensure_user_exists(user_id),
          {:ok, start} <- cast_filter(filters, "start"),
-         {:ok, finish} <- cast_filter(filters, "end") do
+         {:ok, finish} <- cast_filter(filters, "end"),
+         :ok <- validate_range(start, finish) do
       working_times =
         WorkingTime
         |> where([w], w.user_id == ^user_id)
@@ -39,30 +41,90 @@ defmodule TimeManager.WorkingTimes do
     end
   end
 
-  def create_working_time(user_id, attrs) do
+  def create_working_time(user_id, attrs, actor \\ nil) do
     with {:ok, user_id} <- cast_id(user_id),
          :ok <- ensure_user_exists(user_id) do
-      %WorkingTime{user_id: user_id}
-      |> WorkingTime.changeset(attrs)
-      |> Repo.insert()
+      changeset = WorkingTime.changeset(%WorkingTime{user_id: user_id}, attrs)
+
+      with {:ok, candidate} <- Ecto.Changeset.apply_action(changeset, :insert) do
+        Repo.transact(fn ->
+          with {:ok, _} <- Workforce.fetch(User, user_id, true),
+               :ok <- Workforce.mutable(user_id, candidate.start, candidate.end),
+               :ok <- no_overlap(candidate),
+               {:ok, row} <- Repo.insert(changeset) do
+            if actor,
+              do: Workforce.audit(actor, "period.created", %{period_id: row.id, user_id: user_id})
+
+            {:ok, row}
+          end
+        end)
+      end
     end
   end
 
-  def update_working_time(%WorkingTime{} = working_time, attrs) do
-    working_time
-    |> WorkingTime.changeset(attrs)
-    |> Repo.update()
+  def update_working_time(%WorkingTime{} = working_time, attrs, actor \\ nil) do
+    Repo.transact(fn ->
+      with {:ok, _} <- Workforce.fetch(User, working_time.user_id, true),
+           {:ok, current} <- Workforce.fetch(WorkingTime, working_time.id, true),
+           changeset = WorkingTime.changeset(current, attrs),
+           {:ok, candidate} <- Ecto.Changeset.apply_action(changeset, :update),
+           :ok <- Workforce.mutable(current.user_id, current.start, current.end),
+           :ok <- Workforce.mutable(current.user_id, candidate.start, candidate.end),
+           :ok <- no_overlap(candidate),
+           {:ok, row} <- Repo.update(changeset) do
+        if actor,
+          do:
+            Workforce.audit(actor, "period.updated", %{
+              period_id: row.id,
+              user_id: row.user_id,
+              before: %{start: current.start, end: current.end},
+              after: %{start: row.start, end: row.end}
+            })
+
+        {:ok, row}
+      end
+    end)
   end
 
-  def delete_working_time(%WorkingTime{} = working_time) do
-    Repo.delete(working_time)
+  def delete_working_time(%WorkingTime{} = working_time, actor \\ nil) do
+    Repo.transact(fn ->
+      with {:ok, _} <- Workforce.fetch(User, working_time.user_id, true),
+           {:ok, current} <- Workforce.fetch(WorkingTime, working_time.id, true),
+           :ok <- Workforce.mutable(current.user_id, current.start, current.end),
+           {:ok, row} <- Repo.delete(current) do
+        if actor,
+          do: Workforce.audit(actor, "period.deleted", %{period_id: row.id, user_id: row.user_id})
+
+        {:ok, row}
+      end
+    end)
+  end
+
+  defp no_overlap(candidate) do
+    query =
+      from w in WorkingTime,
+        where:
+          w.user_id == ^candidate.user_id and w.start < ^candidate.end and
+            w.end > ^candidate.start
+
+    query = if candidate.id, do: where(query, [w], w.id != ^candidate.id), else: query
+
+    if Repo.exists?(query),
+      do: Workforce.conflict("Cette période chevauche des heures déjà enregistrées."),
+      else: :ok
   end
 
   defp filter_start(query, nil), do: query
-  defp filter_start(query, start), do: where(query, [w], w.start >= ^start)
+  defp filter_start(query, start), do: where(query, [w], w.end > ^start)
 
   defp filter_end(query, nil), do: query
-  defp filter_end(query, finish), do: where(query, [w], w.end <= ^finish)
+  defp filter_end(query, finish), do: where(query, [w], w.start <= ^finish)
+
+  defp validate_range(nil, _), do: :ok
+  defp validate_range(_, nil), do: :ok
+
+  defp validate_range(start, finish),
+    do: if(DateTime.compare(finish, start) == :lt, do: {:error, :bad_request}, else: :ok)
 
   defp cast_filter(filters, key) do
     case Map.get(filters, key) do

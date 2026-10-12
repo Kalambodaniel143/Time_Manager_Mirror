@@ -52,16 +52,20 @@ defmodule TimeManagerWeb.OrganizationIsolationTest do
            )
   end
 
-  test "a user created by an administrator joins their organization", %{conn: conn} = ctx do
-    attrs = %{
-      username: "new",
-      email: unique_email(),
-      password: valid_password(),
-      role: "employee"
-    }
+  test "admission creates a member in the reviewing administrator's organization",
+       %{conn: conn} = ctx do
+    {request, _} = join_request_fixture(ctx.admin.organization_id)
 
-    conn = conn |> log_in(ctx.admin) |> post(~p"/api/users", user: attrs)
-    assert json_response(conn, 201)["data"]["organization_id"] == ctx.admin.organization_id
+    conn =
+      conn
+      |> log_in(ctx.admin)
+      |> post(
+        ~p"/api/organizations/#{ctx.admin.organization_id}/join-requests/#{request.id}/approve",
+        %{password: valid_password(), organization_id: "spoofed"}
+      )
+
+    assert json_response(conn, 200)["data"]["user"]["organization_id"] ==
+             ctx.admin.organization_id
   end
 
   test "personal details are hidden from managers", %{conn: conn} = ctx do

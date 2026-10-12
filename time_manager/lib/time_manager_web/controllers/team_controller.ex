@@ -36,7 +36,7 @@ defmodule TimeManagerWeb.TeamController do
       if Authorization.administrator?(me) do
         Teams.list_teams(me.organization_id)
       else
-        managed = Teams.list_managed_teams(me)
+        managed = if Authorization.manager?(me), do: Teams.list_managed_teams(me), else: []
         managed_ids = MapSet.new(managed, & &1.id)
 
         member_of =
@@ -67,7 +67,10 @@ defmodule TimeManagerWeb.TeamController do
 
     with {:ok, team} <- Teams.fetch_team(id),
          :ok <-
-           authorize(Authorization.administrator_of_team?(me, team) or team.manager_id == me.id) do
+           authorize(
+             Authorization.administrator_of_team?(me, team) or
+               (Authorization.manager?(me) and team.manager_id == me.id)
+           ) do
       render(conn, :show, team: team)
     end
   end
@@ -86,7 +89,13 @@ defmodule TimeManagerWeb.TeamController do
     me = current_user(conn)
 
     with :ok <- authorize(Authorization.administrator?(me)),
-         {:ok, team} <- Teams.create_team(attrs, me.organization_id) do
+         {:ok, team} <-
+           TimeManager.Workforce.record(
+             me,
+             "team.created",
+             fn row -> %{team_id: row.id} end,
+             fn -> Teams.create_team(attrs, me.organization_id) end
+           ) do
       conn
       |> put_status(:created)
       |> render(:show, team: team)
@@ -109,7 +118,13 @@ defmodule TimeManagerWeb.TeamController do
 
   def update(conn, %{"id" => id, "team" => attrs}) when is_map(attrs) do
     with {:ok, team} <- fetch_administered_team(current_user(conn), id),
-         {:ok, team} <- Teams.update_team(team, attrs) do
+         {:ok, team} <-
+           TimeManager.Workforce.record(
+             current_user(conn),
+             "team.updated",
+             %{team_id: team.id},
+             fn -> Teams.update_team(team, attrs) end
+           ) do
       render(conn, :show, team: team)
     end
   end
@@ -128,7 +143,13 @@ defmodule TimeManagerWeb.TeamController do
 
   def delete(conn, %{"id" => id}) do
     with {:ok, team} <- fetch_administered_team(current_user(conn), id),
-         {:ok, _team} <- Teams.delete_team(team) do
+         {:ok, _team} <-
+           TimeManager.Workforce.record(
+             current_user(conn),
+             "team.deleted",
+             %{team_id: team.id},
+             fn -> Teams.delete_team(team) end
+           ) do
       send_resp(conn, :no_content, "")
     end
   end
@@ -147,7 +168,13 @@ defmodule TimeManagerWeb.TeamController do
   def add_member(conn, %{"id" => id, "user_id" => user_id}) do
     with {:ok, team} <- fetch_administered_team(current_user(conn), id),
          {:ok, user} <- Accounts.fetch_user(user_id),
-         {:ok, team} <- Teams.add_member(team, user) do
+         {:ok, team} <-
+           TimeManager.Workforce.record(
+             current_user(conn),
+             "team.member.added",
+             %{team_id: team.id, user_id: user.id},
+             fn -> Teams.add_member(team, user) end
+           ) do
       render(conn, :show, team: team)
     end
   end
@@ -170,7 +197,13 @@ defmodule TimeManagerWeb.TeamController do
   def remove_member(conn, %{"id" => id, "user_id" => user_id}) do
     with {:ok, team} <- fetch_administered_team(current_user(conn), id),
          {:ok, user} <- Accounts.fetch_user(user_id),
-         {:ok, team} <- Teams.remove_member(team, user) do
+         {:ok, team} <-
+           TimeManager.Workforce.record(
+             current_user(conn),
+             "team.member.removed",
+             %{team_id: team.id, user_id: user.id},
+             fn -> Teams.remove_member(team, user) end
+           ) do
       render(conn, :show, team: team)
     end
   end

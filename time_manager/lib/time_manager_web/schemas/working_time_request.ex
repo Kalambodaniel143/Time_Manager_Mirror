@@ -11,6 +11,7 @@ defmodule TimeManagerWeb.Schemas.WorkingTimeRequest do
       workingtime: %Schema{
         type: :object,
         properties: %{
+          kind: %Schema{type: :string, enum: ["work", "oncall", "recup"], default: "work"},
           start: %Schema{
             type: :string,
             format: :"date-time",

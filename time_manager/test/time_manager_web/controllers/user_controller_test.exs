@@ -66,29 +66,19 @@ defmodule TimeManagerWeb.UserControllerTest do
   end
 
   describe "create" do
-    test "an administrator creates an account with a role", %{conn: conn, admin: admin} do
-      attrs = %{
-        username: "new",
-        email: "new@example.com",
-        password: valid_password(),
-        role: "manager"
-      }
+    test "direct creation is forbidden for administrators and managers", %{conn: conn} = ctx do
+      for viewer <- [ctx.admin, ctx.manager] do
+        created =
+          conn
+          |> log_in(viewer)
+          |> post(~p"/api/users",
+            user: %{username: "new", email: "new@example.com", password: valid_password()}
+          )
 
-      conn = conn |> log_in(admin) |> post(~p"/api/users", user: attrs)
+        assert json_response(created, 403)
+      end
 
-      assert %{"role" => "manager", "email" => "new@example.com"} =
-               json_response(conn, 201)["data"]
-    end
-
-    test "anyone else gets 403", %{conn: conn, manager: manager} do
-      attrs = %{username: "new", email: "new@example.com", password: valid_password()}
-      conn = conn |> log_in(manager) |> post(~p"/api/users", user: attrs)
-      assert json_response(conn, 403)
-    end
-
-    test "invalid data: 422", %{conn: conn, admin: admin} do
-      conn = conn |> log_in(admin) |> post(~p"/api/users", user: %{username: nil})
-      assert json_response(conn, 422)["errors"] != %{}
+      assert TimeManager.Accounts.list_users(%{"email" => "new@example.com"}) == []
     end
   end
 

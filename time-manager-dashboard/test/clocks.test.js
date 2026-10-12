@@ -792,6 +792,8 @@ function teamApi({ histories = {}, errors = [], missing = [], periods = {} } = {
     assert.equal(options.method || 'GET', 'GET')
     requests.push(url)
     const path = new URL(url, 'http://localhost').pathname
+    if (path === '/api/workforce/context') return response({ rules: { maxConsecutiveNights: 3, maxNightsPerWeek: 0, maxNightsPerMonth: 0, overtimeThreshold: 40 }, preferences: {}, permissions: [{team_id:10,manager_id:999,validate:true,correct:true,publish:false}] })
+    if (path === '/api/weekly-sheets') return response([])
     if (path === '/api/teams') return response([{ id: 10, name: 'Équipe réelle de test', manager: { id: 999 }, members: users }])
     if (path === '/api/users') return response(users)
     const user = users.find((item) => path.endsWith(`/${item.id}`))
@@ -836,7 +838,7 @@ test('manager refresh removes the alert after the employee completes the departu
   teamApi({ histories: { 'sara.ortiz': clocks }, periods: { 'sara.ortiz': [period] } })
   await vm.loadTeam()
   assert.equal(vm.departureAlerts.length, 0)
-  assert.equal(vm.selection.includes('sara.ortiz'), false)
+  assert.equal(vm.selection.includes('sara.ortiz'), true)
   assert.equal(vm.rows.find((row) => row.username === 'sara.ortiz').buckets.total, 8)
 })
 
@@ -865,7 +867,7 @@ test('invalid clocks and failed user reads cannot make a sheet appear verified',
   assert.equal(vm.selection.includes('sara.ortiz'), false)
   globalThis.fetch = async () => response(null)
   await vm.loadTeam()
-  assert.match(vm.error, /équipes invalide/)
+  assert.match(vm.error, /Réponse du serveur invalide/)
   assert.equal(vm.loading, false)
   assert.deepEqual(vm.selection, [])
 })
@@ -897,7 +899,7 @@ test('an open overnight service under 24 hours does not produce a manager alert'
   const vm = managerComponent()
   await vm.loadTeam()
   assert.equal(vm.departureAlerts.length, 0)
-  assert.equal(vm.selection.includes('sara.ortiz'), false)
+  assert.equal(vm.selection.includes('sara.ortiz'), true)
 })
 
 test('manager alerts survive a pause and block only the week containing the arrival', async () => {
@@ -910,14 +912,14 @@ test('manager alerts survive a pause and block only the week containing the arri
   vm.monday = new Date('2026-10-05T00:00:00')
   assert.equal(vm.departureAlerts.length, 1)
   assert.equal(vm.departureAlerts[0].departureInWeek, false)
-  assert.equal(vm.canSelect(vm.departureAlerts[0]), false)
+  assert.equal(vm.canSelect(vm.departureAlerts[0]), true)
 })
 
-test('real sheets cannot be selected for a local validation, before or after the 24-hour threshold', async () => {
+test('crossing the 24-hour threshold removes an incomplete sheet from server validation selection', async () => {
   teamApi({ histories: { 'sara.ortiz': [{ ...managerArrival, time: '2026-10-04 11:00:00' }] } })
   const vm = managerComponent()
   await vm.loadTeam()
-  assert.equal(vm.selection.includes('sara.ortiz'), false)
+  assert.equal(vm.selection.includes('sara.ortiz'), true)
   vm.now = new Date('2026-10-05T11:00:01Z')
   TeamOverview.watch.rows.call(vm)
   assert.equal(vm.selection.includes('sara.ortiz'), false)

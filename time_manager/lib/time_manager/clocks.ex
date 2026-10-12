@@ -71,6 +71,12 @@ defmodule TimeManager.Clocks do
              previous = latest_clock(user_id),
              :ok <- validate_completion(previous, clock, changeset, expected_clock_id),
              :ok <- validate_transition(previous, clock, changeset),
+             :ok <-
+               TimeManager.Workforce.mutable(
+                 user_id,
+                 clock.time,
+                 DateTime.add(clock.time, 1, :second)
+               ),
              {:ok, saved_clock} <- Repo.insert(changeset),
              :ok <- create_period(previous, saved_clock) do
           {:ok, saved_clock}

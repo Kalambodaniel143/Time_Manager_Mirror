@@ -1,0 +1,38 @@
+<template>
+  <section class="card section-card page-stack">
+    <header><h2 class="card-title">Congés et absences</h2><button class="btn btn-outline btn-sm" :disabled="loading || busy" @click="load">Actualiser</button></header>
+    <form class="page-stack" @submit.prevent="submit"><p class="field-hint">Indiquez la plage horaire en UTC. Votre responsable examine la demande avant validation.</p><div class="form-grid"><label class="field"><span class="field-label">Type</span><select v-model="form.kind" class="input"><option value="leave">Congé</option><option value="sick">Arrêt maladie</option><option value="recup">Récupération</option></select></label><label class="field"><span class="field-label">Début (UTC)</span><input v-model="form.start" class="input" type="datetime-local" required /></label><label class="field"><span class="field-label">Fin (UTC)</span><input v-model="form.end" class="input" type="datetime-local" required /></label></div><label class="field"><span class="field-label">Commentaire facultatif</span><textarea v-model.trim="form.reason" class="input" maxlength="500" rows="2" /></label><button class="btn btn-primary" :disabled="busy || loading">Envoyer la demande</button></form>
+    <p v-if="error" class="field-error" role="alert">{{ error }}</p><p v-if="loading" role="status">Chargement…</p><p v-else-if="!error && !items.length" class="muted">Aucune demande.</p>
+    <article v-for="item in items" :key="item.id" class="request"><strong>{{ name(item.user_id) }} · {{ kinds[item.kind] }}</strong><p>{{ stamp(item.start) }} → {{ stamp(item.end) }} UTC</p><span class="pill">{{ statuses[item.status] }}</span><p>{{ item.reason }}</p><p v-if="item.payable_hours !== null" class="field-hint">Heures rémunérables déclarées : {{ item.payable_hours }}</p><button v-if="canReview && mayReview(item.user_id) && item.status === 'approved' && item.kind !== 'recup'" class="btn btn-outline btn-sm" @click="target = item; paymentEdit = true; approving = true; cancelling = false; payable = item.payable_hours ?? ''">Confirmer les heures pour la paie</button><p v-if="item.review_reason" class="field-hint">{{ item.review_reason }}</p><div v-if="canReview && mayReview(item.user_id) && item.status === 'pending'" class="actions"><button class="btn btn-primary btn-sm" :disabled="busy" @click="target = item; reason = ''; cancelling = false; approving = true; paymentEdit = false; payable = item.payable_hours ?? ''">Accepter</button><button class="btn btn-outline btn-sm" :disabled="busy" @click="review(item, 'rejected')">Refuser</button></div><button v-if="(item.user_id === currentId && item.status === 'pending') || (canReview && mayReview(item.user_id) && item.status === 'approved')" class="btn btn-outline btn-sm" :disabled="busy" @click="target = item; reason = ''; cancelling = true; approving = false; paymentEdit = false">Annuler la demande</button></article>
+    <ModalDialog v-if="target" :title="cancelling ? 'Annuler l’absence' : paymentEdit ? 'Heures rémunérables' : approving ? 'Accepter l’absence' : 'Refuser l’absence'" id="absence-refusal" :busy="busy" @close="target = null"><label v-if="approving && target.kind !== 'recup'" class="field"><span class="field-label">Heures à rémunérer selon le planning (facultatif)</span><input v-model="payable" class="input" type="number" min="0" step="0.25" /><span class="field-hint">Le nombre d’heures travaillées prévues doit être confirmé. Une plage de plusieurs jours n’est pas assimilée à du travail continu.</span></label><label class="field"><span class="field-label">{{ approving ? 'Commentaire facultatif' : 'Motif' }}</span><textarea v-model.trim="reason" class="input" maxlength="500" required /></label><p v-if="error" class="field-error" role="alert">{{ error }}</p><button class="btn btn-danger" :disabled="busy || (!approving && !reason)" @click="cancelling ? cancel(target, reason) : paymentEdit ? setPayment(target) : decide(target, approving ? 'approved' : 'rejected', reason)">Confirmer</button></ModalDialog>
+  </section>
+</template>
+<script>
+import ModalDialog from '../ui/ModalDialog.vue'
+import { auth } from '../../stores/auth'
+import { listUsers } from '../../services/userService'
+import { listAbsences, requestAbsence, reviewAbsence, cancelAbsence, canReviewTarget, setAbsencePayment } from '../../services/workforceService'
+import { formatClockDate } from '../../utils/clockDate'
+export default {
+  name: 'AbsencePanel', components: { ModalDialog }, props: { canReview: Boolean },
+  data() { return { items: [], users: [], loading: false, busy: false, error: '', target: null, reason: '', cancelling: false, approving: false, paymentEdit: false, payable: '', version: 0, form: { start: '', end: '', kind: 'leave', reason: '' }, kinds: { leave: 'Congé', sick: 'Arrêt maladie', recup: 'Récupération' }, statuses: { pending: 'En attente', approved: 'Acceptée', rejected: 'Refusée', cancelled: 'Annulée' } } },
+  computed: { currentId() { return auth.user?.id } },
+  created() { this.load() }, beforeUnmount() { this.version += 1 },
+  methods: {
+    async setPayment(item) { if (this.busy) return; this.busy = true; this.error = ''; try { await setAbsencePayment(item.id, this.payable); this.target = null; await this.load() } catch (error) { this.error = error.message } finally { this.busy = false } },
+    stamp: formatClockDate, mayReview: canReviewTarget,
+    async cancel(item, reason) { if (this.busy) return; this.busy = true; this.error = ''; try { await cancelAbsence(item.id, reason); this.target = null; await this.load() } catch (error) { this.error = error.message } finally { this.busy = false } },
+    name(id) { return this.users.find(user => user.id === id)?.username || (id === this.currentId ? 'Moi' : `Agent ${id}`) },
+    async load() { const version = ++this.version; this.loading = true; this.error = ''; try { const [items, users] = await Promise.all([listAbsences(), this.canReview ? listUsers() : []]); if (version === this.version) { this.items = items; this.users = users } } catch (error) { if (version === this.version) this.error = error.message } finally { if (version === this.version) this.loading = false } },
+    async submit() { if (this.busy) return; this.busy = true; this.error = ''; try { await requestAbsence({ ...this.form, start: `${this.form.start}:00Z`, end: `${this.form.end}:00Z` }); this.form = { start: '', end: '', kind: 'leave', reason: '' }; await this.load() } catch (error) { this.error = error.message } finally { this.busy = false } },
+    review(item, status) { if (status === 'rejected') { this.target = item; this.reason = ''; this.cancelling = false; this.approving = false } else this.decide(item, status, '') },
+    async decide(item, status, reason) { if (this.busy) return; this.busy = true; this.error = ''; try { await reviewAbsence(item.id, status, reason, status === 'approved' && this.payable !== '' ? this.payable : undefined); this.target = null; await this.load() } catch (error) { this.error = error.message } finally { this.busy = false } },
+  },
+}
+</script>
+<style scoped>
+header,.actions { display: flex; gap: 12px; justify-content: space-between; flex-wrap: wrap; }
+.form-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 14px; }
+.request { border-top: 1px solid var(--border); padding-top: 16px; display: flex; flex-direction: column; gap: 8px; }
+@media(max-width:760px) { .form-grid { grid-template-columns: 1fr; } }
+</style>

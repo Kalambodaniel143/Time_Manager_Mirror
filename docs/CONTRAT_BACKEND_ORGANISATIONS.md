@@ -1,5 +1,7 @@
 # Contrat backend — Gotham City, adhésions et super administrateur
 
+La section 13 décrit l’implémentation backend/frontend actuelle et remplace les anciennes limites de raccordement.
+
 Ce document décrit les appels du front dans `time-manager-dashboard/src/services/organizationService.js` et les demandes de correction ajoutées dans `src/services/correctionService.js`. La section 9 précise les changements liés à la fusion de la maquette du 7 octobre 2026. La section 11 décrit l’ajout du 9 octobre 2026 : suppression personnelle du compte, avec adaptation ciblée du contrôleur et des permissions backend.
 
 ## 1. Parcours actuel — organisation unique (8 octobre 2026)
@@ -14,7 +16,7 @@ Ce document décrit les appels du front dans `time-manager-dashboard/src/service
 
 Le code de rôle backend reste `administrator`. « Super administrateur » est son libellé métier dans l’organisation unique ; aucun rôle supplémentaire `super_admin` n’est envoyé par le front. L’alias `admin` est normalisé par le service pour les écrans d’administration existants.
 
-**État serveur à distinguer :** les endpoints d’organisations/adhésions existent désormais dans le backend récupéré depuis main. Son routeur expose encore la création publique `POST /api/organizations` et l’inscription directe `POST /api/auth/register`. Leur suppression/refus côté serveur est nécessaire pour imposer réellement la nouvelle politique (voir section 10). L’adaptation mono-organisation du 8 octobre concernait le front et le contrat ; les seules modifications serveur ultérieures sont celles de la suppression personnelle (section 11). Aucune base de données utilisateur n’a été modifiée lors de ce développement.
+**État serveur à distinguer :** le nouveau routeur local refuse la création publique d’organisation et l’inscription directe (403) ; l’admission et le provisionnement manuel sont conservés. Les nouveaux workflows sont implémentés dans ce dépôt (section 13), mais nécessitent leur déploiement et leurs migrations sur le serveur distant. Les vérifications de développement utilisent la base de tests ; aucune base distante n’a été modifiée.
 
 ## 2. Simulation et branchement réel
 
@@ -657,3 +659,116 @@ Le détail des écrans et des fonctions sans API est dans [FRONTEND.md](FRONTEND
 - Le proxy Vite peut viser un serveur distant via `VITE_BACKEND_URL`. Il réécrit seulement l’Origin/Referer de sa propre origine vers le backend, pour conserver le contrôle d’origine Phoenix après le changement de Host ; les origines tierces sont laissées au contrôle serveur.
 
 Pour un volume important, une route de relevé agrégé par mois serait préférable aux lectures de tous les historiques utilisateur. Elle devra conserver le périmètre de session, fournir les totaux exacts et expliciter le fuseau, l’arrondi et les catégories. Aucune nouvelle route d’agrégation n’est requise pour le raccordement actuel.
+
+## 13. Implémentation complète des workflows — 12 octobre 2026
+
+Cette section décrit le nouveau code backend/frontend du dépôt et remplace les états « route absente », « uniquement local » ou « à implémenter » des sections 9.2–9.4 et 12. Le serveur distant doit encore recevoir ce code et les trois migrations : voir [DEPLOIEMENT_WORKFLOWS.md](DEPLOIEMENT_WORKFLOWS.md). Le détail des écrans est dans [FRONTEND.md](FRONTEND.md).
+
+### Transport, identité et admission
+
+Toutes les nouvelles routes sont sous `/api`, dans les pipelines API/auth existants : cookie JWT HttpOnly, jeton `X-CSRF-Token`, contrôle d’origine, identité et rôle rechargés depuis la base. Les réponses JSON sont enveloppées dans `data`. Les erreurs restent `400/401/403/404/409/422` ; les conflits de version, état, clôture ou chevauchement donnent un message explicite. Le CSV est une réponse `text/csv`, pas une enveloppe JSON.
+
+`POST /auth/register`, `POST /organizations` et `POST /users` répondent désormais `403` : les comptes sont créés par admission ou provisionnement manuel. Les routes de changement de rôle refusent la création d’un administrateur ; le rôle privilégié reste manuel. Les domaines internes de provisionnement sont conservés pour les scripts et les fixtures.
+
+### Routes nouvelles exactes
+
+| Méthode | Route | Autorisation / effet |
+|---|---|---|
+| GET | `/workforce/context` | Connecté : règles effectives, préférences personnelles et permissions des équipes gérées. |
+| GET/PATCH | `/organizations/:org_id/rules` | Lecture dans sa propre organisation ; écriture par son administrateur. |
+| GET/PATCH | `/teams/:id/permissions` | Lecture d’une équipe accessible ; écriture par son administrateur. |
+| GET/PUT | `/users/:user_id/week-notes/:week` | Lecture selon le périmètre ; seul le salarié écrit sa note. |
+| GET | `/weekly-sheets?week=YYYY-MM-DD` | Semaines des utilisateurs accessibles, y compris une représentation open si aucune ligne n’existe encore. |
+| POST | `/weekly-sheets/validate` | Validation atomique d’une sélection, permission validate, jamais soi-même. |
+| POST | `/weekly-sheets/:user_id/:week/:action` | Actions close/reopen, permission validate, motif obligatoire. |
+| GET | `/correction-requests?user_id=...` | Suivi personnel ou du périmètre du responsable. |
+| POST | `/workingtime/:id/correction-requests` | Proposition sur sa propre période ; aucune mutation directe. |
+| PATCH | `/correction-requests/:id` | Décision approved/rejected par un autre responsable, permission correct. |
+| GET | `/plans?from=YYYY-MM-DD&to=YYYY-MM-DD` | Équipes gérées et/ou appartenances autorisées ; publications pour les employés. |
+| GET | `/plans/:id` | Planning d’une équipe accessible ; brouillon seulement pour son manager actuel ou l’administration. |
+| POST | `/teams/:id/plans` | Création d’un planning par le manager de l’équipe ou son administration. |
+| PATCH | `/plans/:id` | Modification de la période d’un brouillon vide. |
+| DELETE | `/plans/:id` | Retrait d’un planning futur ; publication requise si déjà publié, motif obligatoire. |
+| POST | `/plans/:plan_id/shifts` | Nouvelle affectation d’un membre de l’équipe. |
+| PUT/DELETE | `/plans/:plan_id/shifts/:id` | Modification/suppression de garde future. |
+| POST | `/plans/:id/publish` | Permission publish ; contrôles d’affectation, horaires, absences et quotas. |
+| GET/POST | `/shift-swaps` | Liste personnelle/périmètre responsable ; proposition d’échange de sa garde avec celle d’un collègue du même planning. |
+| PATCH | `/shift-swaps/:id/consent` | Accord/refus uniquement par le collègue destinataire. |
+| PATCH | `/shift-swaps/:id` | Décision d’un autre responsable après consentement ; approbation nécessite validate pour les deux agents et publish pour l’équipe. |
+| GET/POST | `/absence-requests` | Consultation du périmètre et demande personnelle de congé, maladie ou récupération. |
+| PATCH | `/absence-requests/:id` | Décision par un responsable avec permission validate. |
+| POST | `/absence-requests/:id/cancel` | Retrait personnel pending ou annulation par un responsable ; motif obligatoire. |
+| PATCH | `/absence-requests/:id/payment` | Confirmation des heures rémunérables d’une absence approuvée, par un autre responsable autorisé. |
+| GET | `/payroll?month=YYYY-MM` | Relevé calculé pour l’organisation de l’administrateur. |
+| GET | `/payroll/export?month=YYYY-MM` | CSV du même calcul et du même périmètre. |
+| GET/PUT | `/users/:id/payroll-profile` | Lecture personnelle ou administration ; taux/devise modifiés uniquement par son administration. |
+| GET/PATCH | `/auth/preferences` | Préférences du compte authentifié, sans identifiant d’utilisateur dans le corps. |
+| GET | `/audit-events` | 200 dernières actions de son organisation, pour l’administration. |
+| GET | `/notifications` | 100 dernières notifications personnelles. |
+| PATCH | `/notifications/:id/read` | Marquage comme lue uniquement pour leur destinataire. |
+
+Les routes existantes de pointage/périodes, utilisateurs et équipes sont conservées, avec protection des semaines et journalisation supplémentaires. L’index de périodes filtre désormais les **chevauchements** de la fenêtre start/end : les périodes originales sont renvoyées sans découpage, et le front répartit leur affichage sur les journées. Cela conserve les services traversant minuit, une semaine ou un mois.
+
+### Corps et états
+
+Règles : `PATCH /organizations/:id/rules` avec `{"rules": {...}}`. Clés acceptées :
+
+- `maxConsecutiveNights` : entier 1–31, défaut 3.
+- `maxNightsPerWeek` : 0–7, et `maxNightsPerMonth` : 0–31 ; 0 désactive ce quota, défaut 0.
+- `overtimeThreshold` : 1–168 heures/semaine, défaut 40.
+- `publishDaysAhead` : 0–365 jours, défaut 14.
+- `nightStart`/`nightEnd` : heures UTC 0–23 distinctes, défaut 22/6.
+- `nightMultiplier`/`overtimeMultiplier` : nombres 1–10, défaut 1,5/2.
+- `paidAbsenceKinds` : liste de leave/sick, vide par défaut ; recup n’est pas rémunérée.
+- `timezone` : `Etc/UTC` dans cette version.
+
+Permissions : `{"permissions":{"validate":true,"correct":true,"publish":false}}`. Les trois flags sont booléens et attachés à l’équipe ; ils s’appliquent à son manager actuel. Les valeurs initiales sont validate/correct true et publish false. L’administration conserve ses droits de périmètre. Le contexte fournit team_id, manager_id, member_ids et ces flags pour piloter l’interface ; ces données ne remplacent pas le contrôle serveur.
+
+Note : `{"note":"..."}`, limitée à 2000 caractères. `week` est une date de lundi. Le même enregistrement de feuille conserve note, status (open/validated/closed), reviewer_id, reviewed_at et reason. Validation : `{"week":"2026-10-05","user_ids":[14,15]}`, 1–100 comptes uniques. Close/reopen : `{"reason":"..."}`, 1–500 caractères. Seules les semaines terminées sont validables ; les départs manquants et corrections pending sont bloquants.
+
+La correction conserve le contrat de la section 9.2 : `{"correction":{"start":"...","end":"...","reason":"..."}}`, puis décision `{"status":"approved","reason":"..."}` ou rejected avec motif obligatoire. Les horaires before sont conservés ; accepter une proposition périmée ou déjà traitée retourne 409. La période n’est changée qu’au succès de la transaction.
+
+Planning : `POST /teams/:id/plans` avec `{"plan":{"start":"2026-10-27","days":14}}`, 1–31 jours. Les réponses fournissent id, team_id, start, days, revision, published_revision, published_at, shifts, members, can_manage et can_publish. Un brouillon vide peut recevoir start/days par PATCH avec revision.
+
+Garde : `{"shift":{"user_id":14,"start":"2026-10-27T22:00:00Z","end":"2026-10-28T06:00:00Z","kind":"night","place":"Centre","revision":1}}`. Kind : day/night/oncall/leave/rest ; durée positive jusqu’à 24 h. L’utilisateur est vérifié comme membre, la garde doit commencer dans la période du planning et être future. DELETE garde et publication utilisent `{"revision":2}` ; retrait du planning ajoute reason. Les dates et limites sont calculées en UTC.
+
+Une publication conserve une copie immuable des affectations. Les modifications incrémentent revision ; les employés continuent à lire la dernière publication. Les contrôles utilisent les publications des autres équipes pour détecter chevauchements et quotas mensuels/hebdomadaires, y compris les frontières de plannings. Un planning commencé ne peut pas être supprimé.
+
+Échange : `{"shift_id":1,"target_shift_id":2,"reason":"..."}`. Les utilisateurs sont dérivés des deux gardes ; le demandeur doit posséder la première. Consentement : `{"accepted":true}`. États : pending → consented → approved/rejected ; le refus du collègue produit rejected. La décision utilise status/reason. L’acceptation permute les propriétaires des deux gardes et actualise la publication dans une seule transaction ; elle vérifie snapshots, membres et règles courantes. Modifier/supprimer une garde ou retirer un planning rejette ses échanges actifs et notifie les agents.
+
+Absence : `{"start":"...","end":"...","kind":"leave","reason":"..."}` ; kind leave/sick/recup, plage positive limitée à 366 jours. Décision : `{"status":"approved","reason":"","payable_hours":"24"}`. Payable_hours est facultatif à l’acceptation, mais nécessaire pour chiffrer une absence rémunérable ; il peut être complété par l’endpoint payment. Il est non négatif, fini et ne dépasse pas l’intervalle. Le repos compensatoire pris n’est pas payable. Un manager ne décide jamais sa propre absence. États : pending, approved, rejected, cancelled. Les demandes et approbations vérifient les chevauchements et les semaines verrouillées.
+
+Profil de paie : `{"hourly_rate":"15.50","currency":"EUR"}`. Taux non négatif jusqu’à 100000, fini, deux décimales maximum ; null supprime le taux. Devises EUR/USD/GBP. Le taux n’est jamais supposé ni remplacé par un exemple.
+
+Préférences : theme (light/night/contrast), strong_text, tour_seen, speech_enabled (booléens), speech_rate (0,5–2), speech_voice (texte jusqu’à 200 caractères). Les voix sont propres à l’appareil ; le backend stocke la sélection, pas une piste audio.
+
+### Calcul financier
+
+Les catégories de travail sont exclusives : day, night hors dépassement hebdomadaire, sup, recup (travail donnant droit à récupération), oncall. La catégorie d’une période enregistrée est work/oncall/recup ; jour/nuit et dépassements sont calculés, pas choisis librement comme un multiplicateur dans le corps client.
+
+Le calcul récupère le début de la semaine contenant le premier jour du mois pour tenir compte des heures du mois précédent consommant déjà le seuil hebdomadaire. Il découpe en UTC aux frontières d’heure/semaine/mois. Les heures sup. ne cumulent pas la majoration nuit. Montants : Decimal, arrondi final à deux décimales ; totaux monétaires séparés par devise. Les personnes présentes dans plusieurs équipes ne sont comptées qu’une fois.
+
+Leave/sick et recup_taken sont des absences suivies séparément du total travaillé. La rémunération d’absence n’est incluse que pour les catégories activées et la quantité confirmée par le responsable. Cette quantité est répartie au prorata de l’intervalle si l’absence traverse le mois ; le travail en chevauchement est déduit et signalé. Un montant reste null si un taux ou une quantité nécessaire manque. Le relevé fournit absence_payment_incomplete, absence_conflict et confirmed, et le front signale les régularisations et semaines non validées. L’export est un relevé du scénario, pas une déclaration fiscale ou un calcul de salaire net.
+
+### Atomicité, historique et sécurité
+
+Les mutations des heures et les validations utilisent un verrou par salarié ; les validations groupées verrouillent les comptes dans l’ordre des identifiants. Les décisions vérifient l’état courant sous verrou. Les plans utilisent revision et un verrou de publication par organisation. Les tests de concurrence utilisent des connexions PostgreSQL indépendantes : une seule création/décision réussit lorsque deux appels visent la même opération.
+
+Une semaine validated/closed bloque les périodes, les pointages datés dans cette semaine, les notes et les régularisations d’absence. Réouvrir exige un responsable différent et un motif. Les utilisateurs, équipes, plannings et permissions restent dans le périmètre réel ; une rétrogradation interdit immédiatement les accès de manager au prochain appel.
+
+Les événements d’audit enregistrent l’acteur, l’organisation, l’action et les détails métier pertinents. Les mots de passe, hashes et jetons ne sont pas journalisés. Les notifications de publication/décision restent dans l’application et sont personnelles ; aucun email/SMS ou rappel programmé supplémentaire n’est promis par cette implémentation.
+
+### Base, vérification et mise en ligne
+
+Les tables workforce_settings, team_permissions, account_preferences, weekly_sheets, correction_requests, workforce_plans, planned_shifts, shift_swaps, absence_requests, payroll_profiles, workforce_events et workforce_notifications sont créées par les migrations, sans suppression des données existantes. Workingtime reçoit kind ; absence_requests reçoit payable_hours. Les clés étrangères nettoient les données opérationnelles liées à un compte supprimé et anonymisent les références d’acteurs du journal.
+
+```bash
+# time_manager : base de tests isolée, Elixir compatible
+mix precommit
+# time-manager-dashboard
+node --test test/*.test.js
+npx eslint src dev test vite.config.js
+npm run build
+```
+
+La mise en ligne doit installer les nouveaux backend/frontend et exécuter les migrations sur la base du serveur existant. Le code local n’active pas de nouvelles routes sur le serveur distant à lui seul.

@@ -51,6 +51,8 @@ export async function request(path, options = {}) {
 
   if (response.status === 204) return null
 
+  if (response.ok && options.responseType === 'text') return response.text()
+
   const payload = await response.json().catch(() => null)
 
   if (response.status === 401 && !options.skipUnauthorizedHandler) unauthorizedHandler()

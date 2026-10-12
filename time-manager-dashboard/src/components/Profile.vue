@@ -10,6 +10,7 @@
         <label class="strong-option"><input v-model="strongText" type="checkbox" @change="saveStrongText" /> Utiliser des textes renforcés</label>
         <button class="btn btn-outline" type="button" @click="$emit('tour')">Revoir la prise en main</button>
       </section>
+      <section v-if="!demo" class="card section page-stack"><h2 class="card-title">Lecture vocale</h2><p>Écoutez les textes et les étapes du guide avec une voix de votre navigateur.</p><label><input v-model="voice.enabled" type="checkbox" /> Afficher les commandes de lecture</label><label class="field"><span class="field-label">Vitesse</span><input v-model.number="voice.rate" class="input" type="range" min="0.5" max="2" step="0.1" /></label><label class="field"><span class="field-label">Voix</span><select v-model="voice.name" class="input"><option value="">Voix française par défaut</option><option v-for="item in voices" :key="item.name" :value="item.name">{{ item.name }} · {{ item.lang }}</option></select></label><button class="btn btn-primary" @click="saveVoice">Enregistrer la lecture vocale</button><button class="btn btn-outline" @click="testVoice">Écouter un exemple</button><p v-if="preferenceError" class="field-error" role="alert">{{ preferenceError }}</p></section>
       <TransparencyPanel />
       <section v-if="organization" class="card section"><h2 class="card-title">Votre compte d’organisation</h2><p>Votre compte est rattaché à Gotham City. Le super administrateur gère les demandes d’adhésion et les rôles depuis « Administration Gotham ».</p></section>
       <form v-if="!demo" class="card section" novalidate @submit.prevent="saveProfile">
@@ -65,7 +66,7 @@
         </div>
       </form>
     </div>
-    <section class="card section support"><h2 class="card-title">Besoin d’un accompagnement ?</h2><p>Un téléphone ou un appareil partagé suffit. Si vous ne pouvez pas utiliser l’application seul, votre responsable peut vous accompagner pour enregistrer vos horaires réels.</p><p class="field-hint">Un oubli ? Complétez votre départ. Une heure déjà enregistrée est incorrecte ? Contactez votre responsable pour la faire corriger.</p></section>
+    <section class="card section support"><h2 class="card-title">Besoin d’un accompagnement ?</h2><p>Un téléphone ou un appareil partagé suffit. Si vous ne pouvez pas utiliser l’application seul, votre responsable peut vous accompagner pour enregistrer vos horaires réels.</p><p class="field-hint">Un oubli ? Complétez votre départ. Une heure déjà enregistrée est incorrecte ? Proposez une correction depuis « Mes heures ». Une semaine validée doit être rouverte par votre responsable.</p></section>
     <section class="card section deletion-section"><div><h2 class="card-title">Supprimer mon compte</h2><p>Cette action supprime votre compte, vos pointages et vos périodes de travail. Vous serez déconnecté et ne pourrez plus utiliser ces identifiants.</p><p v-if="isSuperAdministrator" class="field-hint">Le dernier super administrateur doit transférer ses responsabilités avant de pouvoir supprimer son compte.</p></div><button class="btn btn-danger" type="button" @click="openDeletion">Supprimer mon compte</button></section>
     <ModalDialog v-if="deletionOpen" title="Confirmer la suppression de mon compte" id="account-deletion-title" :busy="deleting" @close="closeDeletion"><p>Vous allez supprimer le compte <strong>{{ profile.email }}</strong>. Cette action est définitive.</p><form class="page-stack" novalidate @submit.prevent="deleteAccount"><label class="field"><span class="field-label">Mot de passe actuel pour confirmer</span><input v-model="deletionPassword" class="input" type="password" autocomplete="current-password" :disabled="deleting" required /></label><label class="deletion-confirmation"><input v-model="deletionConfirmed" type="checkbox" :disabled="deleting" /> Je confirme la suppression définitive de mon compte.</label><p v-if="deletionError" class="field-error" role="alert">{{ deletionError }}</p><div class="deletion-actions"><button class="btn btn-outline" type="button" :disabled="deleting" @click="closeDeletion">Annuler</button><button class="btn btn-danger" type="submit" :disabled="deleting || !deletionConfirmed || !deletionPassword">{{ deleting ? 'Suppression…' : 'Supprimer définitivement' }}</button></div></form></ModalDialog>
     <section class="card section logout-section"><div><h2 class="card-title">Quitter votre session</h2><p class="muted">Déconnectez-vous après utilisation sur un appareil partagé.</p></div><button class="btn btn-primary" type="button" @click="$emit('logout')">Se déconnecter</button></section>
@@ -81,6 +82,8 @@ import { readStrongText, writeStrongText } from '../utils/session'
 import * as userService from '../services/userService'
 import { auth, ROLE_LABELS, setUser } from '../stores/auth'
 import { EMAIL_PATTERN, PASSWORD_MIN_LENGTH, displayName } from '../utils/people'
+import { workforce, savePreferences, loadContext } from '../services/workforceService'
+import { speechSupported, readAloud, stopReading } from '../utils/speech'
 import { isDemoData } from '../services/orgService'
 import { notify } from '../utils/toast'
 
@@ -94,6 +97,7 @@ export default {
 
   data() {
     return {
+      voices: [], voice: { enabled: Boolean(workforce.preferences.speech_enabled), rate: workforce.preferences.speech_rate || 1, name: workforce.preferences.speech_voice || '' }, preferenceError: '',
       deletionOpen: false,
       deletionPassword: '',
       deletionConfirmed: false,
@@ -145,7 +149,8 @@ export default {
       if (auth.user) this.profile = { username: auth.user.username, email: auth.user.email, first_name: auth.user.first_name || '', last_name: auth.user.last_name || '' }
     },
   },
-  beforeUnmount() { this.deletionDisposed = true; this.deletionPassword = '' },
+  async mounted() { this.refreshVoices(); if (speechSupported()) window.speechSynthesis.addEventListener('voiceschanged', this.refreshVoices); if (!this.demo) { try { const ctx = await loadContext(); if (!this.deletionDisposed) { this.voice = { enabled: ctx.preferences.speech_enabled, rate: ctx.preferences.speech_rate, name: ctx.preferences.speech_voice }; this.strongText = ctx.preferences.strong_text } } catch (error) { this.preferenceError = error.message } } },
+  beforeUnmount() { this.deletionDisposed = true; this.deletionPassword = ''; stopReading(); if (speechSupported()) window.speechSynthesis.removeEventListener('voiceschanged', this.refreshVoices) },
   methods: {
     openDeletion() { this.deletionPassword = ''; this.deletionConfirmed = false; this.deletionError = ''; this.deletionOpen = true },
     closeDeletion() { if (this.deleting) return; this.deletionOpen = false; this.deletionPassword = ''; this.deletionConfirmed = false; this.deletionError = '' },
@@ -164,7 +169,10 @@ export default {
         this.deletionError = error.status === 409 && /last administrator|dernier super administrateur/i.test(error.message) ? 'Le dernier super administrateur ne peut pas supprimer son compte. Transférez d’abord ses responsabilités.' : error.payload?.errors?.current_password ? 'Mot de passe actuel incorrect.' : error.message
       } finally { this.deleting = false }
     },
-    saveStrongText() { writeStrongText(this.strongText) },
+    refreshVoices() { this.voices = speechSupported() ? window.speechSynthesis.getVoices() : [] },
+    async saveVoice() { this.preferenceError = ''; try { await savePreferences({ speech_enabled: this.voice.enabled, speech_rate: this.voice.rate, speech_voice: this.voice.name }) } catch (error) { this.preferenceError = error.message } },
+    testVoice() { if (!speechSupported()) { this.preferenceError = 'La lecture vocale n’est pas disponible dans ce navigateur.'; return }; readAloud('Bienvenue dans Time Manager. Vous pouvez écouter vos horaires et le guide de prise en main.', { speech_rate: this.voice.rate, speech_voice: this.voice.name }) },
+    async saveStrongText() { writeStrongText(this.strongText); if (!this.demo) { try { await savePreferences({ strong_text: this.strongText }) } catch (error) { this.preferenceError = error.message } } },
     async saveProfile() {
       if (this.hasProfileErrors || this.savingProfile) return
       const userId = auth.user.id
