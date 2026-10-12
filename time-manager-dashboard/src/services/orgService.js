@@ -30,6 +30,11 @@ const RULE_LABELS = {
   publishDaysAhead: 'Planning publié au moins (jours avant)',
 }
 
+export function isDemoData() { return Boolean(auth.organizationSession) }
+function requireDemo() {
+  if (!isDemoData()) throw new Error('Cette fonctionnalité n’est pas encore disponible en mode réel.')
+}
+
 function stamp(date, time) {
   const clock = time || `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
   return `${toDateInput(date)} ${clock}`
@@ -44,6 +49,11 @@ export function planStart() {
 }
 
 function freshState() {
+  if (!isDemoData()) return {
+    rules: { maxConsecutiveNights: Infinity, maxNightsPerWeek: 0, maxNightsPerMonth: 0, overtimeThreshold: Infinity, publishDaysAhead: 0 },
+    rights: [], journal: [], notes: {}, validated: {}, swapRequests: [],
+    teamPlan: { start: toDateInput(planStart()), rows: {}, published: false },
+  }
   const lastWeek = toDateInput(lastWeekMonday())
 
   return {
@@ -63,6 +73,7 @@ function freshState() {
 
 function restore() {
   const state = freshState()
+  if (!isDemoData()) return state
   const saved = readJson(storageKey(), null)
   if (!saved) return state
 
@@ -78,9 +89,10 @@ function restore() {
 }
 
 export const org = reactive(restore())
-watch(() => auth.organizationSession?.organization.id, () => Object.assign(org, restore()))
+watch(() => auth.organizationSession?.organization.id, () => Object.assign(org, restore()), { flush: 'sync' })
 
 function persist() {
+  requireDemo()
   writeJson(storageKey(), org)
 }
 
@@ -89,18 +101,22 @@ function log(text) {
 }
 
 export function personaFor(role) {
+  if (!isDemoData()) return { name: '', username: '', email: '', space: auth.organization?.name || 'Mon espace' }
   return PERSONAS[role] || PERSONAS.employee
 }
 
 export function team() {
+  if (!isDemoData()) return { name: 'Mon équipe', members: [] }
   return TEAM
 }
 
 export function memberOf(username) {
+  if (!isDemoData()) return null
   return TEAM.members.find((member) => member.username === username) || null
 }
 
 export function employeePlan(today = new Date()) {
+  if (!isDemoData()) return []
   const monday = mondayOf(today)
   const todayKey = toDateInput(today)
   let placeIndex = 0
@@ -129,6 +145,7 @@ export function noteFor(username, weekKey) {
 }
 
 export function setNote(username, weekKey, text) {
+  requireDemo()
   org.notes[`${username}:${weekKey}`] = text
   persist()
 }
@@ -138,6 +155,7 @@ export function isValidated(username, weekKey) {
 }
 
 export function validateSheets(usernames, weekKey) {
+  requireDemo()
   usernames.forEach((username) => {
     org.validated[`${username}:${weekKey}`] = true
   })
@@ -190,6 +208,7 @@ export function planAlerts() {
 }
 
 export function swapShifts(usernameA, usernameB, index) {
+  requireDemo()
   const rowA = org.teamPlan.rows[usernameA]
   const rowB = org.teamPlan.rows[usernameB]
   if (!rowA || !rowB) return
@@ -202,6 +221,7 @@ export function swapShifts(usernameA, usernameB, index) {
 }
 
 export function setShift(username, index, kind) {
+  requireDemo()
   const row = org.teamPlan.rows[username]
   if (!row) return
 
@@ -216,11 +236,13 @@ export function canPublish(managerId = 'lucie') {
 }
 
 export function publishPlan() {
+  requireDemo()
   org.teamPlan.published = true
   persist()
 }
 
 export function setRight(managerId, key, value) {
+  requireDemo()
   const right = org.rights.find((item) => item.id === managerId)
   if (!right || right[key] === value) return
 
@@ -230,6 +252,7 @@ export function setRight(managerId, key, value) {
 }
 
 export function setRule(key, value) {
+  requireDemo()
   const number = Number(value)
   if (!Object.hasOwn(RULE_LABELS, key) || !Number.isInteger(number) || number < (['maxNightsPerWeek', 'maxNightsPerMonth'].includes(key) ? 0 : 1) || org.rules[key] === number) return
 
@@ -240,7 +263,7 @@ export function setRule(key, value) {
 }
 
 export function payroll() {
-  const rows = PAYROLL.map((row) => ({
+  const rows = (isDemoData() ? PAYROLL : []).map((row) => ({
     ...row,
     total: row.day + row.night + row.sup + row.recup + row.oncall + row.leave,
   }))
@@ -266,17 +289,20 @@ export function payrollCsv() {
 }
 
 export function resetOrg() {
+  requireDemo()
   Object.assign(org, freshState())
   persist()
 }
 
 export function requestShiftSwap(user, day, reason) {
+  requireDemo()
   if (!day || !reason.trim()) throw new Error('Choisissez une garde et indiquez votre demande.')
   if (org.swapRequests.some(item => item.user_id === user.id && item.day === day && item.status === 'pending')) throw new Error('Une demande est déjà en attente pour cette garde.')
   const item = { id: crypto.randomUUID(), user_id: user.id, username: user.username, day, reason: reason.trim(), status: 'pending', created_at: new Date().toISOString() }
   org.swapRequests.unshift(item); persist(); return item
 }
 export function resolveShiftSwap(id, status) {
+  requireDemo()
   if (!['accepted', 'rejected'].includes(status)) return
   const item = org.swapRequests.find(request => request.id === id)
   if (!item || item.status !== 'pending') return

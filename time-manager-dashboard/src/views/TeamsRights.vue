@@ -1,5 +1,10 @@
 <template>
-  <div class="rights">
+  <div v-if="!demo" class="rights">
+    <PageHeader eyebrow="Administration" title="Équipes et droits" />
+    <InfoNote title="Droits associés aux rôles"><p>L’employé consulte son compte et pointe pour lui-même. Le manager consulte et corrige les heures des membres des équipes qu’il gère. L’administration gère les comptes et les équipes de son espace.</p><p>Les droits supplémentaires, règles de planning et journal des changements ne sont pas encore disponibles.</p><RouterLink class="btn btn-outline" :to="{ name: 'adminUsers' }">Gérer les rôles</RouterLink></InfoNote>
+    <AdminTeams />
+  </div>
+  <div v-else class="rights">
     <PageHeader eyebrow="Administration" title="Équipes et droits" />
 
     <p class="demo-notice">Droits et règles de démonstration · enregistrés dans ce navigateur. Les permissions du serveur restent celles des rôles et équipes réels.</p>
@@ -34,14 +39,17 @@ import InfoNote from '../components/ui/InfoNote.vue'
 import PageHeader from '../components/ui/PageHeader.vue'
 import OrgRules from '../components/admin/OrgRules.vue'
 import RightsTable from '../components/admin/RightsTable.vue'
-import { org } from '../services/orgService'
+import AdminTeams from './AdminTeams.vue'
+import { RouterLink } from 'vue-router'
+import { org, isDemoData } from '../services/orgService'
 
 export default {
   name: 'TeamsRights',
 
-  components: { InfoNote, OrgRules, PageHeader, RightsTable },
+  components: { AdminTeams, RouterLink, InfoNote, OrgRules, PageHeader, RightsTable },
 
   computed: {
+    demo: isDemoData,
     journal() {
       return org.journal
     },

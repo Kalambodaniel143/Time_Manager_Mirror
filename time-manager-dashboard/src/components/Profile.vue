@@ -12,9 +12,12 @@
       </section>
       <TransparencyPanel />
       <section v-if="organization" class="card section"><h2 class="card-title">Votre compte d’organisation</h2><p>Votre compte est rattaché à Gotham City. Le super administrateur gère les demandes d’adhésion et les rôles depuis « Administration Gotham ».</p></section>
-      <form v-if="!organization" class="card section" novalidate @submit.prevent="saveProfile">
+      <form v-if="!demo" class="card section" novalidate @submit.prevent="saveProfile">
         <h2 class="card-title">Identité</h2>
         <p class="card-subtitle">Votre rôle : <strong>{{ roleLabel }}</strong>. Seule l’administration peut le changer.</p>
+
+        <label class="field"><span class="field-label">Prénom</span><input v-model.trim="profile.first_name" class="input" autocomplete="given-name" maxlength="100" /><span v-if="profileErrors.first_name" class="field-error">{{ profileErrors.first_name }}</span></label>
+        <label class="field"><span class="field-label">Nom</span><input v-model.trim="profile.last_name" class="input" autocomplete="family-name" maxlength="100" /><span v-if="profileErrors.last_name" class="field-error">{{ profileErrors.last_name }}</span></label>
 
         <label class="field">
           <span class="field-label">Identifiant</span>
@@ -35,7 +38,7 @@
         </div>
       </form>
 
-      <form v-if="!organization" class="card section" novalidate @submit.prevent="savePassword">
+      <form v-if="!demo" class="card section" novalidate @submit.prevent="savePassword">
         <h2 class="card-title">Mot de passe</h2>
         <p class="card-subtitle">Le mot de passe actuel est demandé : une session ouverte ne suffit pas à changer de mot de passe.</p>
 
@@ -62,7 +65,7 @@
         </div>
       </form>
     </div>
-    <section class="card section support"><h2 class="card-title">Besoin d’un accompagnement ?</h2><p>Un téléphone ou un appareil partagé suffit. Si vous ne pouvez pas utiliser l’application seul, votre responsable peut vous accompagner pour enregistrer vos horaires réels.</p><p class="field-hint">Un oubli ? Complétez votre départ. Une heure déjà enregistrée est incorrecte ? Proposez une correction depuis « Mes heures ».</p></section>
+    <section class="card section support"><h2 class="card-title">Besoin d’un accompagnement ?</h2><p>Un téléphone ou un appareil partagé suffit. Si vous ne pouvez pas utiliser l’application seul, votre responsable peut vous accompagner pour enregistrer vos horaires réels.</p><p class="field-hint">Un oubli ? Complétez votre départ. Une heure déjà enregistrée est incorrecte ? Contactez votre responsable pour la faire corriger.</p></section>
     <section class="card section deletion-section"><div><h2 class="card-title">Supprimer mon compte</h2><p>Cette action supprime votre compte, vos pointages et vos périodes de travail. Vous serez déconnecté et ne pourrez plus utiliser ces identifiants.</p><p v-if="isSuperAdministrator" class="field-hint">Le dernier super administrateur doit transférer ses responsabilités avant de pouvoir supprimer son compte.</p></div><button class="btn btn-danger" type="button" @click="openDeletion">Supprimer mon compte</button></section>
     <ModalDialog v-if="deletionOpen" title="Confirmer la suppression de mon compte" id="account-deletion-title" :busy="deleting" @close="closeDeletion"><p>Vous allez supprimer le compte <strong>{{ profile.email }}</strong>. Cette action est définitive.</p><form class="page-stack" novalidate @submit.prevent="deleteAccount"><label class="field"><span class="field-label">Mot de passe actuel pour confirmer</span><input v-model="deletionPassword" class="input" type="password" autocomplete="current-password" :disabled="deleting" required /></label><label class="deletion-confirmation"><input v-model="deletionConfirmed" type="checkbox" :disabled="deleting" /> Je confirme la suppression définitive de mon compte.</label><p v-if="deletionError" class="field-error" role="alert">{{ deletionError }}</p><div class="deletion-actions"><button class="btn btn-outline" type="button" :disabled="deleting" @click="closeDeletion">Annuler</button><button class="btn btn-danger" type="submit" :disabled="deleting || !deletionConfirmed || !deletionPassword">{{ deleting ? 'Suppression…' : 'Supprimer définitivement' }}</button></div></form></ModalDialog>
     <section class="card section logout-section"><div><h2 class="card-title">Quitter votre session</h2><p class="muted">Déconnectez-vous après utilisation sur un appareil partagé.</p></div><button class="btn btn-primary" type="button" @click="$emit('logout')">Se déconnecter</button></section>
@@ -77,7 +80,8 @@ import TransparencyPanel from './employee/TransparencyPanel.vue'
 import { readStrongText, writeStrongText } from '../utils/session'
 import * as userService from '../services/userService'
 import { auth, ROLE_LABELS, setUser } from '../stores/auth'
-import { EMAIL_PATTERN, PASSWORD_MIN_LENGTH } from '../utils/people'
+import { EMAIL_PATTERN, PASSWORD_MIN_LENGTH, displayName } from '../utils/people'
+import { isDemoData } from '../services/orgService'
 import { notify } from '../utils/toast'
 
 export default {
@@ -98,7 +102,7 @@ export default {
       deletionDisposed: false,
       strongText: readStrongText(),
       themes: [{ value: 'light', label: 'Clair' }, { value: 'night', label: 'Nuit' }, { value: 'contrast', label: 'Contraste élevé' }],
-      profile: { username: auth.user.username, email: auth.user.email },
+      profile: { username: auth.user.username, email: auth.user.email, first_name: auth.user.first_name || '', last_name: auth.user.last_name || '' },
       password: { current: '', next: '', confirmation: '' },
       minLength: PASSWORD_MIN_LENGTH,
       savingProfile: false,
@@ -109,10 +113,11 @@ export default {
   },
 
   computed: {
+    demo: isDemoData,
     currentUserId() { return auth.user?.id },
     isSuperAdministrator() { return auth.user?.role === 'administrator' },
-    organization() { return auth.organizationSession?.organization || null },
-    displayName() { if (!auth.user) return ''; return auth.organizationSession ? `${auth.user.first_name} ${auth.user.last_name}` : auth.user.username },
+    organization() { return auth.organization || null },
+    displayName() { return displayName(auth.user) },
     initials() { return this.displayName.split(/[ ._-]+/).filter(Boolean).map(part => part[0]).join('').slice(0, 2).toUpperCase() },
     roleLabel() {
       return ROLE_LABELS[auth.user?.role] || auth.user?.role || ''
@@ -122,6 +127,8 @@ export default {
       const errors = {}
       if (!this.profile.username) errors.username = 'Un identifiant est nécessaire.'
       if (!EMAIL_PATTERN.test(this.profile.email)) errors.email = 'Adresse invalide (ex. nom@domaine.fr).'
+      if (this.organization && !this.profile.first_name) errors.first_name = 'Le prénom est nécessaire pour un compte d’organisation.'
+      if (this.organization && !this.profile.last_name) errors.last_name = 'Le nom est nécessaire pour un compte d’organisation.'
       return errors
     },
 
@@ -135,7 +142,7 @@ export default {
       if (id === previous) return
       this.deletionOpen = false; this.deletionPassword = ''; this.deletionConfirmed = false
       this.password = { current: '', next: '', confirmation: '' }
-      if (auth.user) this.profile = { username: auth.user.username, email: auth.user.email }
+      if (auth.user) this.profile = { username: auth.user.username, email: auth.user.email, first_name: auth.user.first_name || '', last_name: auth.user.last_name || '' }
     },
   },
   beforeUnmount() { this.deletionDisposed = true; this.deletionPassword = '' },
@@ -159,12 +166,14 @@ export default {
     },
     saveStrongText() { writeStrongText(this.strongText) },
     async saveProfile() {
+      if (this.hasProfileErrors || this.savingProfile) return
+      const userId = auth.user.id
       this.savingProfile = true
       this.profileError = ''
 
       try {
-        setUser(await userService.updateUser(auth.user.id, { ...this.profile }))
-        notify('Profil mis à jour.')
+        const user = await userService.updateUser(userId, { ...this.profile })
+        if (!this.deletionDisposed && auth.user?.id === userId) { setUser(user); notify('Profil mis à jour.') }
       } catch (error) {
         this.profileError = error.message
       } finally {

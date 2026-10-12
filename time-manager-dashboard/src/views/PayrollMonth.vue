@@ -1,5 +1,6 @@
 <template>
-  <div class="payroll">
+  <MonthlyHours v-if="!demo" :now="now" />
+  <div v-else class="payroll">
     <PageHeader :eyebrow="`${monthName} · ${data.rows.length} services`" :title="`Paie de ${monthName}`">
       <button class="btn btn-primary" type="button" @click="exportCsv">
         <AppIcon name="check" />
@@ -49,7 +50,8 @@ import AppIcon from '../components/ui/AppIcon.vue'
 import HourTag from '../components/ui/HourTag.vue'
 import InfoNote from '../components/ui/InfoNote.vue'
 import PageHeader from '../components/ui/PageHeader.vue'
-import { org, payroll, payrollCsv } from '../services/orgService'
+import MonthlyHours from '../components/admin/MonthlyHours.vue'
+import { org, payroll, payrollCsv, isDemoData } from '../services/orgService'
 import { formatHours } from '../utils/hours'
 import { notify } from '../utils/toast'
 
@@ -65,7 +67,7 @@ const COLUMNS = [
 export default {
   name: 'PayrollMonth',
 
-  components: { AppIcon, HourTag, InfoNote, PageHeader },
+  components: { MonthlyHours, AppIcon, HourTag, InfoNote, PageHeader },
 
   props: {
     now: { type: Date, required: true },
@@ -76,6 +78,7 @@ export default {
   },
 
   computed: {
+    demo: isDemoData,
     monthName() {
       const month = new Date(this.now.getFullYear(), this.now.getMonth() - 1, 1)
       return month.toLocaleDateString('fr-FR', { month: 'long' })

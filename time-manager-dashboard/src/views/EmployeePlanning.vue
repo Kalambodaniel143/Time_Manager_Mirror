@@ -1,5 +1,6 @@
 <template>
- <div class="planning page-stack">
+ <div v-if="!demo" class="planning page-stack"><PageHeader title="Mon planning" /><UnavailableFeature title="Planning indisponible" text="Vos affectations ne sont pas encore disponibles dans l’application. Contactez votre responsable pour connaître vos prochaines gardes." /></div>
+ <div v-else class="planning page-stack">
   <PageHeader :eyebrow="rangeLabel" title="Mon planning"><button class="btn btn-outline" type="button" @click="swapOpen = true">Demander un échange de garde</button></PageHeader>
   <p class="demo-notice">Planning d’exemple · vos affectations réelles et les dates de publication restent à confirmer auprès de votre responsable.</p>
   <div class="week-tabs" aria-label="Semaine du planning"><button v-for="(week, index) in weeks" :key="week.label" class="btn btn-outline" :class="{ 'is-selected': selectedWeek === index }" :aria-pressed="selectedWeek === index" type="button" @click="selectedWeek = index">{{ week.label }}</button></div>
@@ -13,14 +14,16 @@
 import HourTag from '../components/ui/HourTag.vue'
 import PageHeader from '../components/ui/PageHeader.vue'
 import ModalDialog from '../components/ui/ModalDialog.vue'
-import { employeePlan, org, requestShiftSwap } from '../services/orgService'
+import UnavailableFeature from '../components/ui/UnavailableFeature.vue'
+import { employeePlan, org, requestShiftSwap, isDemoData } from '../services/orgService'
 import { auth } from '../stores/auth'
 import { toDateInput } from '../utils/date'
 import { formatRange } from '../utils/hours'
 export default {
- name: 'EmployeePlanning', components: { HourTag, PageHeader, ModalDialog }, props: { now: { type: Date, required: true } }, emits: ['tour'],
+ name: 'EmployeePlanning', components: { UnavailableFeature, HourTag, PageHeader, ModalDialog }, props: { now: { type: Date, required: true } }, emits: ['tour'],
  data() { return { selectedWeek: 0, swapOpen: false, swapDay: '', swapReason: '', swapError: '', statuses: { pending: 'En attente', accepted: 'Examinée · échange à organiser', rejected: 'Refusée' } } },
  computed: {
+  demo: isDemoData,
   days() { return employeePlan(this.now).map(day => ({ ...day, key: toDateInput(day.date), label: day.date.toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' }), fullLabel: day.date.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' }) })) },
   weeks() { return [0, 7].map(offset => ({ days: this.days.slice(offset, offset + 7), label: formatRange(this.days[offset].date, this.days[offset + 6].date) })) },
   rangeLabel() { return formatRange(this.days[0].date, this.days.at(-1).date) },

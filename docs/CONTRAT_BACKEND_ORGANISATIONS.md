@@ -18,7 +18,7 @@ Le code de rôle backend reste `administrator`. « Super administrateur » est s
 
 ## 2. Simulation et branchement réel
 
-Par défaut, le nouveau circuit utilise une simulation persistante dans le navigateur, indépendante de `VITE_USE_MOCK` :
+Le circuit utilise désormais l’API par défaut. La simulation persistante n’est activée que par une demande explicite, indépendante de `VITE_USE_MOCK` :
 
 ```env
 VITE_AUTH_USE_MOCK=true
@@ -32,6 +32,7 @@ Pour utiliser la connexion, l’adhésion et les décisions sur le backend exist
 VITE_AUTH_USE_MOCK=false
 VITE_USE_MOCK=false
 VITE_API_URL=/api
+VITE_BACKEND_URL=http://localhost:4000
 ```
 
 Redémarrer Vite après un changement de variables ; reconstruire le bundle pour la production. Les variables `VITE_*` sont publiques, ne jamais y placer de secret.
@@ -40,7 +41,7 @@ En simulation, les données sont propres à ce navigateur et à cette origine. L
 
 Les utilisateurs simulés ne sont pas créés dans le backend. Depuis la fusion, `App.userId` contient leur identifiant local et les services de pointage/périodes/corrections dirigent explicitement leurs appels vers `mocks/organizationWork.js` tant que `auth.organizationSession` existe. Ces identifiants ne sont pas envoyés à l’API. Les données sont persistées sous `tm-work-demo:<organization_id>` ; planning, droits, notes, règles et validation locale sous `tm-org:<organization_id>`. La connexion backend conserve le transport API et `auth.user.id`. Les pages d’administration des utilisateurs et équipes backend sont accessibles en mode backend, tandis que les comptes simulés se gèrent dans Administration Gotham.
 
-Le transport commun transmet `X-CSRF-Token` aux routes protégées. Le token reçu à la connexion est conservé lors de la restauration `/auth/session`, dont la réponse n’a pas besoin de le répéter. Les réponses canonical backend `administrator` sont normalisées en alias admin pour l’écran métier, puis en administrator dans l’état partagé. Les sessions d’une autre ville ou sans organisation sont refusées par ce front ; cette validation ne remplace pas le contrôle serveur de périmètre.
+Le transport commun transmet `X-CSRF-Token` aux routes protégées. Le token reçu à la connexion est conservé lors de la restauration `/auth/session`, dont la réponse n’a pas besoin de le répéter. Les réponses canonical backend `administrator` sont normalisées en alias admin pour l’écran métier, puis en administrator dans l’état partagé. Les sessions d’une autre ville sont refusées. Les comptes historiques sans organisation sont acceptés uniquement lorsque `organization` et `user.organization_id` sont tous deux absents ou null : ils accèdent à l’espace sans organisation autorisé par le backend, sans rattachement fictif à Gotham, et sans écran d’adhésions. Le prénom et le nom peuvent être null pour ces comptes ; l’identifiant et l’email restent obligatoires. Cette validation ne remplace pas le contrôle serveur de périmètre.
 
 ## 3. Transport et enveloppes
 
@@ -354,10 +355,10 @@ Cette section décrit les fonctionnalités de la fusion ; les références au pa
 - Charte verte, navigation desktop et barre inférieure mobile par rôle ; les fonctions d’organisation restent disponibles.
 - Mon compte rassemble identité, affichage Clair/Nuit/Contraste, textes renforcés, confidentialité, aide et déconnexion. En mode backend, les formulaires d’identité et changement de mot de passe existants sont conservés. En mode organisation simulée, ils ne tentent pas de modifier un faux utilisateur dans l’API.
 - Pointages, pauses/reprises et périodes persistants dans la simulation d’organisation. Une pause est exclue des durées. Les données ne sont pas partagées entre organisations.
-- L’employé propose une correction sur une période existante ; ses heures ne changent qu’après acceptation par un autre responsable autorisé. Un refus nécessite un motif. La proposition, les horaires originaux et la décision sont affichés.
+- En simulation, l’employé propose une correction sur une période existante ; ses heures ne changent qu’après acceptation par un autre responsable autorisé. En réel, ce workflow reste indisponible sans ses endpoints ; les responsables autorisés utilisent l’édition directe des périodes.
 - Les heures existent en tableau desktop et cartes mobile avec durée séparée. Les propositions ne sont pas additionnées aux heures confirmées.
 - Les vrais membres d’équipe sont lus depuis `/teams` en mode backend pour Mon équipe. Dans la simulation, les membres visibles de l’organisation constituent un groupe de démonstration ; cette simplification ne remplace pas les permissions par équipe du serveur.
-- Le planning employé a deux semaines distinctes ; le planning responsable permet une sélection d’agent sur mobile. Les plannings restent des exemples.
+- En simulation, le planning employé a deux semaines distinctes et le planning responsable permet une sélection d’agent sur mobile. En réel, aucun planning fictif n’est affiché.
 - Demandes d’échange enregistrées localement et examinables dans la démonstration. Les accepter signifie organiser l’échange ; cela n’effectue pas automatiquement une permutation réelle de gardes.
 - Résumés de l’équipe, accès aux fiches, validation groupée locale, règles enregistrées explicitement et droits accompagnés de leurs états lisibles.
 - Aucun badge, aucune géolocalisation, aucune collecte d’activité, aucun email automatique et aucun envoi à un logiciel de paie ne sont introduits. L’export est un téléchargement CSV d’exemple.
@@ -440,20 +441,20 @@ La simulation couvre propositions/décisions/isolement, mais ne possède pas un 
 
 ### 9.4 Fonctions encore locales et raccordement à prévoir
 
-Ces fonctionnalités n’introduisent pas aujourd’hui de nouveaux appels HTTP dans le front ; leurs futures API devront être définies et raccordées :
+En mode réel, les fonctions sans route serveur sont désormais indisponibles et ne lisent pas les données locales de démonstration. En mode simulation explicite, les prototypes ci-dessous sont conservés. Le relevé mensuel constitue une exception : il est calculé depuis les périodes de l’API, sans devenir un calcul de paie.
 
 | Fonction | Comportement actuel | Besoin serveur |
 |---|---|---|
-| Planning/publication | Exemple modifiable localement ; aucun agent notifié. | Gardes réelles, brouillon/version publiée, dates de publication et notifications. |
-| Demande d’échange | Enregistrement local dans `org.swapRequests`, statut pending/accepted/rejected ; accepted ne permute pas automatiquement les gardes. | Gardes identifiées, demande persistante, décision et échange transactionnel, contrôles de contraintes. |
-| Notes | Stockage local et avertissement sur l’absence de partage réel. | Note liée au salarié, à la semaine et au manager autorisé, visibilité identique pour les deux. |
-| Validation | État local par utilisateur/semaine ; accès groupé. | Feuille hebdomadaire persistante, validateur/date, anomalies bloquantes, clôture et nouvelle validation après correction. |
-| Droits/règles/journal | Démonstration locale ; pas de notification annoncée comme envoyée. | Droits validate/correct/publish par équipe, règles par organisation et journal métier persistant. |
-| Paie | Relevé d’exemple et CSV téléchargé. | Totaux par mois/service depuis heures réellement confirmées ; catégories, majorations et politique d’arrondi explicites. |
+| Planning/publication | Indisponible en réel ; exemple local en simulation. | Gardes réelles, brouillon/version publiée, dates de publication et notifications. |
+| Demande d’échange | Indisponible en réel ; demande locale en simulation. | Gardes identifiées, demande persistante, décision et échange transactionnel, contrôles de contraintes. |
+| Notes | Masquées en réel ; stockage local en simulation. | Note liée au salarié, à la semaine et au manager autorisé, visibilité identique pour les deux. |
+| Validation | Actions masquées en réel ; état local par utilisateur/semaine en simulation. | Feuille hebdomadaire persistante, validateur/date, anomalies bloquantes, clôture et nouvelle validation après correction. |
+| Droits/règles/journal | Équipes et rôles réels accessibles ; droits fins, règles et journal indisponibles en réel. | Droits validate/correct/publish par équipe, règles par organisation et journal métier persistant. |
+| Paie | Relevé mensuel réel par agent et CSV de durées ; paie de démonstration seulement en simulation. | Calcul de paie serveur : catégories, majorations, arrondi, congés et clôture explicites. |
 
 Les dépassements de nuits ne suppriment pas les heures travaillées. La sélection automatique les signale et ne les coche pas ; le responsable peut les examiner puis les sélectionner explicitement. Un départ manquant ou des pointages non vérifiés restent bloquants dans le front. Le serveur devra appliquer une politique cohérente et empêcher l’auto-validation.
 
-Les règles locales contiennent désormais :
+Les règles locales de la simulation contiennent :
 
 ```json
 {
@@ -624,3 +625,35 @@ npm run test:account
 # Dans time_manager, avec Elixir compatible et une base de tests isolée :
 mix precommit
 ```
+
+
+### Reprendre le super administrateur du mock dans la base réelle
+
+Un mot de passe mock dérivé avec PBKDF2 ne permet pas de retrouver son texte ni de copier directement son hash dans l’authentification Argon2 du backend. Pour conserver les mêmes identifiants, saisir le mot de passe original dans le terminal, sans le publier dans un message.
+
+Depuis la racine du dépôt, dans l’environnement où les paramètres PostgreSQL du backend sont configurés :
+
+```bash
+bash scripts/recreate_gotham_admin.sh
+```
+
+Le script propose l’adresse `nando@gotham.city` et demande prénom/nom (les valeurs proposées Nando/Martin sont à corriger si le mock utilisait une autre identité). Le mot de passe et sa confirmation sont masqués ; aucun secret n’est écrit dans le dépôt. Les migrations et les rôles doivent déjà exister.
+
+Il crée Gotham et le compte ensemble si la ville n’existe pas, ou ajoute le compte à Gotham si elle existe sans administrateur. Un compte déjà identique et avec le même mot de passe est réutilisé. Un compte différent portant cet email ou un autre super administrateur de Gotham bloque l’opération : aucune suppression, promotion ni réinitialisation silencieuse n’est réalisée.
+
+Cette commande est explicite et manuelle ; elle n’est pas exécutée au démarrage du site. Elle nécessite un Elixir compatible avec le projet et l’accès à la base réelle. Son ajout ne signifie pas qu’un compte a déjà été créé.
+
+## 12. Raccordement étendu aux routes existantes — 12 octobre 2026
+
+Le détail des écrans et des fonctions sans API est dans [FRONTEND.md](FRONTEND.md). Ce raccordement ne modifie ni le code backend ni la base distante.
+
+- Le front accepte la session historique sans organisation telle que rendue par `SessionJSON` : organisation et `user.organization_id` null, rôle cohérent, identifiant positif, username et email renseignés. Il ne crée pas de rattachement ni de permission Gotham. Les noms sont facultatifs uniquement pour ces comptes historiques.
+- Le profil réel permet les mises à jour déjà acceptées par `PUT /users/:id` (`user` contenant username/email/prénom/nom, ou password/current_password). Les champs genre/date/lieu restent en lecture dans les réponses, sans écriture de profil ajoutée hors contrat.
+- Les équipes, managers et membres sont fournis par `GET /teams`. Un manager n’utilise pour la vue des heures que les équipes dont `manager.id` est son identifiant. Aucun membre fictif ne complète une équipe vide ou une réponse en erreur.
+- Les graphiques et le relevé mensuel utilisent les périodes `GET /workingtime/:userId`. Le relevé obtient le périmètre via `GET /users`, les équipes via `GET /teams`, et compte chaque utilisateur une seule fois. Il découpe les périodes aux limites UTC du mois et exporte des durées par agent. Il ne représente pas une API de paie.
+- Les mois/jours du relevé et des graphiques sont explicitement en UTC ; une éventuelle convention de jour de service/fuseau métier devra être définie et appliquée avant les calculs de paie.
+- Aucun seuil de démonstration ni multiplicateur de salaire n’est appliqué en réel. Les droits fins, règles, notes, planning, échanges, validation de semaines et journal restent à implémenter sur le serveur. Leurs interactions locales sont indisponibles en réel.
+- Les services de demande de correction sont conservés comme contrat futur, mais leurs boutons/listes n’appellent pas ces endpoints absents en réel. L’édition directe de période reste raccordée au backend.
+- Le proxy Vite peut viser un serveur distant via `VITE_BACKEND_URL`. Il réécrit seulement l’Origin/Referer de sa propre origine vers le backend, pour conserver le contrôle d’origine Phoenix après le changement de Host ; les origines tierces sont laissées au contrôle serveur.
+
+Pour un volume important, une route de relevé agrégé par mois serait préférable aux lectures de tous les historiques utilisateur. Elle devra conserver le périmètre de session, fournir les totaux exacts et expliciter le fuseau, l’arrondi et les catégories. Aucune nouvelle route d’agrégation n’est requise pour le raccordement actuel.

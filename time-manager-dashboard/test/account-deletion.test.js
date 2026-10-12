@@ -12,7 +12,7 @@ before(async () => {
   globalThis.localStorage = { getItem: key => storage.get(key) ?? null, setItem: (key, value) => storage.set(key, String(value)), removeItem: key => storage.delete(key) }
   globalThis.sessionStorage = globalThis.localStorage
   if (!globalThis.crypto) globalThis.crypto = webcrypto
-  server = await createServer({ server: { middlewareMode: true, hmr: false }, appType: 'custom' })
+  server = await createServer({ server: { middlewareMode: true, hmr: false }, appType: 'custom', define: { 'import.meta.env.VITE_AUTH_USE_MOCK': JSON.stringify('true') } })
   demo = await server.ssrLoadModule('/src/mocks/organizationAuth.js')
   work = await server.ssrLoadModule('/src/mocks/organizationWork.js')
   service = await server.ssrLoadModule('/src/services/accountService.js')

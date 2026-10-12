@@ -97,7 +97,8 @@ configureHttp({
 })
 
 function sessionHome(role) {
-  return auth.organization && role === 'administrator' ? { name: 'organization' } : homeFor(role)
+  if (role === 'administrator') return { name: auth.organization ? 'organization' : 'adminUsers' }
+  return homeFor(role)
 }
 
 function denied(role) {
