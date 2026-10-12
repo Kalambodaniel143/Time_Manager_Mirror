@@ -20,14 +20,25 @@ services:
     restart: unless-stopped
     depends_on:
       - db
+      - mailpit
     env_file: ./.env
     environment:
       PGHOST: db
       PGPORT: "5432"
+      EMAIL_DELIVERY: mailpit
+      MAILPIT_HOST: mailpit
+      MAILPIT_PORT: "1025"
     volumes:
       - ./.env:/app/.env:ro
     ports:
       - "4000:4000"
+
+  mailpit:
+    image: axllent/mailpit:latest
+    restart: unless-stopped
+    ports:
+      - "8025:8025"
+      - "1025:1025"
 
   dashboard:
     image: ${DOCKER_USERNAME}/time-manager-frontend:latest

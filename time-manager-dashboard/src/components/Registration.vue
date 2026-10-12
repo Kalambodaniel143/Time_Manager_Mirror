@@ -1,6 +1,6 @@
 <template>
   <AuthLayout>
-    <form class="auth-form" novalidate @submit.prevent="submit">
+    <form v-if="!verificationPending" class="auth-form" novalidate @submit.prevent="submit">
       <h2 class="page-title">Créer un compte</h2>
       <p class="lede">Votre compte démarre avec le rôle Employé. L’administration vous rattache ensuite à vos équipes.</p>
 
@@ -43,6 +43,23 @@
         <RouterLink class="link" :to="{ name: 'login' }">Se connecter</RouterLink>
       </p>
     </form>
+    <form v-else class="auth-form" novalidate @submit.prevent="verify">
+      <h2 class="page-title">Vérifier votre e-mail</h2>
+      <p class="lede">Un code à 6 chiffres a été envoyé à <strong>{{ form.email }}</strong>.</p>
+      <label class="field">
+        <span class="field-label">Code de vérification</span>
+        <input ref="code" v-model.trim="code" class="input" inputmode="numeric" autocomplete="one-time-code" maxlength="6" />
+      </label>
+      <p v-if="error" class="field-error" role="alert">{{ error }}</p>
+      <button class="btn btn-primary btn-login" type="submit" :disabled="loading">
+        <AppIcon name="check" />
+        {{ loading ? 'Vérification…' : 'Vérifier mon e-mail' }}
+      </button>
+      <button class="btn btn-secondary btn-login" type="button" :disabled="loading" @click="resend">
+        Renvoyer le code
+      </button>
+      <p class="switch"><button class="link link-button" type="button" @click="verificationPending = false">Modifier l’adresse</button></p>
+    </form>
   </AuthLayout>
 </template>
 
@@ -50,7 +67,7 @@
 import { RouterLink } from 'vue-router'
 import AppIcon from './ui/AppIcon.vue'
 import AuthLayout from './layout/AuthLayout.vue'
-import { register } from '../stores/auth'
+import { register, resendVerification, verifyEmail } from '../stores/auth'
 import { EMAIL_PATTERN, PASSWORD_MIN_LENGTH } from '../utils/people'
 import { homeFor } from '../utils/session'
 
@@ -67,6 +84,8 @@ export default {
       touched: Object.fromEntries(FIELDS.map((field) => [field, false])),
       error: '',
       loading: false,
+      verificationPending: false,
+      code: '',
     }
   },
 
@@ -101,8 +120,39 @@ export default {
 
       try {
         const { username, email, password } = this.form
-        const user = await register({ username, email, password })
+        await register({ username, email, password })
+        this.verificationPending = true
+        this.$nextTick(() => this.$refs.code?.focus())
+      } catch (error) {
+        this.error = error.message
+      } finally {
+        this.loading = false
+      }
+    },
+
+    async verify() {
+      if (!/^\d{6}$/.test(this.code)) {
+        this.error = 'Saisissez le code à 6 chiffres reçu par e-mail.'
+        return
+      }
+
+      this.loading = true
+      this.error = ''
+      try {
+        const user = await verifyEmail(this.form.email, this.code)
         this.$router.push(homeFor(user.role))
+      } catch (error) {
+        this.error = error.message
+      } finally {
+        this.loading = false
+      }
+    },
+
+    async resend() {
+      this.loading = true
+      this.error = ''
+      try {
+        await resendVerification(this.form.email)
       } catch (error) {
         this.error = error.message
       } finally {
