@@ -13,6 +13,7 @@ defmodule TimeManagerWeb.JoinRequestController do
   import TimeManagerWeb.Authz
 
   alias TimeManager.{Authorization, Organizations}
+  alias TimeManager.{Email, EmailDelivery}
   alias TimeManagerWeb.Plugs.RateLimit
   alias TimeManagerWeb.Schemas.{ApproveRequest, ApproveResponse, ConflictResponse}
   alias TimeManagerWeb.Schemas.{ErrorResponse, JoinRequestCreateRequest, JoinRequestReceipt}
@@ -104,12 +105,12 @@ defmodule TimeManagerWeb.JoinRequestController do
   end
 
   operation(:approve,
-    summary: "Approve a request: create the employee (its administrators)",
+    summary: "Approve a request: create and configure the member (its administrators)",
     description:
-      "Creates the employee with the password chosen by the administrator, atomically. The " <>
-        "password is not returned. 409 if the request was already reviewed.",
+      "Creates the member with the username, role and password chosen by the administrator, " <>
+        "then sends the credentials by email. 409 if the request was already reviewed.",
     parameters: [org_id: @org_id, id: @id],
-    request_body: {"Password", "application/json", ApproveRequest},
+    request_body: {"Credentials", "application/json", ApproveRequest},
     responses: [
       ok: {"Request approved", "application/json", ApproveResponse},
       forbidden: {"Not allowed", "application/json", ErrorResponse},
@@ -119,11 +120,30 @@ defmodule TimeManagerWeb.JoinRequestController do
     ]
   )
 
-  def approve(conn, %{"org_id" => org_id, "id" => id, "password" => password}) do
+  def approve(
+        conn,
+        %{"org_id" => org_id, "id" => id, "password" => password} = params
+      ) do
+    username = Map.get(params, "username")
+    role = Map.get(params, "role", "employee")
+
     with {:ok, me} <- organization_admin(conn, org_id),
          {:ok, result} <-
-           Organizations.approve_join_request(me.organization_id, id, password, me) do
+           Organizations.approve_join_request(
+             me.organization_id,
+             id,
+             username,
+             password,
+             role,
+             me
+           ),
+         :ok <-
+           result.user.email
+           |> Email.credentials(result.user, password, result.user.organization)
+           |> EmailDelivery.send() do
       render(conn, :approved, result)
+    else
+      {:error, :email_delivery_failed} -> {:error, :service_unavailable}
     end
   end
 
