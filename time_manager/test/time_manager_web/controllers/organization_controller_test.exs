@@ -3,102 +3,18 @@ defmodule TimeManagerWeb.OrganizationControllerTest do
 
   import TimeManager.AccountsFixtures
 
-  defp create_body(attrs \\ %{}) do
-    Enum.into(attrs, %{
-      name: "Atelier Gotham",
-      profile: %{first_name: "Nando", last_name: "Martin", email: "nando@example.com"},
-      password: valid_password()
-    })
-  end
-
-  describe "create" do
-    test "creates the organization and its administrator, and opens their session",
-         %{conn: conn} do
-      conn = post(conn, ~p"/api/organizations", create_body())
-
-      assert %{
-               "csrf_token" => csrf,
-               "role" => "administrator",
-               "user" => %{"role" => "administrator", "organization_id" => org_id} = user,
-               "organization" => %{"id" => org_id, "name" => "Atelier Gotham", "created_at" => _}
-             } = json_response(conn, 201)["data"]
-
-      assert user["username"] == "nando@example.com"
-      assert user["first_name"] == "Nando"
-      assert user["gender"] == nil
-      assert conn.resp_cookies["jwt"].http_only
-      refute response(conn, 201) =~ "password"
-
-      session =
-        build_conn()
-        |> put_req_cookie("jwt", conn.resp_cookies["jwt"].value)
-        |> put_req_header("x-csrf-token", csrf)
-        |> get(~p"/api/auth/session")
-
-      assert json_response(session, 200)["data"]["organization"]["id"] == org_id
-    end
-
-    test "no role is read from the body", %{conn: conn} do
-      body =
-        create_body(%{
-          role: "employee",
-          profile: %{first_name: "A", last_name: "B", email: "a@b.co", role: "employee"}
+  describe "public creation is disabled" do
+    test "cannot create an organization or privileged account", %{conn: conn} do
+      conn =
+        post(conn, ~p"/api/organizations", %{
+          name: "Gotham City",
+          profile: %{first_name: "A", last_name: "B", email: "new@example.com"},
+          password: valid_password()
         })
 
-      conn = post(conn, ~p"/api/organizations", body)
-      assert json_response(conn, 201)["data"]["role"] == "administrator"
-    end
-
-    test "a name equal but for case, accents and spaces is a 409", %{conn: conn} do
-      organization_admin_fixture(name: "Atelier Gotham")
-
-      conn =
-        post(conn, ~p"/api/organizations", create_body(%{name: "  ATELIER   Gothàm "}))
-
-      assert %{"detail" => _, "name" => [_]} = json_response(conn, 409)["errors"]
-    end
-
-    test "an e-mail already used is a 409 and creates no organization", %{conn: conn} do
-      user_fixture(email: "nando@example.com")
-      conn = post(conn, ~p"/api/organizations", create_body())
-
-      assert %{"email" => [_]} = json_response(conn, 409)["errors"]
-      assert {:error, _} = TimeManager.Organizations.lookup_organization("Atelier Gotham")
-    end
-
-    test "reports every invalid field at once; no personal details required", %{conn: conn} do
-      body = %{
-        name: " x ",
-        profile: %{first_name: "  ", last_name: "Martin", email: "bad"},
-        password: String.duplicate("a", 129)
-      }
-
-      conn = post(conn, ~p"/api/organizations", body)
-
-      assert %{"name" => _, "first_name" => _, "email" => _, "password" => _} =
-               errors = json_response(conn, 422)["errors"]
-
-      refute Map.has_key?(errors, "gender")
-    end
-
-    test "a 128-character password is kept as typed, spaces included", %{conn: conn} do
-      password = " " <> String.duplicate("p", 126) <> " "
-      conn = post(conn, ~p"/api/organizations", create_body(%{password: password}))
-      assert json_response(conn, 201)
-
-      assert {:ok, _} = TimeManager.Accounts.authenticate("nando@example.com", password)
-
-      assert {:error, _} =
-               TimeManager.Accounts.authenticate("nando@example.com", String.trim(password))
-    end
-
-    test "a password made of spaces only is refused", %{conn: conn} do
-      conn = post(conn, ~p"/api/organizations", create_body(%{password: "          "}))
-      assert %{"password" => _} = json_response(conn, 422)["errors"]
-    end
-
-    test "a malformed body is a 400", %{conn: conn} do
-      assert json_response(post(conn, ~p"/api/organizations", %{name: "X"}), 400)
+      assert json_response(conn, 403)["errors"]["detail"] =~ "désactivée"
+      assert {:error, _} = TimeManager.Organizations.lookup_organization("Gotham City")
+      assert TimeManager.Accounts.list_users(%{"email" => "new@example.com"}) == []
     end
   end
 

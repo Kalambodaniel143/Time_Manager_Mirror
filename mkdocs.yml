@@ -6,6 +6,7 @@ nav:
   - DevOps: DEVOPS.md
   - API: API.md
   - Frontend: FRONTEND.md
+  - Déploiement des workflows: DEPLOIEMENT_WORKFLOWS.md
 
 markdown_extensions:
   - admonition

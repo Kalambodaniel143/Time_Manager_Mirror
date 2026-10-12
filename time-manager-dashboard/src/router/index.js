@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import Notifications from '../views/Notifications.vue'
 import LoginScreen from '../views/LoginScreen.vue'
 import OrganizationAdmin from '../views/OrganizationAdmin.vue'
 import ChartManager from '../components/ChartManager.vue'
@@ -30,6 +31,7 @@ const router = createRouter({
   routes: [
     { path: '/connexion', name: 'login', component: LoginScreen, meta: { public: true } },
     { path: '/inscription', name: 'register', component: LoginScreen, props: { initialMode: 'join' }, meta: { public: true } },
+    { path: '/notifications', name: 'notifications', component: Notifications, meta: { roles: EVERYONE } },
     { path: '/profil', name: 'profile', component: Profile, meta: { roles: EVERYONE } },
     { path: '/', name: 'overview', component: EmployeeToday, meta: { roles: ['employee'] } },
     { path: '/planning', name: 'planning', component: EmployeePlanning, meta: { roles: ['employee'] } },

@@ -12,6 +12,8 @@
 
     <main id="main-content" class="main" tabindex="-1">
       <p v-if="organizationSession" class="demo-notice">Mode démonstration · vos comptes et actions restent dans ce navigateur.</p>
+      <SpeechControls />
+      <p v-if="workforceError" class="field-error" role="alert">{{ workforceError }}</p>
       <WorkingTimes
         v-if="isOverlay && overlayUserId"
         ref="list"
@@ -44,6 +46,9 @@ import { personaFor } from './services/orgService'
 import { getWorkingTimes } from './services/workingTimeService'
 import { auth, logout, clearSession, fetchMe, startOrganizationSession } from './stores/auth'
 import { notify } from './utils/toast'
+import SpeechControls from './components/workforce/SpeechControls.vue'
+import { loadContext, savePreferences, clearWorkforce, workforce } from './services/workforceService'
+import { stopReading } from './utils/speech'
 import { durationInHours } from './utils/date'
 import { displayName } from './utils/people'
 import { applyTheme, applyStrongText, readStrongText, readStorage, readTheme, writeStorage, writeTheme } from './utils/session'
@@ -54,13 +59,13 @@ const TOUR_KEY = 'tm-tour-seen'
 const TOUR_STEPS = [
   { title: 'Pointer, c’est un seul geste', text: 'Touchez le grand rond en arrivant, puis en partant. Le reste se calcule tout seul.' },
   { title: 'Retrouvez vos horaires', text: 'Consultez les arrivées, départs et durées enregistrés dans « Mes heures ».' },
-  { title: 'Une erreur ? Signalez-la', text: 'Complétez un départ oublié depuis « Mes heures ». Pour corriger des horaires déjà enregistrés, contactez votre responsable.' },
+  { title: 'Une erreur ? Signalez-la', text: 'Complétez un départ oublié depuis « Mes heures ». Proposez une correction depuis « Mes heures ». Votre responsable examine la demande avant de modifier les horaires.' },
 ]
 
 export default {
   name: 'App',
 
-  components: { AccountIdentity, AppSidebar, OnboardingTour, RouterView, ToastStack, User, WorkingTimes },
+  components: { SpeechControls, AccountIdentity, AppSidebar, OnboardingTour, RouterView, ToastStack, User, WorkingTimes },
 
   data() {
     return {
@@ -81,6 +86,7 @@ export default {
       return auth.user
     },
 
+    workforceError() { return workforce.error },
     organizationSession() { return auth.organizationSession },
 
     citySession() { return auth.organizationSession || (auth.organization ? { organization: auth.organization, user: auth.user, role: auth.user?.role === 'administrator' ? 'admin' : auth.user?.role } : null) },
@@ -166,7 +172,9 @@ export default {
       handler(id) {
         this.loadStats()
         // The theme may have been picked on the login page.
-        this.setTheme(readTheme())
+        this.setTheme(readTheme(), false)
+        if (!id) { clearWorkforce(); stopReading() }
+        else if (!this.organizationSession) this.loadPreferences(id)
         this.tourOpen = Boolean(id) && this.user.role === 'employee' && !readStorage(TOUR_KEY)
       },
     },
@@ -187,6 +195,10 @@ export default {
   },
 
   methods: {
+    async loadPreferences(id) {
+      try { const context = await loadContext(); if (this.userId !== id) return; this.setTheme(context.preferences.theme, false); applyStrongText(context.preferences.strong_text); this.tourOpen = this.user.role === 'employee' && !context.preferences.tour_seen }
+      catch { /* The page displays workforce.error; existing account actions stay usable. */ }
+    },
     async refreshOrganizationSession() {
       if (!this.citySession) return
       await fetchMe()
@@ -234,10 +246,11 @@ export default {
       if (this.$refs.list) await this.$refs.list.getWorkingTimes()
     },
 
-    setTheme(theme) {
+    setTheme(theme, sync = true) {
       this.theme = theme
       applyTheme(theme)
       writeTheme(theme)
+      if (sync && this.user && !this.organizationSession) savePreferences({ theme }).catch(error => notify(error.message, 'error'))
     },
 
     onAccountDeleted() {
@@ -263,6 +276,8 @@ export default {
     closeTour() {
       this.tourOpen = false
       writeStorage(TOUR_KEY, '1')
+      stopReading()
+      if (this.user && !this.organizationSession) savePreferences({ tour_seen: true }).catch(error => notify(error.message, 'error'))
     },
 
     closeOverlay() {

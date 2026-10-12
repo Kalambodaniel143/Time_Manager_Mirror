@@ -1,3 +1,4 @@
+import { formatClockDate } from './clockDate'
 import { durationInHours, parseDateTime, startOfWeek, toDateInput } from './date'
 
 export const KIND_LABELS = {
@@ -143,11 +144,20 @@ export function weekFilters(monday) {
   }
 }
 
-export function entriesByDay(entries, monday) {
-  return Array.from({ length: 7 }, (_, index) => {
-    const key = toDateInput(addDays(monday, index))
-    return entries.filter((entry) => entry.start.slice(0, 10) === key)
+export function clipEntries(entries, from, to) {
+  const lower = Date.UTC(from.getFullYear(), from.getMonth(), from.getDate())
+  const upper = Date.UTC(to.getFullYear(), to.getMonth(), to.getDate())
+  return entries.flatMap(entry => {
+    const start = Date.parse(`${formatClockDate(entry.start).replace(' ', 'T')}Z`)
+    const end = Date.parse(`${formatClockDate(entry.end).replace(' ', 'T')}Z`)
+    const clippedStart = Math.max(start, lower), clippedEnd = Math.min(end, upper)
+    if (clippedEnd <= clippedStart) return []
+    return [{ ...entry, start: new Date(clippedStart).toISOString().slice(0,19).replace('T',' '), end: new Date(clippedEnd).toISOString().slice(0,19).replace('T',' ') }]
   })
+}
+
+export function entriesByDay(entries, monday) {
+  return Array.from({ length: 7 }, (_, index) => clipEntries(entries, addDays(monday,index), addDays(monday,index+1)))
 }
 
 export function longestRun(kinds, target = 'night') {
@@ -167,9 +177,7 @@ export function longestRun(kinds, target = 'night') {
 }
 
 export function weekNightRun(entries, monday) {
-  const kinds = entriesByDay(entries, monday).map((day) =>
-    day.some((entry) => classifyEntry(entry) === 'night') ? 'night' : 'other',
-  )
+  const kinds = Array.from({ length: 7 }, (_, index) => { const key = toDateInput(addDays(monday,index)); return entries.some(entry => entry.start.slice(0,10) === key && classifyEntry(entry) === 'night') ? 'night' : 'other' })
   return longestRun(kinds).length
 }
 

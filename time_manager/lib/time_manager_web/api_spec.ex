@@ -10,9 +10,9 @@ defmodule TimeManagerWeb.ApiSpec do
       info: %Info{
         title: "Time Manager API",
         description:
-          "API for managing users, teams, their clock-ins/outs and their working times. " <>
+          "API for accounts, teams, clock events, worked hours, corrections, weekly sheets, planning, swaps, absences, payroll, preferences and notifications. " <>
             "Authentication: JWT in an HttpOnly cookie plus an X-CSRF-Token header.",
-        version: "1.0.0"
+        version: "2.0.0"
       },
       paths: Paths.from_router(TimeManagerWeb.Router),
       # Both are required on every route except login and register. In Swagger UI,

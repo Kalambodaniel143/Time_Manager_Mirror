@@ -70,6 +70,7 @@
             {{ errors.start || errors.end }}
           </span>
 
+          <label class="field"><span class="field-label">Catégorie de rémunération</span><select v-model="form.kind" class="input"><option value="work">Travail normal (jour/nuit calculés)</option><option value="oncall">Astreinte</option><option value="recup">Travail donnant droit à récupération</option></select><span class="field-hint">Horaires en UTC. La catégorie s’applique à toute la période.</span></label>
           <label class="switch-row">
             <input v-model="fields.nextDay" class="switch-input" type="checkbox" />
             <span class="switch" aria-hidden="true"></span>
@@ -158,7 +159,7 @@ export default {
   data() {
     return {
       presets: PRESETS,
-      form: { id: null, start: '', end: '' },
+      form: { id: null, start: '', end: '', kind: 'work' },
       fields: { day: '', startTime: '', endTime: '', nextDay: false },
       showErrors: false,
       saving: false,
@@ -260,7 +261,7 @@ export default {
       this.deleteArmed = false
 
       if (source) {
-        this.form = { id: source.id, start: source.start, end: source.end }
+        this.form = { id: source.id, start: source.start, end: source.end, kind: source.kind || 'work' }
         this.fields = {
           day: toDateInput(source.start),
           startTime: toTimeInput(source.start),
@@ -268,7 +269,7 @@ export default {
           nextDay: !isSameDay(source.start, source.end),
         }
       } else {
-        this.form = { id: null, start: '', end: '' }
+        this.form = { id: null, start: '', end: '', kind: 'work' }
         this.fields = { day: todayInput(), startTime: '09:00:00', endTime: '17:00:00', nextDay: false }
       }
     },
@@ -300,6 +301,7 @@ export default {
         const created = await workingTimeService.createWorkingTime(this.userId, {
           start: this.form.start,
           end: this.form.end,
+          kind: this.form.kind,
         })
 
         notify(`Période ajoutée · ${formatDuration(this.durationHours)} de travail.`)
@@ -320,6 +322,7 @@ export default {
         const updated = await workingTimeService.updateWorkingTime(this.form.id, {
           start: this.form.start,
           end: this.form.end,
+          kind: this.form.kind,
         })
 
         notify('Période mise à jour.')

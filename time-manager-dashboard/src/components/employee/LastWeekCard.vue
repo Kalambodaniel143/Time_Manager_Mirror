@@ -6,7 +6,7 @@
       <p v-else-if="!error" class="total serif num">{{ totalLabel }}</p>
     </header>
     <p v-if="error" class="field-error" role="alert">Impossible de charger les heures : {{ error }}</p>
-    <WeekBar v-else :buckets="buckets" :target="target" />
+    <WeekBar v-else-if="!loading" :buckets="buckets" :target="target" />
   </section>
 </template>
 
