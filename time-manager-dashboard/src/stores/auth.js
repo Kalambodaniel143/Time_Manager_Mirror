@@ -1,4 +1,5 @@
 import { reactive } from 'vue'
+import * as authService from '../services/authService'
 import { AUTH_USE_MOCK, getSession, loginAccount, logoutAccount } from '../services/organizationService'
 
 // The JWT lives in an HttpOnly cookie: page scripts can never read it. The
@@ -67,6 +68,16 @@ export async function login(email, password) {
 export async function register(attrs) {
   void attrs
   throw new Error('L’inscription directe est désactivée. Envoyez une demande pour rejoindre Gotham City.')
+}
+
+// Preserve the OTP service used by the legacy registration component without
+// reopening direct registration in the Gotham admission flow.
+export async function verifyEmail(email, code) {
+  return startSession(await authService.verifyEmail(email, code))
+}
+
+export async function resendVerification(email) {
+  return authService.resendVerification(email)
 }
 
 // Asks the API who is logged in. Without a CSRF token there is no usable
