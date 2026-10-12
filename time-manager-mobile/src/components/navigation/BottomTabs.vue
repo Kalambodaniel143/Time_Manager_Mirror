@@ -1,27 +1,20 @@
 <template>
   <nav class="bottom-tabs" aria-label="Navigation principale">
     <RouterLink v-for="tab in tabs" :key="tab.route" :to="{ name: tab.route }">
-      <AppIcon :name="tab.icon" />
+      <component :is="tab.icon" :size="22" aria-hidden="true" />
       <span>{{ tab.label }}</span>
     </RouterLink>
   </nav>
 </template>
 
 <script>
-import AppIcon from '@shared/components/ui/AppIcon.vue'
+import { TABS_BY_ROLE } from './menu.js'
+import { app } from '@/services/appState.js'
 
 export default {
   name: 'BottomTabs',
-  components: { AppIcon },
-  data() {
-    return {
-      tabs: [
-        { route: 'clock', label: 'Pointage', icon: 'clock' },
-        { route: 'hours', label: 'Mes heures', icon: 'calendar' },
-        { route: 'planning', label: 'Planning', icon: 'calendar' },
-        { route: 'profile', label: 'Profil', icon: 'users' },
-      ],
-    }
+  computed: {
+    tabs: () => TABS_BY_ROLE[app.user?.role] ?? TABS_BY_ROLE.employee,
   },
 }
 </script>
