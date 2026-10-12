@@ -5,7 +5,8 @@ defmodule TimeManagerWeb.Schemas.ApproveResponse do
 
   OpenApiSpex.schema(%{
     title: "ApproveResponse",
-    description: "The approved request and the employee created. The password is not returned.",
+    description:
+      "The approved request and the configured member. The password is never returned by the API.",
     type: :object,
     properties: %{
       data: %Schema{
