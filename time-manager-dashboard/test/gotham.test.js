@@ -7,7 +7,7 @@ let server, demo, service, LoginScreen
 const storage = new Map()
 const basic = { first_name: 'Nando', last_name: 'Martin', email: 'super@gotham.city' }
 const applicant = { first_name: 'Sara', last_name: 'Ortiz', email: 'sara@gotham.city', gender: 'female', birth_date: '1999-03-12', birth_place: 'Paris' }
-const password = 'Password8'
+const password = 'Lantern8'
 before(async () => {
   globalThis.localStorage = { getItem: key => storage.get(key) ?? null, setItem: (key, value) => storage.set(key, String(value)), removeItem: key => storage.delete(key) }
   if (!globalThis.crypto) globalThis.crypto = webcrypto

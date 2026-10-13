@@ -1,0 +1,1 @@
+<template><p class="field-hint">{{ $t("8 à 128 caractères. Évitez les suites de chiffres, les répétitions et les mots courants. Préférez une phrase de plusieurs mots que vous seul connaissez.") }}</p></template>

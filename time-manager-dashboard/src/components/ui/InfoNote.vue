@@ -3,7 +3,7 @@
     <span class="info-badge" aria-hidden="true">
       <AppIcon :name="icon" />
     </span>
-    <p class="info-title">{{ title }}</p>
+    <p class="info-title">{{ $t(title) }}</p>
     <p class="info-text"><slot /></p>
   </aside>
 </template>

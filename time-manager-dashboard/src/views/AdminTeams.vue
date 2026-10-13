@@ -1,13 +1,10 @@
 <template>
   <div class="admin-teams">
-    <PageHeader :eyebrow="isAdmin ? 'Administration' : 'Mon équipe'" :title="isAdmin ? 'Équipes' : 'Mes équipes'" />
+    <PageHeader :eyebrow="$t(isAdmin ? 'Administration' : 'Mon équipe')" :title="$t(isAdmin ? 'Équipes' : 'Mes équipes')" />
 
-    <InfoNote v-if="!isAdmin" title="Composition des équipes">
-      Seule l’administration compose les équipes et nomme leurs managers : sinon, ajouter quelqu’un à son équipe donnerait
-      accès à ses heures.
-    </InfoNote>
+    <InfoNote v-if="!isAdmin" :title="$t(&quot;Composition des équipes&quot;)"> {{ $t("Seule l’administration compose les équipes et nomme leurs managers : sinon, ajouter quelqu’un à son équipe donnerait accès à ses heures.") }} </InfoNote>
 
-    <p v-if="error" class="field-error" role="alert">{{ error }}</p>
+    <p v-if="error" class="field-error" role="alert">{{ $t(error) }}</p>
     <div v-else-if="loading" class="skeleton table-skeleton"></div>
 
     <div v-else class="grid">
@@ -21,23 +18,24 @@
             type="button"
             @click="armed === team.id ? remove(team) : (armed = team.id)"
           >
-            {{ armed === team.id ? 'Confirmer' : 'Supprimer' }}
+            {{ $t(armed === team.id ? 'Confirmer' : 'Supprimer') }}
           </button>
         </header>
 
         <form v-if="isAdmin" class="add" @submit.prevent="rename(team)">
-          <input v-model.trim="names[team.id]" class="input" :aria-label="`Nom de ${team.name}`" required maxlength="100" />
-          <button class="btn btn-outline btn-sm" type="submit" :disabled="!names[team.id] || names[team.id] === team.name">Renommer</button>
+          <input v-model.trim="names[team.id]" class="input" :aria-label="$t(`Nom de ${team.name}`)" required maxlength="100" />
+          <button class="btn btn-outline btn-sm" type="submit" :disabled="!names[team.id] || names[team.id] === team.name">{{ $t("Renommer") }}</button>
         </form>
 
         <label v-if="isAdmin" class="field">
-          <span class="field-label">Manager</span>
+          <span class="field-label">{{ $t("Manager") }}</span>
           <select class="input select" :value="team.manager ? team.manager.id : ''" @change="setManager(team, $event.target.value)">
-            <option value="">Aucun</option>
+            <option value="">{{ $t("Aucun") }}</option>
             <option v-for="user in managers" :key="user.id" :value="user.id">{{ user.username }}</option>
           </select>
+          <span class="field-hint">{{ $t("Le manager encadre l’équipe et ne figure pas parmi ses membres. Nommer un membre manager le retire de la liste des membres.") }}</span>
         </label>
-        <p v-else class="card-subtitle">Manager : {{ team.manager ? team.manager.username : 'aucun' }}</p>
+        <p v-else class="card-subtitle">{{ $t("Manager :") }} {{ team.manager ? team.manager.username : $t('aucun') }}</p>
 
         <ul class="members">
           <li v-for="member in team.members" :key="member.id" class="member">
@@ -45,32 +43,32 @@
               {{ member.username }}
             </RouterLink>
             <span v-else>{{ member.username }}</span>
-            <button v-if="isAdmin" class="btn btn-quiet btn-sm" type="button" @click="removeMember(team, member)">Retirer</button>
+            <button v-if="isAdmin" class="btn btn-quiet btn-sm" type="button" @click="removeMember(team, member)">{{ $t("Retirer") }}</button>
           </li>
-          <li v-if="team.members.length === 0" class="empty">Aucun membre visible.</li>
+          <li v-if="team.members.length === 0" class="empty">{{ $t("Aucun membre visible.") }}</li>
         </ul>
 
         <form v-if="isAdmin" class="add" @submit.prevent="addMember(team)">
-          <select v-model="adding[team.id]" class="input select" :aria-label="`Ajouter à ${team.name}`">
-            <option :value="undefined" disabled>Ajouter un membre…</option>
+          <select v-model="adding[team.id]" class="input select" :aria-label="$t(`Ajouter à ${team.name}`)">
+            <option :value="undefined" disabled>{{ $t("Ajouter un membre…") }}</option>
             <option v-for="user in candidates(team)" :key="user.id" :value="user.id">{{ user.username }}</option>
           </select>
-          <button class="btn btn-outline btn-sm" type="submit" :disabled="!adding[team.id]">Ajouter</button>
+          <button class="btn btn-outline btn-sm" type="submit" :disabled="!adding[team.id]">{{ $t("Ajouter") }}</button>
         </form>
       </section>
 
       <form v-if="isAdmin" class="card team create" @submit.prevent="create">
-        <h2 class="card-title">Nouvelle équipe</h2>
+        <h2 class="card-title">{{ $t("Nouvelle équipe") }}</h2>
         <label class="field">
-          <span class="field-label">Nom</span>
+          <span class="field-label">{{ $t("Nom de l’équipe") }}</span>
           <input v-model.trim="newName" class="input" />
         </label>
         <div>
-          <button class="btn btn-primary btn-sm" type="submit" :disabled="!newName">Créer l’équipe</button>
+          <button class="btn btn-primary btn-sm" type="submit" :disabled="!newName">{{ $t("Créer l’équipe") }}</button>
         </div>
       </form>
 
-      <p v-if="!isAdmin && teams.length === 0" class="card-subtitle">Vous ne faites partie d’aucune équipe pour le moment.</p>
+      <p v-if="!isAdmin && teams.length === 0" class="card-subtitle">{{ $t("Vous ne faites partie d’aucune équipe pour le moment.") }}</p>
     </div>
   </div>
 </template>
@@ -123,7 +121,7 @@ export default {
 
     candidates(team) {
       const ids = new Set(team.members.map((member) => member.id))
-      return this.users.filter((user) => !ids.has(user.id))
+      return this.users.filter((user) => !ids.has(user.id) && user.id !== team.manager?.id)
     },
 
     replace(team) {
@@ -151,6 +149,7 @@ export default {
 
     addMember(team) {
       const userId = this.adding[team.id]
+      if (!this.candidates(team).some(user => user.id === userId)) { notify('Choisissez un membre différent du manager et des membres déjà présents.', 'error'); return }
       return this.run(async () => {
         this.replace(await teamService.addMember(team.id, userId))
         this.adding[team.id] = undefined
@@ -214,7 +213,8 @@ export default {
 }
 
 .member {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 76px;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
@@ -224,6 +224,10 @@ export default {
   color: var(--text-muted);
   font-size: 14px;
 }
+
+.member > :first-child { min-width: 0; overflow-wrap: anywhere; }
+.member > button { justify-self: end; min-width: 76px; text-align: center; }
+.add .input { min-width: 0; }
 
 .add {
   display: flex;

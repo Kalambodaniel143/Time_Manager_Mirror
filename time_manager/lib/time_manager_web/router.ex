@@ -21,6 +21,8 @@ defmodule TimeManagerWeb.Router do
     pipe_through :api
 
     post "/auth/login", AuthController, :login
+    post "/auth/forgot-password", AuthController, :forgot_password
+    post "/auth/reset-password", AuthController, :reset_password
     post "/auth/register", AdmissionPolicyController, :registration
     post "/auth/verify-email", AuthController, :verify_email
     post "/auth/resend-verification", AuthController, :resend_verification
@@ -88,6 +90,7 @@ defmodule TimeManagerWeb.Router do
     patch "/auth/preferences", WorkforceController, :update_preferences
     get "/audit-events", WorkforceController, :journal
     get "/notifications", WorkforceController, :notifications
+    get "/notifications/count", WorkforceController, :notification_count
     patch "/notifications/:id/read", WorkforceController, :read_notification
 
     resources "/teams", TeamController, except: [:new, :edit]

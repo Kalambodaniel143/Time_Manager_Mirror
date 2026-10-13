@@ -4,38 +4,38 @@
     <table class="table week-table">
       <thead>
         <tr>
-          <th scope="col">Jour</th>
-          <th scope="col">Arrivée</th>
-          <th scope="col">Départ</th>
-          <th scope="col">Durée</th>
-          <th scope="col">Type d’heures</th>
-          <th scope="col">État</th>
+          <th scope="col">{{ $t("Jour") }}</th>
+          <th scope="col">{{ $t("Arrivée") }}</th>
+          <th scope="col">{{ $t("Départ") }}</th>
+          <th scope="col">{{ $t("Durée") }}</th>
+          <th scope="col">{{ $t("Type d’heures") }}</th>
+          <th scope="col">{{ $t("État") }}</th>
         </tr>
       </thead>
       <tbody>
         <template v-for="day in rows" :key="day.key">
           <tr v-if="day.entries.length === 0">
-            <th scope="row">{{ day.label }}</th>
-            <td class="num">{{ day.key === pendingDay ? clock(missingDeparture.arrival.time) : '—' }}</td>
+            <th scope="row">{{ $t(day.label) }}</th>
+            <td class="num">{{ $t(day.key === pendingDay ? clock(missingDeparture.arrival.time) : '—') }}</td>
             <td>—</td>
             <td>—</td>
-            <td class="muted">{{ day.key === pendingDay ? 'À compléter' : 'Aucune période' }}</td>
+            <td class="muted">{{ $t(day.key === pendingDay ? 'À compléter' : 'Aucune période') }}</td>
             <td>
-              <span v-if="day.key === pendingDay">Départ non pointé</span>
-              <button v-else-if="day.editable" class="btn btn-quiet btn-sm" type="button" @click="$emit('create', day.key)">Ajouter</button>
+              <span v-if="day.key === pendingDay">{{ $t("Départ non pointé") }}</span>
+              <button v-else-if="day.editable" class="btn btn-quiet btn-sm" type="button" @click="$emit('create', day.key)">{{ $t("Ajouter") }}</button>
             </td>
           </tr>
           <tr v-for="(entry, index) in day.entries" :key="entry.id || `${day.key}-${index}`">
-            <th scope="row">{{ index === 0 ? day.label : '' }}</th>
+            <th scope="row">{{ $t(index === 0 ? day.label : '') }}</th>
             <td class="num">{{ clock(entry.start) }}</td>
             <td class="num">{{ clock(entry.end) }}</td>
             <td class="num">{{ duration(entry.hours) }}</td>
             <td><HourTag :kind="entry.kind" short /></td>
             <td>
               <div class="state">
-                <span class="pill pill-ok"><AppIcon name="check" />Enregistré</span>
-                <button v-if="canRequest" class="btn btn-quiet btn-sm" type="button" @click="$emit('request', entry.id)">Proposer une correction</button>
-                <button v-if="entry.editable" class="btn btn-quiet btn-sm" type="button" @click="$emit('edit', entry.id)">Corriger</button>
+                <span class="pill pill-ok"><AppIcon name="check" />{{ $t("Enregistré") }}</span>
+                <button v-if="canRequest" class="btn btn-quiet btn-sm" type="button" @click="$emit('request', entry.id)">{{ $t("Proposer une correction") }}</button>
+                <button v-if="entry.editable" class="btn btn-quiet btn-sm" type="button" @click="$emit('edit', entry.id)">{{ $t("Corriger") }}</button>
               </div>
             </td>
           </tr>
@@ -44,7 +44,7 @@
       </tbody>
     </table>
   </div>
-  <div class="mobile-hours"><article v-for="day in rows" :key="day.key" class="card day-card"><header><strong>{{ day.label }}</strong><span class="pill" :class="day.key === pendingDay ? 'pill-warn' : 'pill-ok'">{{ day.key === pendingDay ? 'À régulariser' : day.entries.length ? 'Enregistré' : 'Aucune période' }}</span></header><p v-if="!day.entries.length" class="muted">{{ day.key === pendingDay ? `Arrivée ${clock(missingDeparture.arrival.time)} · départ à compléter` : 'Aucune période enregistrée' }}</p><div v-for="entry in day.entries" :key="entry.id" class="mobile-entry"><div class="entry-summary"><span class="num">{{ clock(entry.start) }} → {{ clock(entry.end) }}</span><HourTag :kind="entry.kind" :hours="entry.hours" /></div><button v-if="canRequest" class="btn btn-outline btn-sm" type="button" @click="$emit('request', entry.id)">Proposer une correction</button><button v-if="entry.editable" class="btn btn-quiet btn-sm" type="button" @click="$emit('edit', entry.id)">Corriger</button></div><button v-if="!day.entries.length && day.editable" class="btn btn-quiet btn-sm" type="button" @click="$emit('create', day.key)">Ajouter une période</button></article></div>
+  <div class="mobile-hours"><article v-for="day in rows" :key="day.key" class="card day-card"><header><strong>{{ $t(day.label) }}</strong><span class="pill" :class="day.key === pendingDay ? 'pill-warn' : 'pill-ok'">{{ $t(day.key === pendingDay ? 'À régulariser' : day.entries.length ? 'Enregistré' : 'Aucune période') }}</span></header><p v-if="!day.entries.length" class="muted">{{ $t(day.key === pendingDay ? `Arrivée ${clock(missingDeparture.arrival.time)} · départ à compléter` : 'Aucune période enregistrée') }}</p><div v-for="entry in day.entries" :key="entry.id" class="mobile-entry"><div class="entry-summary"><span class="num">{{ clock(entry.start) }} → {{ clock(entry.end) }}</span><HourTag :kind="entry.kind" :hours="entry.hours" /></div><button v-if="canRequest" class="btn btn-outline btn-sm" type="button" @click="$emit('request', entry.id)">{{ $t("Proposer une correction") }}</button><button v-if="entry.editable" class="btn btn-quiet btn-sm" type="button" @click="$emit('edit', entry.id)">{{ $t("Corriger") }}</button></div><button v-if="!day.entries.length && day.editable" class="btn btn-quiet btn-sm" type="button" @click="$emit('create', day.key)">{{ $t("Ajouter une période") }}</button></article></div>
   <MissingDeparture v-if="userId" :user-id="userId" :now="now" :week-start="monday" @detected="missingDeparture = $event" @completed="$emit('completed')" @refreshed="$emit('completed')" />
   </div>
 </template>

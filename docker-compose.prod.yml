@@ -25,7 +25,7 @@ services:
     environment:
       PGHOST: db
       PGPORT: "5432"
-      EMAIL_DELIVERY: mailpit
+      EMAIL_DELIVERY: ${EMAIL_DELIVERY:-mailpit}
       MAILPIT_HOST: mailpit
       MAILPIT_PORT: "1025"
     volumes:

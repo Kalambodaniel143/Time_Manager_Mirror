@@ -5,7 +5,7 @@ import { createServer } from 'vite'
 
 const storage = new Map()
 const initialFetch = globalThis.fetch
-const password = 'Password8'
+const password = 'Lantern8'
 const profile = email => ({ first_name: 'Sara', last_name: 'Ortiz', email, gender: 'female', birth_date: '1999-03-12', birth_place: 'Paris' })
 let server, demo, work, service, store, Profile
 before(async () => {

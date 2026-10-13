@@ -1,7 +1,7 @@
 <template>
-  <div class="theme-toggle" role="group" aria-label="Affichage">
-    <button v-for="option in options" :key="option.value" type="button" :class="{ 'is-active': modelValue === option.value }" :aria-label="option.label" :title="option.label" :aria-pressed="modelValue === option.value" @click="$emit('update:modelValue', option.value)">
-      <AppIcon :name="option.icon" /><span v-if="option.value === 'contrast'">Contraste</span>
+  <div class="theme-toggle" role="group" :aria-label="$t(&quot;Affichage&quot;)">
+    <button v-for="option in options" :key="option.value" type="button" :class="{ 'is-active': modelValue === option.value }" :aria-label="$t(option.label)" :title="$t(option.label)" :aria-pressed="modelValue === option.value" @click="$emit('update:modelValue', option.value)">
+      <AppIcon :name="option.icon" /><span v-if="option.value === 'contrast'">{{ $t("Contraste") }}</span>
     </button>
   </div>
 </template>

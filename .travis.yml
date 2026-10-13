@@ -3,8 +3,23 @@ language: minimal
 services:
   - docker
 
+stages:
+  - Test
+  - name: "Build & Push Image"
+    if: branch = main AND type != pull_request
+  - name: Deploy
+    if: branch = main AND type != pull_request
+
 jobs:
   include:
+    - stage: Test
+      name: Backend tests
+      script:
+        - bash scripts/check_workflows.sh backend
+    - stage: Test
+      name: Frontend tests and build
+      script:
+        - bash scripts/check_workflows.sh frontend
     - stage: "Build & Push Image"
       script:
         - echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin
@@ -24,7 +39,7 @@ jobs:
       script:
         - scp -v docker-compose.prod.yml $SERVER_USER@$SERVER_IP:~/docker-compose.yml
         # Build the server .env from the Travis environment variables
-        - printf 'PGUSER=%s\nPGPASSWORD=%s\nPGDATABASE=%s\nPGPORT=%s\nDOCKER_USERNAME=%s\nJWT_SECRET=%s\nEMAIL_DELIVERY=mailpit\nADMIN_EMAIL=%s\nADMIN_PASSWORD=%s\n' "$PGUSER" "$PGPASSWORD" "$PGDATABASE" "$PGPORT" "$DOCKER_USERNAME" "$JWT_SECRET" "$ADMIN_EMAIL" "$ADMIN_PASSWORD" > .env.deploy
+        - printf 'PGUSER=%s\nPGPASSWORD=%s\nPGDATABASE=%s\nPGPORT=%s\nDOCKER_USERNAME=%s\nJWT_SECRET=%s\nEMAIL_DELIVERY=%s\nRESEND_API_KEY=%s\nRESEND_FROM=%s\nRESEND_FROM_EMAIL=%s\nADMIN_EMAIL=%s\nADMIN_PASSWORD=%s\n' "$PGUSER" "$PGPASSWORD" "$PGDATABASE" "$PGPORT" "$DOCKER_USERNAME" "$JWT_SECRET" "${EMAIL_DELIVERY:-mailpit}" "$RESEND_API_KEY" "${RESEND_FROM:-Time Manager <onboarding@resend.dev>}" "${RESEND_FROM_EMAIL:-onboarding@resend.dev}" "$ADMIN_EMAIL" "$ADMIN_PASSWORD" > .env.deploy
         - scp .env.deploy $SERVER_USER@$SERVER_IP:~/.env
         - scp deploy.sh $SERVER_USER@$SERVER_IP:~/deploy.sh
         - ssh $SERVER_USER@$SERVER_IP "bash ~/deploy.sh"

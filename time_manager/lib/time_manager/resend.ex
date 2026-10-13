@@ -17,7 +17,7 @@ defmodule TimeManager.Resend do
   defp send_request(email, api_key) do
     body = %{
       from: Application.fetch_env!(:time_manager, :resend_from),
-      to: [email.to],
+      to: Enum.map(email.to, fn {_name, address} -> address end),
       subject: email.subject,
       text: email.text_body
     }

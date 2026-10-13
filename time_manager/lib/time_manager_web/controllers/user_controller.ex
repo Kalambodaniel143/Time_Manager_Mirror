@@ -147,6 +147,10 @@ defmodule TimeManagerWeb.UserController do
                )
              end
            ) do
+      if is_binary(user_params["password"]) and user_params["password"] != "" do
+        Accounts.deliver_password_changed(user)
+      end
+
       render(conn, :show, user: user, viewer: me)
     end
   end

@@ -1,10 +1,8 @@
 <template>
   <div class="jonas-marker" :class="{ 'is-inline': inline }" role="note">
     <span class="jonas-badge">
-      <AppIcon name="wrench" />
-      À implémenter · Jonas (clocks)
-    </span>
-    <p class="jonas-title">{{ title }}</p>
+      <AppIcon name="wrench" /> {{ $t("À implémenter · Jonas (clocks)") }} </span>
+    <p class="jonas-title">{{ $t(title) }}</p>
     <p v-if="$slots.default" class="jonas-text"><slot /></p>
   </div>
 </template>

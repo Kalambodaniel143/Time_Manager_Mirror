@@ -545,7 +545,10 @@ defmodule TimeManager.Workforce.Planning do
                  Repo.exists?(
                    from s in Swap,
                      where: s.shift_id == ^source.id and s.status in ["pending", "consented"]
-                 ), do: Workforce.conflict("Un échange est déjà en attente."), else: :ok),
+                 ),
+                 do: Workforce.conflict("Un échange est déjà en attente."),
+                 else: :ok
+               ),
              {:ok, row} <-
                Repo.insert(%Swap{
                  user_id: me.id,
@@ -675,7 +678,10 @@ defmodule TimeManager.Workforce.Planning do
            if(
              Enum.all?([source.user_id, target.user_id], fn id ->
                Enum.any?(team.members, &(&1.id == id))
-             end), do: :ok, else: Workforce.conflict("La composition de l’équipe a changé.")),
+             end),
+             do: :ok,
+             else: Workforce.conflict("La composition de l’équipe a changé.")
+           ),
          {:ok, _} <- Repo.update(Ecto.Changeset.change(source, user_id: target.user_id)),
          {:ok, _} <- Repo.update(Ecto.Changeset.change(target, user_id: source.user_id)),
          candidates = shifts(plan.id),

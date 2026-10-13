@@ -28,7 +28,10 @@ Puis `npm run dev`. Le compte utilisé doit exister dans la base locale ; le com
 2. `20261012145131_allow_legacy_audit_events.exs` : journal pour les comptes historiques sans organisation.
 3. `20261012164950_add_absence_payable_hours.exs` : quantité d’heures rémunérables confirmée sur une absence.
 
-Les migrations sont additives. Aucune réinitialisation de base n’est requise. Ne pas utiliser `mix ecto.reset`, supprimer le volume PostgreSQL ou recréer les comptes pour ce déploiement.
+4. `20261013143422_add_password_recovery_and_session_version.exs` : codes de récupération et version de session.
+5. `20261013203307_remove_managers_from_own_team_memberships.exs` : retrait des appartenances redondantes des managers à leur propre équipe. Cette migration ne touche ni aux comptes, ni à leurs heures, ni à leur rôle de manager. Le rollback ne reconstitue pas ces appartenances.
+
+Les migrations de structure sont additives ; la cinquième nettoie les appartenances indiquées. Aucune réinitialisation de base n’est requise. Ne pas utiliser `mix ecto.reset`, supprimer le volume PostgreSQL ou recréer les comptes pour ce déploiement.
 
 ## Serveur Docker existant
 
@@ -69,3 +72,22 @@ Une `404` signifie que le nouveau routeur n’est pas encore servi. Vérifier é
 Avec un compte réel, vérifier successivement : connexion, permissions, règles, note, correction, validation/réouverture, création/publication de gardes, consentement/validation d’un échange, absence, confirmation de ses heures rémunérables, relevé mensuel/CSV et notifications. Les essais doivent utiliser des comptes/données de recette appropriés.
 
 Le guide de lecture vocale se teste dans un navigateur compatible, via Mon compte et « Écouter cette étape ». Il ne nécessite pas de service audio backend.
+
+## Emails et pipeline du 13 octobre
+
+Travis exécute maintenant une étape **Test** avant **Build & Push Image**, puis **Deploy**. Backend : format, compilation sans avertissements et tests PostgreSQL. Frontend : ESLint, tests et build. Publication et déploiement sont limités à main hors pull request et ne s’exécutent pas après un échec des tests. Les jobs utilisent `scripts/check_workflows.sh` : Docker Compose v2 est préféré, avec repli sur `docker-compose` si nécessaire. Le script supprime uniquement les ressources de la composition de test à la fin.
+
+La composition `docker-compose.test.yml` utilise sa propre base éphémère. Les tests locaux peuvent aussi être lancés avec `mix precommit` et `npm run check`. Voir la [recette](RECETTE_VALIDATIONS.md).
+
+Le serveur conserve Mailpit par défaut. Pour que les emails arrivent dans des boîtes réelles, configurer les variables protégées Travis (ou le fichier d’environnement privé du serveur pour un déploiement manuel) :
+
+```env
+EMAIL_DELIVERY=resend
+RESEND_API_KEY=<clé privée Resend>
+RESEND_FROM=Time Manager <notifications@votre-domaine>
+RESEND_FROM_EMAIL=notifications@votre-domaine
+```
+
+L’expéditeur doit être autorisé chez le fournisseur. Ne pas committer ces valeurs. Le pipeline transmet ces paramètres et Compose respecte désormais EMAIL_DELIVERY au lieu d’imposer Mailpit. En recette, garder `EMAIL_DELIVERY=mailpit` et vérifier les messages dans Mailpit. La réussite des tests avec l’adaptateur de test ne garantit pas la délivrance par le fournisseur distant.
+
+Après déploiement, vérifier dans OpenAPI `/auth/forgot-password`, `/auth/reset-password` et `/notifications/count`. Faire un essai sur un compte de recette : récupération, connexion avec le nouveau mot de passe, refus de l’ancienne session et réception de l’alerte. Aucune réinitialisation de base ni recréation des comptes existants n’est nécessaire.

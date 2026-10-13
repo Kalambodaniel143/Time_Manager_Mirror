@@ -368,24 +368,49 @@ defmodule TimeManager.Accounts do
   stolen session alone is not enough to take over the account.
   """
   def change_password(%User{} = user, current_password, attrs) do
-    if User.valid_password?(user, current_password) do
-      reset_password(user, attrs)
-    else
-      changeset =
-        user
-        |> Ecto.Changeset.change()
-        |> Ecto.Changeset.add_error(:current_password, "is not valid")
+    Repo.transact(fn ->
+      current = Repo.one!(from u in User, where: u.id == ^user.id, lock: "FOR UPDATE")
 
-      {:error, changeset}
-    end
+      if User.valid_password?(current, current_password) do
+        reset_password(current, attrs)
+      else
+        {:error,
+         current
+         |> Ecto.Changeset.change()
+         |> Ecto.Changeset.add_error(:current_password, "is not valid")}
+      end
+    end)
   end
 
   @doc "Sets a new password without checking the old one (administrator reset)."
   def reset_password(%User{} = user, attrs) do
-    user
-    |> User.password_changeset(attrs)
-    |> Repo.update()
-    |> preload_role()
+    Repo.transact(fn ->
+      current = Repo.one!(from u in User, where: u.id == ^user.id, lock: "FOR UPDATE")
+
+      with {:ok, updated} <-
+             current
+             |> User.password_changeset(attrs)
+             |> Ecto.Changeset.put_change(:session_version, current.session_version + 1)
+             |> Repo.update()
+             |> preload_role() do
+        from(r in TimeManager.Accounts.PasswordRecovery, where: r.user_id == ^user.id)
+        |> Repo.delete_all()
+
+        {:ok, updated}
+      end
+    end)
+  end
+
+  def deliver_password_changed(user) do
+    case user.email |> TimeManager.Email.password_changed() |> TimeManager.EmailDelivery.send() do
+      :ok ->
+        :ok
+
+      {:error, _} ->
+        require Logger
+        Logger.error("Password changed, but its confirmation email could not be delivered")
+        :ok
+    end
   end
 
   @doc """

@@ -9,12 +9,12 @@ export function dismiss(id) {
   if (index !== -1) toasts.splice(index, 1)
 }
 
-export function notify(message, tone = 'success', timeout = 3400) {
+export function notify(message, tone = 'success', timeout = tone === 'error' ? 0 : 5000) {
   seed += 1
   const id = seed
 
   toasts.push({ id, message, tone })
-  setTimeout(() => dismiss(id), timeout)
+  if (timeout > 0) setTimeout(() => dismiss(id), timeout)
 
   return id
 }

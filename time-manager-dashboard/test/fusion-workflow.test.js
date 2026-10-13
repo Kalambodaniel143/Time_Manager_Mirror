@@ -6,7 +6,7 @@ import { createServer } from 'vite'
 let server, demo, work, corrections
 const values = new Map()
 const originalFetch = globalThis.fetch
-const password = 'Password8'
+const password = 'Lantern8'
 const profile = email => ({ first_name: 'Sara', last_name: 'Martin', email, gender: 'female', birth_date: '1999-03-12', birth_place: 'Paris' })
 const minutesAgo = value => new Date(Date.now() - value * 60000)
 

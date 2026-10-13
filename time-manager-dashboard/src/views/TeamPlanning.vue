@@ -1,45 +1,41 @@
 <template>
   <TeamPlan v-if="!demo" />
   <div v-else class="team-planning">
-    <PageHeader :eyebrow="`${published ? 'Publié' : 'À publier'} · ${rangeLabel}`" title="Planning d’équipe">
-      <button class="btn btn-primary" type="button" :disabled="!publishable" :title="blockReason" @click="publish">
+    <PageHeader :eyebrow="$t(`${published ? 'Publié' : 'À publier'} · ${rangeLabel}`)" :title="$t(&quot;Planning d’équipe&quot;)">
+      <button class="btn btn-primary" type="button" :disabled="!publishable" :title="$t(blockReason)" @click="publish">
         <AppIcon name="calendar" />
-        {{ published ? `Publié jusqu’au ${endLabel}` : `Publier jusqu’au ${endLabel}` }}
+        {{ $t(published ? `Publié jusqu’au ${endLabel}` : `Publier jusqu’au ${endLabel}`) }}
       </button>
     </PageHeader>
 
-    <p class="demo-notice">Planning d’exemple · les modifications restent dans ce navigateur et aucun agent n’est notifié. Le contrôle mensuel porte sur les jours affichés ; le serveur devra vérifier le mois complet.</p>
-    <div class="week-tabs" aria-label="Semaine du planning"><button v-for="(week, index) in weeks" :key="index" class="btn btn-outline" :aria-pressed="selectedWeek === index" type="button" @click="selectedWeek = index">{{ week }}</button></div>
-    <label class="agent-select field"><span class="field-label">Afficher la semaine de</span><select v-model="selectedAgent" class="input"><option v-for="row in rows" :key="row.username" :value="row.username">{{ row.name }} · {{ row.unit }}</option></select></label>
+    <p class="demo-notice">{{ $t("Planning d’exemple · les modifications restent dans ce navigateur et aucun agent n’est notifié. Le contrôle mensuel porte sur les jours affichés ; le serveur devra vérifier le mois complet.") }}</p>
+    <div class="week-tabs" :aria-label="$t(&quot;Semaine du planning&quot;)"><button v-for="(week, index) in weeks" :key="index" class="btn btn-outline" :aria-pressed="selectedWeek === index" type="button" @click="selectedWeek = index">{{ week }}</button></div>
+    <label class="agent-select field"><span class="field-label">{{ $t("Afficher la semaine de") }}</span><select v-model="selectedAgent" class="input"><option v-for="row in rows" :key="row.username" :value="row.username">{{ row.name }} · {{ row.unit }}</option></select></label>
     <div class="stack">
-      <AlertBanner v-for="alert in alerts" :key="alert.member.username" tone="danger" :title="alert.title" :text="alert.text">
-        <button v-if="alert.partner" class="btn btn-on-dark btn-sm" type="button" @click="swap(alert)">
-          Échanger le {{ alert.day }} avec {{ alert.partnerFirst }}
+      <AlertBanner v-for="alert in alerts" :key="alert.member.username" tone="danger" :title="$t(alert.title)" :text="$t(alert.text)">
+        <button v-if="alert.partner" class="btn btn-on-dark btn-sm" type="button" @click="swap(alert)"> {{ $t("Échanger le") }} {{ alert.day }} {{ $t("avec") }} {{ alert.partnerFirst }}
         </button>
       </AlertBanner>
 
-      <AlertBanner v-for="message in frequencyAlerts" :key="message" tone="warning" title="Fréquence de nuits à ajuster" :text="message" />
+      <AlertBanner v-for="message in frequencyAlerts" :key="message" tone="warning" :title="$t(&quot;Fréquence de nuits à ajuster&quot;)" :text="$t(message)" />
       <PlanGrid :days="visibleDays" :rows="visibleRows" :max-nights="maxNights" :offset="selectedWeek * 7" :selected-agent="selectedAgent" @cycle="cycle" />
-      <section v-if="swapRequests.length" class="card section-card"><h2 class="card-title">Demandes d’échange de la démonstration</h2><article v-for="item in swapRequests" :key="item.id" class="swap-request"><strong>{{ item.username }} · {{ item.day }}</strong><p>{{ item.reason }}</p><div><button class="btn btn-outline btn-sm" type="button" @click="resolveSwap(item.id, 'accepted')">Examiner et organiser</button><button class="btn btn-quiet btn-sm" type="button" @click="resolveSwap(item.id, 'rejected')">Refuser</button></div></article></section>
+      <section v-if="swapRequests.length" class="card section-card"><h2 class="card-title">{{ $t("Demandes d’échange de la démonstration") }}</h2><article v-for="item in swapRequests" :key="item.id" class="swap-request"><strong>{{ item.username }} · {{ item.day }}</strong><p>{{ item.reason }}</p><div><button class="btn btn-outline btn-sm" type="button" @click="resolveSwap(item.id, 'accepted')">{{ $t("Examiner et organiser") }}</button><button class="btn btn-quiet btn-sm" type="button" @click="resolveSwap(item.id, 'rejected')">{{ $t("Refuser") }}</button></div></article></section>
 
       <p class="legend">
         <HourTag kind="day" />
         <HourTag kind="night" />
         <HourTag kind="oncall" />
         <HourTag kind="leave" />
-        <span>
-          Seuil de l’équipe : {{ maxNights }} nuits d’affilée, fixé par l’administration. Publication {{ daysAhead }} jours à
-          l’avance.
-        </span>
+        <span> {{ $t("Seuil de l’équipe :") }} {{ maxNights }} {{ $t("nuits d’affilée, fixé par l’administration. Publication") }} {{ daysAhead }} {{ $t("jours à l’avance.") }} </span>
       </p>
-      <p v-if="!rightGranted" class="field-hint">
-        Publication réservée : votre droit « publier le planning » est désactivé par l’administration.
-      </p>
+      <p v-if="!rightGranted" class="field-hint"> {{ $t("Publication réservée : votre droit « publier le planning » est désactivé par l’administration.") }} </p>
     </div>
   </div>
 </template>
 
 <script>
+import { intlLocale } from '../utils/i18n.js'
+
 import AlertBanner from '../components/ui/AlertBanner.vue'
 import AppIcon from '../components/ui/AppIcon.vue'
 import HourTag from '../components/ui/HourTag.vue'
@@ -65,7 +61,7 @@ import { notify } from '../utils/toast'
 const CYCLE = ['day', 'night', 'oncall', 'leave', 'rest']
 
 function dayMonth(date) {
-  return date.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' })
+  return date.toLocaleDateString(intlLocale(), { day: 'numeric', month: 'long' })
 }
 
 export default {
@@ -120,7 +116,7 @@ export default {
     },
 
     endLabel() {
-      return this.days[this.days.length - 1].toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })
+      return this.days[this.days.length - 1].toLocaleDateString(intlLocale(), { day: 'numeric', month: 'short' })
     },
 
     alerts() {
