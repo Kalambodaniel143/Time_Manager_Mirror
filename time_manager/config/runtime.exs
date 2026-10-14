@@ -38,7 +38,7 @@ email_delivery =
     value -> raise "EMAIL_DELIVERY must be either mailpit or resend, got: #{value}"
   end
 
-config :time_manager, :email_delivery, email_delivery
+config :time_manager, :email_delivery, if(config_env() == :test, do: :test, else: email_delivery)
 
 if email_delivery == :mailpit and config_env() != :test do
   config :time_manager, TimeManager.Mailer,

@@ -1,3 +1,4 @@
+import { intlLocale } from './i18n.js'
 import { formatClockDate } from './clockDate'
 import { durationInHours, parseDateTime, startOfWeek, toDateInput } from './date'
 
@@ -94,7 +95,7 @@ export function formatHours(hours) {
   const minutes = Math.round((Number(hours) || 0) * 60)
   const whole = Math.floor(minutes / 60)
   const rest = minutes % 60
-  const head = `${whole.toLocaleString('fr-FR')} h`
+  const head = `${whole.toLocaleString(intlLocale())} h`
   return rest ? `${head} ${pad(rest)}` : head
 }
 
@@ -116,7 +117,7 @@ export function isoWeek(value) {
 }
 
 function monthShort(date) {
-  return date.toLocaleDateString('fr-FR', { month: 'short' })
+  return date.toLocaleDateString(intlLocale(), { month: 'short' })
 }
 
 export function formatRange(from, to) {
@@ -125,16 +126,16 @@ export function formatRange(from, to) {
 }
 
 export function formatDayMonthLong(date) {
-  return date.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' })
+  return date.toLocaleDateString(intlLocale(), { day: 'numeric', month: 'long' })
 }
 
 export function weekdayShort(date) {
-  const label = date.toLocaleDateString('fr-FR', { weekday: 'short' })
+  const label = date.toLocaleDateString(intlLocale(), { weekday: 'short' })
   return label.charAt(0).toUpperCase() + label.slice(1)
 }
 
 export function weekdayUpper(date) {
-  return date.toLocaleDateString('fr-FR', { weekday: 'short' }).toUpperCase()
+  return date.toLocaleDateString(intlLocale(), { weekday: 'short' }).toUpperCase()
 }
 
 export function weekFilters(monday) {

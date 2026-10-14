@@ -1,5 +1,5 @@
 <template>
-  <div class="segmented" role="radiogroup" :aria-label="label">
+  <div class="segmented" role="radiogroup" :aria-label="$t(label)">
     <button
       v-for="option in options"
       :key="option.value"
@@ -10,7 +10,7 @@
       :aria-checked="option.value === modelValue"
       @click="$emit('update:modelValue', option.value)"
     >
-      {{ option.label }}
+      {{ $t(option.label) }}
     </button>
   </div>
 </template>

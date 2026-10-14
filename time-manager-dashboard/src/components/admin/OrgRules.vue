@@ -1,8 +1,8 @@
 <template>
   <section class="card rules">
-    <h2 class="card-title">Règles de l’organisation</h2>
+    <h2 class="card-title">{{ $t("Règles de l’organisation") }}</h2>
     <div v-for="rule in rules" :key="rule.key" class="rule">
-      <label class="rule-label" :for="`rule-${rule.key}`">{{ rule.label }}</label>
+      <label class="rule-label" :for="`rule-${rule.key}`">{{ $t(rule.label) }}</label>
       <div class="rule-row">
         <input
           :disabled="busy || loading"
@@ -13,16 +13,16 @@
           :step="rule.decimal ? 0.1 : 1"
           v-model.number="draft[rule.key]"
         />
-        <p class="rule-hint">{{ rule.hint }}</p>
+        <p class="rule-hint">{{ $t(rule.hint) }}</p>
       </div>
     </div>
-    <fieldset v-if="!demo" class="page-stack"><legend class="rule-label">Absences rémunérées au taux normal</legend><label><input v-model="draft.paidAbsenceKinds" type="checkbox" value="leave" /> Congés</label><label><input v-model="draft.paidAbsenceKinds" type="checkbox" value="sick" /> Arrêts maladie</label><p class="field-hint">Sans activation, les absences sont suivies mais ne contribuent pas au montant. La récupération prise reste non rémunérée.</p></fieldset>
+    <fieldset v-if="!demo" class="page-stack"><legend class="rule-label">{{ $t("Absences rémunérées au taux normal") }}</legend><label><input v-model="draft.paidAbsenceKinds" type="checkbox" value="leave" /> {{ $t("Congés") }}</label><label><input v-model="draft.paidAbsenceKinds" type="checkbox" value="sick" /> {{ $t("Arrêts maladie") }}</label><p class="field-hint">{{ $t("Sans activation, les absences sont suivies mais ne contribuent pas au montant. La récupération prise reste non rémunérée.") }}</p></fieldset>
     <div class="rule">
-      <p class="rule-label">Rappel de pointage oublié</p>
-      <p class="rule-hint">Les décisions et publications sont notifiées dans l’application.</p>
+      <p class="rule-label">{{ $t("Rappel de pointage oublié") }}</p>
+      <p class="rule-hint">{{ $t("Les décisions et publications sont notifiées dans l’application.") }}</p>
     </div>
-    <p v-if="message" class="field-hint" role="status">{{ message }}</p>
-    <button class="btn btn-primary" type="button" :disabled="loading || busy" @click="save">Enregistrer les règles</button>
+    <p v-if="message" class="field-hint" role="status">{{ $t(message) }}</p>
+    <button class="btn btn-primary" type="button" :disabled="loading || busy" @click="save">{{ $t("Enregistrer les règles") }}</button>
   </section>
 </template>
 

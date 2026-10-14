@@ -20,7 +20,12 @@ defmodule TimeManager.Token do
 
   @doc "Builds a token for `user`, bound to `csrf_token`."
   def sign(user, csrf_token) do
-    generate_and_sign(%{"user_id" => user.id, "role" => user.role.name, "xsrf" => csrf_token})
+    generate_and_sign(%{
+      "user_id" => user.id,
+      "role" => user.role.name,
+      "xsrf" => csrf_token,
+      "session_version" => user.session_version
+    })
   end
 
   @doc "A random CSRF token: 32 bytes, URL-safe Base64."

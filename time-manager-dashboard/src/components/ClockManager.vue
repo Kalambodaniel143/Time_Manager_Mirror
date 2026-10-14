@@ -3,14 +3,12 @@
   <section class="card clock" :aria-busy="loading">
     <header class="card-header">
       <div>
-        <h3 class="card-title">
-          Pointage
-          <!-- On affiche l'état seulement après l'avoir récupéré auprès de l'API. -->
+        <h3 class="card-title"> {{ $t("Pointage") }} <!-- On affiche l'état seulement après l'avoir récupéré auprès de l'API. -->
           <span v-if="ready" class="badge" :class="clockIn ? 'badge-success' : 'badge-muted'">
-            {{ stateLabel }}
+            {{ $t(stateLabel) }}
           </span>
         </h3>
-        <p class="card-subtitle">Déclarez le début et la fin de votre journée</p>
+        <p class="card-subtitle">{{ $t("Déclarez le début et la fin de votre journée") }}</p>
       </div>
     </header>
 
@@ -18,14 +16,14 @@
       <div class="clock-status" :class="{ active: ready && clockIn }">
         <span class="clock-pulse" aria-hidden="true"></span>
         <div>
-          <p class="clock-state serif">{{ stateLabel }}</p>
-          <p class="clock-since num">{{ startDateLabel }}</p>
+          <p class="clock-state serif">{{ $t(stateLabel) }}</p>
+          <p class="clock-since num">{{ $t(startDateLabel) }}</p>
           <!-- En pause, le temps travaillé reste affiché mais n'avance plus. -->
 
         </div>
       </div>
 
-      <div class="mobile-clock-time"><span>Heure actuelle</span><strong class="num">{{ currentTimeLabel }}</strong></div>
+      <div class="mobile-clock-time"><span>{{ $t("Heure actuelle") }}</span><strong class="num">{{ $t(currentTimeLabel) }}</strong></div>
       <!-- @click appelle une méthode ; :disabled empêche de cliquer pendant l'attente. -->
       <button
         class="btn clock-btn"
@@ -39,30 +37,28 @@
           <path d="M8 5v3.2l2 1.3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
         </svg>
         <strong class="clock-counter num" role="timer" aria-live="off">{{ elapsedTime }}</strong>
-        <span>{{ clockButtonLabel }}</span>
+        <span>{{ $t(clockButtonLabel) }}</span>
       </button>
 
-      <button v-if="ready && clockIn" class="btn btn-outline" type="button" :disabled="loading" @click="clock('pause')">
-        Prendre une pause
-      </button>
+      <button v-if="ready && clockIn" class="btn btn-outline" type="button" :disabled="loading" @click="clock('pause')"> {{ $t("Prendre une pause") }} </button>
       <template v-if="ready && onBreak">
-        <p class="clock-break-note">Les pauses ne sont pas comptées dans les heures travaillées.</p>
-        <button class="btn btn-outline" type="button" :disabled="loading" @click="clock('departure')">
-          Pointer mon départ
-        </button>
+        <p class="clock-break-note">{{ $t("Les pauses ne sont pas comptées dans les heures travaillées.") }}</p>
+        <button class="btn btn-outline" type="button" :disabled="loading" @click="clock('departure')"> {{ $t("Pointer mon départ") }} </button>
       </template>
 
       <button class="btn btn-quiet btn-sm refresh" type="button" :disabled="loading" @click="refresh">
-        {{ loading ? 'Actualisation…' : 'Actualiser le statut' }}
+        {{ $t(loading ? 'Actualisation…' : 'Actualiser le statut') }}
       </button>
 
       <!-- v-if affiche le message uniquement lorsque sa condition est remplie. -->
-      <p v-if="error" class="clock-error" role="alert">{{ error }}</p>
+      <p v-if="error" class="clock-error" role="alert">{{ $t(error) }}</p>
     </div>
   </section>
 </template>
 
 <script>
+import { intlLocale } from '../utils/i18n.js'
+
 import { getClocks, createClock } from '../services/clockService'
 import { clockDate } from '../utils/missingDeparture'
 import { formatClockDate } from '../utils/clockDate'
@@ -96,7 +92,7 @@ export default {
   },
 
   computed: {
-    currentTimeLabel() { return new Date(this.currentTime).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) },
+    currentTimeLabel() { return new Date(this.currentTime).toLocaleTimeString(intlLocale(), { hour: '2-digit', minute: '2-digit' }) },
     loading() {
       return this.fetching || this.saving
     },
@@ -134,7 +130,7 @@ export default {
       if (this.onBreak) return 'Le compteur reprendra à votre retour.'
       if (!this.clockIn) return 'Aucune période en cours'
       try {
-        return `Depuis le ${clockDate(this.startDateTime).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' })}`
+        return `Depuis le ${clockDate(this.startDateTime).toLocaleString(intlLocale(), { dateStyle: 'short', timeStyle: 'short' })}`
       } catch {
         return 'Heure de début indisponible'
       }

@@ -550,6 +550,14 @@ defmodule TimeManagerWeb.WorkforceController do
 
   operation(:notifications,
     summary: "notifications",
+    parameters: [
+      status: [in: :query, type: :string, description: "all (default), read or unread"],
+      page: [
+        in: :query,
+        type: :integer,
+        description: "Page starting at 1; 50 notifications per page"
+      ]
+    ],
     responses: [
       ok: {"Result", "application/json", WorkflowResponse},
       forbidden: {"Forbidden", "application/json", ErrorResponse},
@@ -558,7 +566,28 @@ defmodule TimeManagerWeb.WorkforceController do
     ]
   )
 
-  def notifications(conn, _p), do: respond(conn, {:ok, Workforce.notifications(me(conn))})
+  def notifications(conn, p) do
+    status = p["status"] || "all"
+
+    with true <- status in ["all", "read", "unread"],
+         raw_page when is_binary(raw_page) <- p["page"] || "1",
+         {page, ""} when page >= 1 and page <= 100_000 <- Integer.parse(raw_page) do
+      respond(conn, {:ok, Workforce.notifications(me(conn), status, page)})
+    else
+      _ ->
+        {:error,
+         {:unprocessable_entity,
+          "Choisissez toutes les notifications, les lues ou les non lues, et un numéro de page valide."}}
+    end
+  end
+
+  operation(:notification_count,
+    summary: "Unread notification count",
+    responses: [ok: {"Count", "application/json", WorkflowResponse}]
+  )
+
+  def notification_count(conn, _p),
+    do: respond(conn, {:ok, %{unread: Workforce.unread_notification_count(me(conn))}})
 
   operation(:read_notification,
     summary: "read notification",

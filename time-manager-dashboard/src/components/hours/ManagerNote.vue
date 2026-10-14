@@ -1,11 +1,11 @@
 <template>
   <section class="note card">
-    <label class="note-title" for="manager-note">Note pour votre manager</label>
-    <p class="note-hint">Facultatif. Pour expliquer une journée particulière.</p>
+    <label class="note-title" for="manager-note">{{ $t("Note pour votre manager") }}</label>
+    <p class="note-hint">{{ $t("Facultatif. Pour expliquer une journée particulière.") }}</p>
     <textarea id="manager-note" v-model="text" :disabled="loading || (!demo && (!ownNote || weekStatus !== 'open'))" class="input note-input" rows="3" @change="save"></textarea>
-    <p class="note-visible"><AppIcon name="eye" />{{ demo ? 'Note enregistrée dans ce navigateur.' : 'Note partagée avec votre responsable.' }}</p>
-    <p v-if="error" class="field-error" role="alert">{{ error }}</p>
-    <p class="note-hint">Une note est facultative et ne remplace pas une demande de correction.</p>
+    <p class="note-visible"><AppIcon name="eye" />{{ $t(demo ? 'Note enregistrée dans ce navigateur.' : 'Note partagée avec votre responsable.') }}</p>
+    <p v-if="error" class="field-error" role="alert">{{ $t(error) }}</p>
+    <p class="note-hint">{{ $t("Une note est facultative et ne remplace pas une demande de correction.") }}</p>
   </section>
 </template>
 

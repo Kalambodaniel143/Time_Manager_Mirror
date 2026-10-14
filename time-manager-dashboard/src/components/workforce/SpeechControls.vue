@@ -1,4 +1,4 @@
-<template><div v-if="enabled" class="speech-controls"><button class="btn btn-outline btn-sm" :disabled="!supported" @click="read">Lire cette page</button><button v-if="speaking" class="btn btn-outline btn-sm" @click="stop">Arrêter la lecture</button><p v-if="error" class="field-hint" role="status">{{ error }}</p><p v-if="!supported" class="field-hint">La lecture vocale n’est pas disponible dans ce navigateur.</p></div></template>
+<template><div v-if="enabled" class="speech-controls"><button class="btn btn-outline btn-sm" :disabled="!supported" @click="read">{{ $t("Lire cette page") }}</button><button v-if="speaking" class="btn btn-outline btn-sm" @click="stop">{{ $t("Arrêter la lecture") }}</button><p v-if="error" class="field-hint" role="status">{{ $t(error) }}</p><p v-if="!supported" class="field-hint">{{ $t("La lecture vocale n’est pas disponible dans ce navigateur.") }}</p></div></template>
 <script>
 import { workforce } from '../../services/workforceService'
 import { speech, speechSupported, readAloud, stopReading } from '../../utils/speech'

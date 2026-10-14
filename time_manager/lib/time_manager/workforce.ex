@@ -19,6 +19,7 @@ defmodule TimeManager.Workforce do
     "timezone" => "Etc/UTC"
   }
   @preferences %{
+    "language" => "fr",
     "theme" => "light",
     "strong_text" => false,
     "tour_seen" => false,
@@ -209,7 +210,10 @@ defmodule TimeManager.Workforce do
            if(
              Enum.all?(attrs, fn {k, v} ->
                k in ["validate", "correct", "publish"] and is_boolean(v)
-             end), do: :ok, else: invalid("Permissions invalides.")) do
+             end),
+             do: :ok,
+             else: invalid("Permissions invalides.")
+           ) do
       Repo.transact(fn ->
         {:ok, _} = fetch(TimeManager.Teams.Team, team.id, true)
         row = Repo.get_by(Permission, team_id: team.id) || %Permission{team_id: team.id}
@@ -250,6 +254,7 @@ defmodule TimeManager.Workforce do
     valid =
       Enum.all?(attrs, fn {key, value} ->
         case key do
+          "language" -> value in ["fr", "en"]
           "theme" -> value in ["light", "night", "contrast"]
           key when key in ["strong_text", "tour_seen", "speech_enabled"] -> is_boolean(value)
           "speech_rate" -> is_number(value) and value >= 0.5 and value <= 2
@@ -323,12 +328,30 @@ defmodule TimeManager.Workforce do
     end
   end
 
-  def notifications(me),
+  def notifications(me, status \\ "all", page \\ 1) do
+    query =
+      from n in Notification,
+        where: n.user_id == ^me.id,
+        order_by: [desc: n.id],
+        limit: 50,
+        offset: ^((page - 1) * 50)
+
+    query =
+      case status do
+        "unread" -> where(query, [n], is_nil(n.read_at))
+        "read" -> where(query, [n], not is_nil(n.read_at))
+        _ -> query
+      end
+
+    query |> Repo.all() |> Enum.map(&plain/1)
+  end
+
+  def unread_notification_count(me),
     do:
-      Repo.all(
-        from n in Notification, where: n.user_id == ^me.id, order_by: [desc: n.id], limit: 100
+      Repo.aggregate(
+        from(n in Notification, where: n.user_id == ^me.id and is_nil(n.read_at)),
+        :count
       )
-      |> Enum.map(&plain/1)
 
   def read_notification(me, id) do
     with {:ok, row} <- fetch(Notification, id),

@@ -2,7 +2,7 @@
   <header class="page-header">
     <div class="page-heading">
       <p class="eyebrow">{{ eyebrow }}</p>
-      <h1 class="page-title">{{ title }}</h1>
+      <h1 class="page-title">{{ $t(title) }}</h1>
     </div>
     <div v-if="$slots.default" class="page-actions">
       <slot />

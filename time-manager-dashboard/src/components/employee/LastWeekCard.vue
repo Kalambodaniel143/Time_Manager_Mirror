@@ -1,11 +1,11 @@
 <template>
   <section class="last-week card">
     <header class="last-week-header">
-      <h2 class="card-title">{{ title }}</h2>
+      <h2 class="card-title">{{ $t(title) }}</h2>
       <span v-if="loading" class="skeleton total-skeleton"></span>
-      <p v-else-if="!error" class="total serif num">{{ totalLabel }}</p>
+      <p v-else-if="!error" class="total serif num">{{ $t(totalLabel) }}</p>
     </header>
-    <p v-if="error" class="field-error" role="alert">Impossible de charger les heures : {{ error }}</p>
+    <p v-if="error" class="field-error" role="alert">{{ $t("Impossible de charger les heures :") }} {{ $t(error) }}</p>
     <WeekBar v-else-if="!loading" :buckets="buckets" :target="target" />
   </section>
 </template>

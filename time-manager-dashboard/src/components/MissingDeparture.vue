@@ -3,25 +3,23 @@
   <component :is="tableRow ? 'tr' : 'section'" v-if="visible">
     <component :is="tableRow ? 'td' : 'div'" :colspan="tableRow ? 6 : undefined">
       <div class="missing-departure">
-        <AlertBanner v-if="missing" title="Départ à vérifier" :text="description">
-          <button v-if="!editing" class="btn btn-outline" type="button" :disabled="loading || saving" @click="editing = true">
-            Compléter
-          </button>
+        <AlertBanner v-if="missing" :title="$t(&quot;Départ à vérifier&quot;)" :text="$t(description)">
+          <button v-if="!editing" class="btn btn-outline" type="button" :disabled="loading || saving" @click="editing = true"> {{ $t("Compléter") }} </button>
         </AlertBanner>
 
         <form v-if="missing && editing" class="completion-form" novalidate @submit.prevent="submit">
-          <label class="field-label" :for="inputId">Date et heure réelles du départ</label>
+          <label class="field-label" :for="inputId">{{ $t("Date et heure réelles du départ") }}</label>
           <input :id="inputId" v-model="finish" class="input" type="datetime-local" step="1" :min="minimum" :max="maximum" :disabled="saving || needsRefresh" required />
-          <p class="hint">Heure locale. Le départ doit suivre le dernier pointage et dater de moins de 7 jours.</p>
+          <p class="hint">{{ $t("Heure locale. Le départ doit suivre le dernier pointage et dater de moins de 7 jours.") }}</p>
           <div class="actions">
-            <button class="btn btn-primary" type="submit" :disabled="saving || loading || needsRefresh">{{ saving ? 'Enregistrement…' : 'Confirmer' }}</button>
-            <button class="btn btn-quiet" type="button" :disabled="saving" @click="editing = false">Annuler</button>
+            <button class="btn btn-primary" type="submit" :disabled="saving || loading || needsRefresh">{{ $t(saving ? 'Enregistrement…' : 'Confirmer') }}</button>
+            <button class="btn btn-quiet" type="button" :disabled="saving" @click="editing = false">{{ $t("Annuler") }}</button>
           </div>
         </form>
 
-        <p v-if="error" class="field-error" role="alert">{{ error }}</p>
+        <p v-if="error" class="field-error" role="alert">{{ $t(error) }}</p>
         <button v-if="needsRefresh" class="btn btn-outline" type="button" :disabled="loading || saving" @click="refresh">
-          {{ loading ? 'Actualisation…' : 'Actualiser les pointages' }}
+          {{ $t(loading ? 'Actualisation…' : 'Actualiser les pointages') }}
         </button>
       </div>
     </component>
@@ -29,6 +27,8 @@
 </template>
 
 <script>
+import { intlLocale } from '../utils/i18n.js'
+
 import AlertBanner from './ui/AlertBanner.vue'
 import { completeDeparture, getClocks } from '../services/clockService'
 import { formatClockDate } from '../utils/clockDate'
@@ -61,7 +61,7 @@ export default {
       return day >= toDateInput(this.weekStart) && day < toDateInput(addDays(this.weekStart, 7))
     },
     description() {
-      const date = clockDate(this.missing.arrival.time).toLocaleString('fr-FR', {
+      const date = clockDate(this.missing.arrival.time).toLocaleString(intlLocale(), {
         weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', second: '2-digit',
       })
       return `Aucun départ enregistré pour le service commencé ${date}. Si vous avez terminé, complétez votre départ.`

@@ -1,20 +1,20 @@
 <template>
-  <div v-if="!demo" class="rights page-stack"><PageHeader eyebrow="Administration" title="Équipes et droits" /><RightsTable /><OrgRules /><section class="card section-card page-stack"><h2 class="card-title">Journal des modifications</h2><button class="btn btn-outline" @click="loadJournal">Actualiser le journal</button><p v-if="error" class="field-error" role="alert">{{ error }}</p><p v-if="!events.length" class="muted">Aucune modification enregistrée.</p><ol class="entries"><li v-for="entry in events" :key="entry.id" class="entry"><time>{{ entry.inserted_at }}</time><div><strong>{{ eventLabel(entry.action) }}</strong><p class="field-hint">{{ details(entry.details) }}</p></div></li></ol></section><AdminTeams /></div>
+  <div v-if="!demo" class="rights page-stack"><PageHeader :eyebrow="$t(&quot;Administration&quot;)" :title="$t(&quot;Équipes et droits&quot;)" /><RightsTable /><OrgRules /><section class="card section-card page-stack"><h2 class="card-title">{{ $t("Journal des modifications") }}</h2><button class="btn btn-outline" @click="loadJournal">{{ $t("Actualiser le journal") }}</button><p v-if="error" class="field-error" role="alert">{{ $t(error) }}</p><p v-if="!events.length" class="muted">{{ $t("Aucune modification enregistrée.") }}</p><ol class="entries"><li v-for="entry in events" :key="entry.id" class="entry"><time>{{ entry.inserted_at }}</time><div><strong>{{ $t(eventLabel(entry.action)) }}</strong><p class="field-hint">{{ details(entry.details) }}</p></div></li></ol></section><AdminTeams /></div>
   <div v-else class="rights">
-    <PageHeader eyebrow="Administration" title="Équipes et droits" />
+    <PageHeader :eyebrow="$t(&quot;Administration&quot;)" :title="$t(&quot;Équipes et droits&quot;)" />
 
-    <p class="demo-notice">Droits et règles de démonstration · enregistrés dans ce navigateur. Les permissions du serveur restent celles des rôles et équipes réels.</p>
+    <p class="demo-notice">{{ $t("Droits et règles de démonstration · enregistrés dans ce navigateur. Les permissions du serveur restent celles des rôles et équipes réels.") }}</p>
     <div class="layout">
       <div class="column">
         <RightsTable />
 
         <section class="card journal">
-          <h2 class="card-title">Journal des modifications</h2>
-          <p class="card-subtitle">Historique des changements effectués dans cette démonstration.</p>
+          <h2 class="card-title">{{ $t("Journal des modifications") }}</h2>
+          <p class="card-subtitle">{{ $t("Historique des changements effectués dans cette démonstration.") }}</p>
           <ol class="entries">
             <li v-for="entry in journal" :key="`${entry.at}-${entry.text}`" class="entry">
               <time class="entry-at num">{{ stamp(entry.at) }}</time>
-              <p>{{ entry.text }}</p>
+              <p>{{ $t(entry.text) }}</p>
             </li>
           </ol>
         </section>
@@ -22,15 +22,15 @@
 
       <div class="column">
         <OrgRules />
-        <InfoNote title="Aucun droit en secret">
-          Les changements sont visibles dans ce journal. Le partage et les notifications seront activés après raccordement du serveur.
-        </InfoNote>
+        <InfoNote :title="$t(&quot;Aucun droit en secret&quot;)"> {{ $t("Les changements sont visibles dans ce journal. Le partage et les notifications seront activés après raccordement du serveur.") }} </InfoNote>
       </div>
     </div>
   </div>
 </template>
 
 <script>
+import { intlLocale } from '../utils/i18n.js'
+
 import InfoNote from '../components/ui/InfoNote.vue'
 import PageHeader from '../components/ui/PageHeader.vue'
 import OrgRules from '../components/admin/OrgRules.vue'
@@ -60,7 +60,7 @@ export default {
     stamp(value) {
       const [day, time] = value.split(' ')
       const date = new Date(`${day}T00:00:00`)
-      return `${date.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })} · ${time}`
+      return `${date.toLocaleDateString(intlLocale(), { day: 'numeric', month: 'short' })} · ${time}`
     },
   },
 }

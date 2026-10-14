@@ -4,16 +4,16 @@
   </RouterView>
 
   <div v-else class="shell">
-    <a class="skip-link" href="#main-content">Aller au contenu</a>
+    <a class="skip-link" href="#main-content">{{ $t("Aller au contenu") }}</a>
     <AppSidebar :role="user.role" :theme="theme" :space="persona.space" :user-id="userId" :organization-access="Boolean(citySession)" :demo="Boolean(organizationSession)" @update:theme="setTheme">
       <AccountIdentity v-if="organizationSession" :session="organizationSession" @logout="logout" />
       <User v-else :user="user" @logout="logout" />
     </AppSidebar>
 
     <main id="main-content" class="main" tabindex="-1">
-      <p v-if="organizationSession" class="demo-notice">Mode démonstration · vos comptes et actions restent dans ce navigateur.</p>
+      <p v-if="organizationSession" class="demo-notice">{{ $t("Mode démonstration · vos comptes et actions restent dans ce navigateur.") }}</p>
       <SpeechControls />
-      <p v-if="workforceError" class="field-error" role="alert">{{ workforceError }}</p>
+      <p v-if="workforceError" class="field-error" role="alert">{{ $t(workforceError) }}</p>
       <WorkingTimes
         v-if="isOverlay && overlayUserId"
         ref="list"
@@ -36,6 +36,7 @@
 
 <script>
 import { RouterView } from 'vue-router'
+import { setLocale } from './utils/i18n'
 import ToastStack from './components/ToastStack.vue'
 import User from './components/User.vue'
 import AccountIdentity from './components/auth/AccountIdentity.vue'
@@ -47,7 +48,7 @@ import { getWorkingTimes } from './services/workingTimeService'
 import { auth, logout, clearSession, fetchMe, startOrganizationSession } from './stores/auth'
 import { notify } from './utils/toast'
 import SpeechControls from './components/workforce/SpeechControls.vue'
-import { loadContext, savePreferences, clearWorkforce, workforce } from './services/workforceService'
+import { loadContext, savePreferences, clearWorkforce, workforce, refreshNotificationCount } from './services/workforceService'
 import { stopReading } from './utils/speech'
 import { durationInHours } from './utils/date'
 import { displayName } from './utils/people'
@@ -171,6 +172,7 @@ export default {
       immediate: true,
       handler(id) {
         this.loadStats()
+        this.refreshNotificationBadge()
         // The theme may have been picked on the login page.
         this.setTheme(readTheme(), false)
         if (!id) { clearWorkforce(); stopReading() }
@@ -184,6 +186,7 @@ export default {
 
   mounted() {
     window.addEventListener('focus', this.refreshOrganizationSession)
+    this.notificationsClock = setInterval(this.refreshNotificationBadge, 30000)
     this.clock = setInterval(() => {
       this.now = new Date()
     }, 60000)
@@ -192,16 +195,19 @@ export default {
   beforeUnmount() {
     window.removeEventListener('focus', this.refreshOrganizationSession)
     clearInterval(this.clock)
+    clearInterval(this.notificationsClock)
   },
 
   methods: {
+    async refreshNotificationBadge() { if (!this.userId || this.organizationSession || document.hidden) return; try { await refreshNotificationCount() } catch { /* The Notifications page exposes load errors and provides retry. */ } },
     async loadPreferences(id) {
-      try { const context = await loadContext(); if (this.userId !== id) return; this.setTheme(context.preferences.theme, false); applyStrongText(context.preferences.strong_text); this.tourOpen = this.user.role === 'employee' && !context.preferences.tour_seen }
+      try { const context = await loadContext(); if (this.userId !== id) return; this.setTheme(context.preferences.theme, false); if (context.preferences.language) setLocale(context.preferences.language); applyStrongText(context.preferences.strong_text); this.tourOpen = this.user.role === 'employee' && !context.preferences.tour_seen }
       catch { /* The page displays workforce.error; existing account actions stay usable. */ }
     },
     async refreshOrganizationSession() {
       if (!this.citySession) return
       await fetchMe()
+      this.refreshNotificationBadge()
       if (!this.user) this.$router.push({ name: 'login' })
       else if (this.$route.meta.roles && !this.$route.meta.roles.includes(this.user.role)) {
         this.$router.push({ name: this.user.role === 'administrator' ? 'organization' : this.user.role === 'manager' ? 'team' : 'overview' })

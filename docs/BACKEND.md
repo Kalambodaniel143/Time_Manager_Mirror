@@ -147,7 +147,7 @@ Les migrations portent clés étrangères, index uniques et contraintes. La supp
 | controllers/workforce_controller.ex | Adaptateur HTTP commun des workflows ; délégation aux contextes. |
 | controllers/*_json.ex, fallback_controller.ex | Forme publique des objets, confidentialité et erreurs HTTP. |
 
-Mots de passe : **8 à 128 caractères**, nouveaux hashes Argon2id. Les anciens bcrypt sont migrés à la connexion réussie. Aucun hash/mot de passe n'est retourné.
+Mots de passe : **8 à 128 caractères**, avec refus des valeurs courantes, numériques ou répétitives (`accounts/password_policy.ex`), nouveaux hashes Argon2id. Les anciens bcrypt sont migrés à la connexion réussie. Aucun hash/mot de passe n'est retourné.
 
 Une semaine validated/closed bloque les périodes, pointages concernés, notes et régularisations d'absence. La réouverture motivée exige un responsable autorisé autre que le salarié.
 
@@ -299,7 +299,7 @@ Limites par minute : login 10/email et 100/IP ; verify/resend 20/IP dans un comp
 }
 ```
 
-Les six champs de profil sont requis. Genre : female/male/non_binary/unspecified. Prénom/nom/lieu ≤100 caractères, email ≤254 ; naissance entre 1900-01-01 et aujourd'hui. La référence n'est placée ni dans l'URL ni dans la réponse admin. L'approbation crée un employé et ne retourne **jamais le mot de passe** ; le frontend présente temporairement celui que l'admin vient de saisir.
+Les six champs de profil sont requis. Genre : female/male/non_binary/unspecified. Prénom/nom/lieu ≤100 caractères, email ≤254 ; naissance depuis 1900-01-01 et **18 ans révolus** ; prénom/nom sans chiffres, lettres Unicode et noms composés acceptés. La référence n'est placée ni dans l'URL ni dans la réponse admin. L'approbation crée un employé et ne retourne **jamais le mot de passe** ; le frontend présente temporairement celui que l'admin vient de saisir.
 
 JoinRequest = `{id,organization_id,organization_name,profile,status,created_at,reviewed_at,reviewed_by,rejection_reason}`. reviewed_by est un ID ; status = pending/approved/rejected.
 
@@ -523,7 +523,8 @@ Les montants utilisent Decimal, arrondi final à deux décimales, sans additionn
 | Méthode | Route | Entrée / accès | Succès | Erreurs |
 |---|---|---|---|---|
 | GET | `/audit-events` | Admin ; aucun filtre/pagination. | 200 data: [Event], 200 derniers de son organisation. | 403. |
-| GET | `/notifications` | Compte courant. | 200 data: [Notification], 100 dernières personnelles. | Authentification commune. |
+| GET | `/notifications` | Compte courant ; query status=all/read/unread, page=1 par défaut. | 200 data: [Notification], 50 par page, filtre appliqué avant pagination. | 422 filtre/page invalide. |
+| GET | `/notifications/count` | Compte courant. | 200 data: {unread: entier}, toutes les pages. | Authentification commune. |
 | PATCH | `/notifications/:id/read` | Destinataire ; aucun corps requis. | 200 data: Notification, read_at renseigné. | 403, 404. |
 | GET | `/openapi` | Public ; aucun paramètre. | 200 spécification JSON, **sans enveloppe data**. | Échec de génération = erreur serveur. |
 
@@ -558,3 +559,26 @@ mix precommit
 precommit utilise l'environnement test : compilation avec warnings-as-errors, contrôle des dépendances inutilisées, formatage et tests. Les tests métier couvrent transitions/validations/concurrence ; les tests HTTP couvrent authentification, isolation, payloads, erreurs et OpenAPI. Les tests concurrents utilisent des connexions PostgreSQL distinctes pour vérifier les verrous réels.
 
 Pour ajouter une route : déclarer le chemin dans router.ex, écrire contrôleur et description OpenAPI, placer les règles dans le contexte, définir schéma/changeset/migration si nécessaires, tester autorisations, erreurs et concurrence pertinente. Actualiser ce document et le [contrat backend/frontend](CONTRAT_BACKEND_ORGANISATIONS.md) si le contrat public change.
+
+## 6. Compléments du 13 octobre : sécurité du compte et interface
+
+### Récupération et révocation
+
+`accounts/password_recovery.ex` gère le code à usage unique : 8 chiffres, 15 minutes, SHA-256 en base, cinq essais. Les transactions verrouillent le compte pour sérialiser changement/rétablissement. `accounts/password_policy.ex` est commun à la création et aux nouveaux mots de passe. `users.session_version` est signé dans le JWT et vérifié par `plugs/authenticate.ex` ; tout changement de mot de passe incrémente cette version et invalide les anciens codes.
+
+| Méthode | Route (préfixe /api) | Entrée | Réponse | Erreurs |
+|---|---|---|---|---|
+| POST | `/auth/forgot-password` | Public ; email valide ≤254 caractères. | 202 data: {message}, identique pour compte connu/inconnu. | 400, 422, 429. |
+| POST | `/auth/reset-password` | Public ; email, code de 8 chiffres, password. | 200 data: {message}, pas de connexion automatique. | 400, 422 code/qualité du mot de passe, 429. |
+
+Exemple : `{"email":"agent@example.test","code":"01234567","password":"<nouvelle phrase personnelle>"}`. Les erreurs de champ restent `{"errors":{"password":["…"]}}` ; un code invalide produit `errors.detail`. Le code n’apparaît jamais dans la réponse. Les schémas OpenAPI sont `password_recovery_request.ex` et `password_reset_request.ex`.
+
+`email.ex` construit les emails bilingues de récupération/alerte ; `email_delivery.ex` sélectionne Mailpit, Resend ou l’adaptateur de test. La modification réussie reste enregistrée si l’email d’alerte échoue ; le serveur journalise cet échec. La récupération publique garde sa réponse générique même si l’envoi échoue. Les clés password/code/token/secret sont filtrées des logs.
+
+### Équipes, préférences et notifications
+
+`Teams.add_member/2` refuse le manager courant de la même équipe (`422`). `Teams.update_team/2` retire un nouveau manager des membres sous verrou. Une migration nettoie les anciennes appartenances redondantes sans supprimer les heures.
+
+`Preferences` accepte désormais `language: "fr" | "en"` (défaut fr), enregistré avec les autres préférences. La traduction se fait dans Vue, les textes libres restent dans leur langue d’origine. Notifications : statut all/read/unread, pagination de 50, compteur personnel indépendant de la pagination.
+
+Le [contrat, section 14](CONTRAT_BACKEND_ORGANISATIONS.md#14-validations-recuperation-et-accessibilite-13-octobre-2026) détaille les formats, limites et migrations. La [recette](RECETTE_VALIDATIONS.md) couvre ces parcours.

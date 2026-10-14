@@ -14,7 +14,9 @@
     "test:account": "node --test test/account-deletion.test.js",
     "test:fusion": "node --test test/fusion-workflow.test.js",
     "test:clocks": "node --test test/clocks.test.js",
-    "test:auth": "node --test test/auth.test.js test/auth-api.test.js test/auth-store.test.js test/gotham.test.js"
+    "test:auth": "node --test test/auth.test.js test/auth-api.test.js test/auth-store.test.js test/gotham.test.js",
+    "test": "node --test test/*.test.js",
+    "check": "eslint src dev test vite.config.js && npm test && npm run build"
   },
   "dependencies": {
     "vue": "^3.5.42",
