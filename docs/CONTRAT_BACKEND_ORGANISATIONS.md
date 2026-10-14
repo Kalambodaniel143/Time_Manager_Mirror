@@ -821,4 +821,14 @@ Le badge est actualisé après connexion, lecture d’une notification, retour a
 
 ### Déploiement et vérification
 
-Deux migrations : `20261013143422_add_password_recovery_and_session_version.exs`, puis `20261013203307_remove_managers_from_own_team_memberships.exs`. Consulter [le déploiement](DEPLOIEMENT_WORKFLOWS.md) et [la recette](RECETTE_VALIDATIONS.md). Les tests frontend/backend précèdent désormais la publication des images dans Travis. Aucun déploiement distant n’est effectué par ces modifications locales.
+Deux migrations : `20261013143422_add_password_recovery_and_session_version.exs`, puis `20261013203307_remove_managers_from_own_team_memberships.exs`. Consulter [le déploiement](DEPLOIEMENT_WORKFLOWS.md) et [la recette](RECETTE_VALIDATIONS.md). Les tests frontend/backend peuvent être exécutés localement avant publication. Travis est conservé à l’identique de main ; le raccordement des tests au pipeline est à coordonner avec son responsable. Aucun déploiement distant n’est effectué par ces modifications locales.
+
+## 15. Fusion avec main — 14 octobre 2026
+
+Le parcours réel d’adhésion conserve la vérification email de main. Après `POST /api/join-requests`, l’interface demande un code de **6 chiffres**, distinct du code de récupération du mot de passe (8 chiffres). `POST /api/join-requests/verify-email` prend `{"email":"agent@example.test","code":"012345"}` et répond `200 {"data":{"request_submitted":true,"organization_name":"Gotham City"}}`. `POST /api/join-requests/resend-verification` prend `{"email":"agent@example.test"}` et répond `200 {"data":{"verification_required":true}}`. Code de vérification : 10 minutes, cinq essais, hash en base. Les demandes non vérifiées ne figurent pas dans la liste administrative. La simulation locale reste sans email ni faux code à recopier.
+
+Après acceptation réelle, main envoie les identifiants choisis par l’administrateur via `Email.credentials/4`. En simulation, la transmission reste manuelle. Les mentions de transmission exclusivement manuelle dans les sections précédentes sont remplacées par ce fonctionnement. Un échec du fournisseur lors de l’acceptation renvoie `503`, alors que le compte a déjà été créé : actualiser la liste et gérer la transmission, sans tenter de recréer le compte.
+
+Conserver la migration `20261013100000_add_join_request_email_verification.exs` de main et appliquer aussi `allow_join_request_verification_without_user` : une vérification d’adhésion appartient à une demande, avant qu’un utilisateur n’existe. `email_verifications.user_id` doit donc pouvoir être null ; la contrainte exige toujours exactement un propriétaire (user_id ou join_request_id). Cette correction est additive et ne supprime aucune vérification.
+
+La configuration `.travis.yml` est restaurée à l’identique de main, conformément à la règle du projet. Les scripts et tests locaux restent disponibles.

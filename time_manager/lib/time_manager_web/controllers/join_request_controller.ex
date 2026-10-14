@@ -12,7 +12,7 @@ defmodule TimeManagerWeb.JoinRequestController do
 
   import TimeManagerWeb.Authz
 
-  alias TimeManager.{Authorization, Organizations}
+  alias TimeManager.{Accounts, Authorization, Email, EmailDelivery, Organizations}
   alias TimeManagerWeb.Plugs.RateLimit
   alias TimeManagerWeb.Schemas.{ApproveRequest, ApproveResponse, ConflictResponse}
   alias TimeManagerWeb.Schemas.{ErrorResponse, JoinRequestCreateRequest, JoinRequestReceipt}
@@ -25,10 +25,16 @@ defmodule TimeManagerWeb.JoinRequestController do
 
   alias TimeManagerWeb.Schemas.{RejectRequest, ValidationErrorResponse}
 
-  action_fallback TimeManagerWeb.FallbackController
+  action_fallback(TimeManagerWeb.FallbackController)
 
-  plug RateLimit, [bucket: :join_request, limit: 10] when action == :create
-  plug RateLimit, [bucket: :join_request_status, limit: 30] when action == :status
+  plug(RateLimit, [bucket: :join_request, limit: 10] when action == :create)
+  plug(RateLimit, [bucket: :join_request_status, limit: 30] when action == :status)
+
+  plug(
+    RateLimit,
+    [bucket: :join_request_verification, limit: 20]
+    when action in [:verify_email, :resend_verification]
+  )
 
   tags(["join requests"])
 
@@ -60,7 +66,9 @@ defmodule TimeManagerWeb.JoinRequestController do
 
   def create(conn, %{"organization_id" => organization_id, "profile" => profile})
       when is_map(profile) do
-    with {:ok, request, reference} <- Organizations.submit_join_request(organization_id, profile) do
+    with {:ok, request, reference} <- Organizations.submit_join_request(organization_id, profile),
+         {:ok, code} <- Accounts.issue_email_verification(request),
+         :ok <- request.email |> Email.verification(code) |> EmailDelivery.send() do
       conn
       |> put_status(:created)
       |> render(:receipt, request: request, reference: reference)
@@ -68,6 +76,73 @@ defmodule TimeManagerWeb.JoinRequestController do
   end
 
   def create(_conn, _params), do: {:error, :bad_request}
+
+  operation(:verify_email,
+    summary: "Verify the email address of a join request",
+    security: [],
+    request_body:
+      {"Email and six-digit code", "application/json",
+       %OpenApiSpex.Schema{
+         type: :object,
+         properties: %{
+           email: %OpenApiSpex.Schema{type: :string, format: :email},
+           code: %OpenApiSpex.Schema{type: :string, pattern: "^[0-9]{6}$"}
+         },
+         required: [:email, :code]
+       }},
+    responses: [
+      ok: {"Email verified", "application/json", TimeManagerWeb.Schemas.WorkflowResponse},
+      bad_request: {"Malformed fields", "application/json", ErrorResponse},
+      unprocessable_entity: {"Invalid or expired code", "application/json", ErrorResponse},
+      too_many_requests: {"Too many attempts", "application/json", ErrorResponse}
+    ]
+  )
+
+  def verify_email(conn, %{"email" => email, "code" => code})
+      when is_binary(email) and is_binary(code) do
+    case Accounts.verify_join_request_email(email, code) do
+      {:ok, request} ->
+        json(conn, %{
+          data: %{request_submitted: true, organization_name: request.organization.name}
+        })
+
+      {:error, :expired_code} ->
+        {:error, :expired_code}
+
+      {:error, :too_many_attempts} ->
+        {:error, :too_many_attempts}
+
+      {:error, :invalid_code} ->
+        {:error, :invalid_code}
+    end
+  end
+
+  def verify_email(_conn, _params), do: {:error, :bad_request}
+
+  operation(:resend_verification,
+    summary: "Resend a join-request email verification code",
+    security: [],
+    request_body: {"Email", "application/json", TimeManagerWeb.Schemas.PasswordRecoveryRequest},
+    responses: [
+      ok: {"Verification required", "application/json", TimeManagerWeb.Schemas.WorkflowResponse},
+      bad_request: {"Malformed email", "application/json", ErrorResponse},
+      too_many_requests: {"Rate limit", "application/json", ErrorResponse},
+      service_unavailable: {"Email unavailable", "application/json", ErrorResponse}
+    ]
+  )
+
+  def resend_verification(conn, %{"email" => email}) when is_binary(email) do
+    with {:ok, request} <- Accounts.find_pending_join_request(email),
+         {:ok, code} <- Accounts.issue_email_verification(request),
+         :ok <- request.email |> Email.verification(code) |> EmailDelivery.send() do
+      json(conn, %{data: %{verification_required: true}})
+    else
+      {:error, :email_delivery_failed} -> {:error, :service_unavailable}
+      _ -> json(conn, %{data: %{verification_required: true}})
+    end
+  end
+
+  def resend_verification(_conn, _params), do: {:error, :bad_request}
 
   operation(:status,
     summary: "Follow a request with its private reference",
@@ -122,7 +197,8 @@ defmodule TimeManagerWeb.JoinRequestController do
   def approve(conn, %{"org_id" => org_id, "id" => id, "password" => password}) do
     with {:ok, me} <- organization_admin(conn, org_id),
          {:ok, result} <-
-           Organizations.approve_join_request(me.organization_id, id, password, me) do
+           Organizations.approve_join_request(me.organization_id, id, password, me),
+         :ok <- deliver_credentials(result.user, password, result.user.organization) do
       render(conn, :approved, result)
     end
   end
@@ -151,6 +227,13 @@ defmodule TimeManagerWeb.JoinRequestController do
   end
 
   def reject(_conn, _params), do: {:error, :bad_request}
+
+  defp deliver_credentials(user, password, organization) do
+    case user.email |> Email.credentials(user, password, organization) |> EmailDelivery.send() do
+      :ok -> :ok
+      {:error, _reason} -> {:error, :service_unavailable}
+    end
+  end
 
   defp organization_admin(conn, org_id) do
     me = current_user(conn)

@@ -3,7 +3,7 @@ import { before, after, test } from 'node:test'
 import { createServer } from 'vite'
 import vue from '@vitejs/plugin-vue'
 
-let server, registration, errors, locale, recovery, workforce, store, AdminTeams
+let server, registration, errors, locale, recovery, workforce, store, AdminTeams, LoginScreen
 const originalFetch = globalThis.fetch
 before(async () => {
   server = await createServer({ configFile: false, plugins: [vue()], server: { middlewareMode: true, hmr: false }, appType: 'custom', define: { 'import.meta.env.VITE_AUTH_USE_MOCK': '"false"', 'import.meta.env.VITE_USE_MOCK': '"false"' } })
@@ -13,6 +13,7 @@ before(async () => {
   recovery = await server.ssrLoadModule('/src/services/passwordRecoveryService.js')
   workforce = await server.ssrLoadModule('/src/services/workforceService.js')
   store = await server.ssrLoadModule('/src/stores/auth.js')
+  LoginScreen = (await server.ssrLoadModule('/src/views/LoginScreen.vue')).default
   AdminTeams = (await server.ssrLoadModule('/src/views/AdminTeams.vue')).default
 })
 after(async () => { globalThis.fetch = originalFetch; locale.setLocale('fr'); await server.close() })
@@ -74,4 +75,30 @@ test('notification filters and badge count are requested from the authenticated 
 })
 test('team member choices exclude the manager and existing members', () => {
   assert.deepEqual(AdminTeams.methods.candidates.call({users:[{id:1},{id:2},{id:3}]}, {manager:{id:1},members:[{id:2}]}), [{id:3}])
+})
+
+test('real admission keeps the tracking receipt and submits the email verification on the same form', async () => {
+  const profile = {first_name:'Sara',last_name:'Martin',email:'example@example.test',gender:'unspecified',birth_place:'Paris',birth_date:'1999-01-01'}
+  const instance = {...LoginScreen.data.call({initialMode:'join'}),profile}
+  for (const [name, method] of Object.entries(LoginScreen.methods)) instance[name] = method.bind(instance)
+  const calls = []
+  globalThis.fetch = async (url, options) => {
+    calls.push(url)
+    if (url.startsWith('/api/organizations/lookup')) return {ok:true,status:200,json:async()=>({data:{id:'org-test',name:'Gotham City'}})}
+    if (url === '/api/join-requests/verify-email') {
+      assert.deepEqual(JSON.parse(options.body), {email:profile.email,code:'123456'})
+      return {ok:true,status:200,json:async()=>({data:{request_submitted:true}})}
+    }
+    return {ok:true,status:201,json:async()=>({data:{id:'req-test',reference:'private-reference',organization_name:'Gotham City',status:'pending'}})}
+  }
+  await instance.submitRegistration()
+  assert.equal(instance.verificationPending,true)
+  assert.equal(instance.reference,'private-reference')
+  assert.equal(instance.profile.email,profile.email)
+  instance.verificationCode = '123456'
+  await instance.submitRegistration()
+  assert.equal(instance.verificationPending,false)
+  assert.equal(instance.mode,'login')
+  assert.equal(calls.filter(url=>url==='/api/join-requests').length,1)
+  assert.equal(calls.at(-1),'/api/join-requests/verify-email')
 })

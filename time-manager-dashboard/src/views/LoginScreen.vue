@@ -46,10 +46,18 @@
         <form v-else-if="mode === 'join'" novalidate :aria-busy="busy" @submit.prevent="submitRegistration">
           <div><p class="eyebrow">{{ $t("Services municipaux de Gotham City") }}</p><h2 class="page-title">{{ $t("Rejoindre Gotham City") }}</h2></div>
           <p class="lede">{{ $t("Votre demande est adressée au super administrateur de Gotham City. Après son accord, vous rejoignez les services municipaux en tant qu’employé.") }}</p>
-          <ProfileFields v-model="profile" :errors="errors" personal-details />
-          <InfoNote :title="$t(&quot;Votre mot de passe vient du super administrateur&quot;)" flat>{{ $t("Vous n’avez pas de mot de passe à choisir ici. Après acceptation, le super administrateur définit votre mot de passe et vous transmet vos identifiants.") }}</InfoNote>
+          <template v-if="!verificationPending">
+            <ProfileFields v-model="profile" :errors="errors" personal-details />
+            <InfoNote :title="$t('Votre mot de passe vient du super administrateur')" flat>{{ $t('Vous n’avez pas de mot de passe à choisir ici. Après acceptation, le super administrateur définit votre mot de passe et vous transmet vos identifiants.') }}</InfoNote>
+            <button class="btn btn-primary btn-login" type="submit" :disabled="busy">{{ $t(busy ? 'Envoi…' : 'Envoyer ma demande') }}</button>
+          </template>
+          <template v-else>
+            <p class="lede">{{ $t('Un code de vérification a été envoyé à {email}. Validez votre adresse avant que la demande ne soit transmise à l’administrateur.', { email }) }}</p>
+            <label class="field"><span class="field-label">{{ $t('Code de vérification') }}</span><input v-model.trim="verificationCode" class="input" inputmode="numeric" autocomplete="one-time-code" maxlength="6" required /></label>
+            <button class="btn btn-primary btn-login" type="submit" :disabled="busy">{{ $t(busy ? 'Vérification…' : 'Vérifier mon adresse') }}</button>
+            <button class="btn btn-outline btn-login" type="button" :disabled="busy" @click="resendRegistrationVerification">{{ $t('Renvoyer le code') }}</button>
+          </template>
           <p v-if="error" class="field-error" role="alert">{{ $t(error) }}</p>
-          <button class="btn btn-primary btn-login" type="submit" :disabled="busy">{{ $t(busy ? 'Envoi…' : 'Envoyer ma demande') }}</button>
         </form>
 
         <PasswordRecovery v-else-if="mode === 'recover'" :initial-email="email" @close="email = $event; changeMode('login')" />
@@ -77,7 +85,7 @@ import AppIcon from '../components/ui/AppIcon.vue'
 import InfoNote from '../components/ui/InfoNote.vue'
 import ProfileFields from '../components/auth/ProfileFields.vue'
 import PasswordRecovery from '../components/auth/PasswordRecovery.vue'
-import { AUTH_USE_MOCK, getRequestStatus, joinOrganization, loginAccount } from '../services/organizationService'
+import { AUTH_USE_MOCK, getRequestStatus, joinOrganization, loginAccount, resendJoinRequestVerification, verifyJoinRequestEmail } from '../services/organizationService'
 import { emptyProfile, errorFields, profileErrors, profilePayload } from '../utils/registration'
 import { readJson, writeJson } from '../utils/session'
 
@@ -94,6 +102,7 @@ export default {
       showLoginPassword: false, mode: this.initialMode === 'join' ? 'join' : 'login', email: '', password: '',
       profile: emptyProfile(), errors: {}, error: '', busy: false,
       receipt: null, reference: readJson(RECEIPT_KEY, null)?.reference || '', mock: AUTH_USE_MOCK,
+      verificationPending: false, verificationCode: '',
       modes: [{ value: 'login', label: 'Connexion', icon: 'login' }, { value: 'join', label: 'Rejoindre Gotham City', icon: 'users' }],
       points: [{ icon: 'users', text: 'Rejoignez les services municipaux de Gotham City.' }, { icon: 'shield', text: 'Le super administrateur examine votre demande et définit vos accès.' }, { icon: 'clock', text: 'Retrouvez vos heures, votre planning et votre équipe.' }],
       pixels: 'llllddllllllolllddllo'.split('').map((code) => ({ l: 'light', d: 'dark', o: 'orange' })[code]),
@@ -130,6 +139,7 @@ export default {
     },
     async submitRegistration() {
       if (this.busy) return
+      if (this.verificationPending) return this.verifyRegistrationEmail()
       this.error = ''
       this.errors = profileErrors(this.profile, true)
       if (Object.keys(this.errors).length) return
@@ -139,9 +149,31 @@ export default {
         this.reference = this.receipt.reference
         writeJson(RECEIPT_KEY, { reference: this.reference })
         this.email = this.profile.email
+        this.verificationPending = !this.mock
+        if (this.mock) { this.profile = emptyProfile(); this.changeMode('login') }
+      } catch (error) { this.error = error.message; this.errors = { ...this.errors, ...errorFields(error) } }
+      finally { this.busy = false }
+    },
+    async verifyRegistrationEmail() {
+      if (this.busy) return
+      if (!/^\d{6}$/.test(this.verificationCode)) { this.error = 'Saisissez le code à 6 chiffres reçu par e-mail.'; return }
+      this.busy = true
+      this.error = ''
+      try {
+        await verifyJoinRequestEmail(this.email, this.verificationCode)
+        this.verificationPending = false
+        this.verificationCode = ''
         this.profile = emptyProfile()
         this.changeMode('login')
-      } catch (error) { this.error = error.message; this.errors = { ...this.errors, ...errorFields(error) } }
+      } catch (error) { this.error = error.message }
+      finally { this.busy = false }
+    },
+    async resendRegistrationVerification() {
+      if (this.busy) return
+      this.busy = true
+      this.error = ''
+      try { await resendJoinRequestVerification(this.email) }
+      catch (error) { this.error = error.message }
       finally { this.busy = false }
     },
     async refreshStatus() {

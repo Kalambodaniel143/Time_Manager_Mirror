@@ -747,7 +747,7 @@
   "Rôle mis à jour.": "Role updated.",
   "Rôle modifié": "Role changed",
   "Saisissez au moins": "Enter at least",
-  "Saisissez le code à 6 chiffres reçu par e-mail.": "Enter the 6-digit code received by email.",
+  "Saisissez le code à 6 chiffres reçu par e-mail.": "Enter the six-digit code received by email.",
   "Saisissez une adresse email valide.": "Enter a valid email address.",
   "Saisissez une adresse email valide, par exemple nom@domaine.fr.": "Enter a valid email address, for example name@example.com.",
   "Saisissez une date de naissance valide, entre 1900 et aujourd’hui.": "Enter a valid date of birth between 1900 and today.",
@@ -921,5 +921,9 @@
   "La fin doit être postérieure au début. Vérifiez les dates et les heures de la période.": "The end must be after the start. Check the period's dates and times.",
   "Cette heure précède le dernier pointage enregistré. Choisissez une heure ultérieure.": "This time is before the latest clock record. Choose a later time.",
   "Ce pointage ne peut pas suivre le précédent. Actualisez la page : une arrivée doit être suivie d’un départ, et inversement.": "This clock record cannot follow the previous one. Refresh the page: an arrival must be followed by a departure, and vice versa.",
-  "Nom de l’équipe": "Team name"
+  "Nom de l’équipe": "Team name",
+  "Un code de vérification a été envoyé à {email}. Validez votre adresse avant que la demande ne soit transmise à l’administrateur.": "A verification code has been sent to {email}. Verify your email before your request is sent to the administrator.",
+  "Vérifier mon adresse": "Verify my email",
+  "Le compte employé est créé. Les identifiants ont été envoyés par email à": "The employee account has been created. Credentials have been emailed to",
+  "Le mot de passe ne sera plus affiché après fermeture de cette fenêtre.": "The password will no longer be shown after this window is closed."
 }

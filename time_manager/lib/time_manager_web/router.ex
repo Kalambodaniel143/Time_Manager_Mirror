@@ -30,6 +30,8 @@ defmodule TimeManagerWeb.Router do
     post "/organizations", AdmissionPolicyController, :organization
     get "/organizations/lookup", OrganizationController, :lookup
     post "/join-requests", JoinRequestController, :create
+    post "/join-requests/verify-email", JoinRequestController, :verify_email
+    post "/join-requests/resend-verification", JoinRequestController, :resend_verification
     post "/join-requests/status", JoinRequestController, :status
   end
 

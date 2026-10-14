@@ -19,7 +19,7 @@ Utiliser une base de recette et des comptes de test : un administrateur, un mana
 | Français/anglais | Changer la langue à la connexion, puis dans Mon compte ou le menu ; parcourir les écrans et le guide. | Libellés et dates traduits, données personnelles inchangées ; préférence restaurée après reconnexion. |
 | Mobile | Répéter connexion, adhésion, récupération et changement personnel à 390 px. | Formulaires lisibles, commandes accessibles et aucun défilement horizontal. |
 | Erreurs | Arrêter le backend de recette, puis provoquer un mauvais mot de passe et une validation de champ. | Message réseau actionnable, cause de connexion claire, champ invalide nommé ; aucune trace SQL affichée. |
-| Pipeline | Ouvrir une PR ou pousser une branche ; consulter Travis. | Tests backend, tests frontend, lint et build. Publication/déploiement uniquement sur main hors PR, après succès de l’étape Test. |
+| Avant fusion | Exécuter les commandes de validation ci-dessous. | Tests backend, tests frontend, lint et build réussis. Travis reste inchangé ; l’intégration de ces checks à la CI relève de son responsable. |
 
 ## Vérification automatique locale
 
@@ -31,7 +31,7 @@ npm ci
 npm run check
 ```
 
-Comme dans Travis, avec Docker et Docker Compose, depuis la racine :
+Avec Docker et Docker Compose, depuis la racine :
 
 ```bash
 bash scripts/check_workflows.sh backend

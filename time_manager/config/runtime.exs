@@ -32,7 +32,7 @@ config :time_manager,
        System.get_env("RESEND_FROM_EMAIL", "onboarding@resend.dev")
 
 email_delivery =
-  case System.get_env("EMAIL_DELIVERY", "resend") do
+  case System.get_env("EMAIL_DELIVERY", if(config_env() == :prod, do: "resend", else: "mailpit")) do
     "mailpit" -> :mailpit
     "resend" -> :resend
     value -> raise "EMAIL_DELIVERY must be either mailpit or resend, got: #{value}"

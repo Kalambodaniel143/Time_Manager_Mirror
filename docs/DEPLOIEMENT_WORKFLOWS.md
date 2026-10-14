@@ -24,6 +24,8 @@ Puis `npm run dev`. Le compte utilisé doit exister dans la base locale ; le com
 
 ## Migrations ajoutées
 
+La fusion conserve aussi `20261013100000_add_join_request_email_verification.exs` de main et ajoute `20261014115921_allow_join_request_verification_without_user.exs` pour autoriser le code d’une demande avant création du compte. Appliquer toutes les migrations avec `mix ecto.migrate`.
+
 1. `20261012143436_add_workforce_workflows.exs` : règles, permissions, préférences, feuilles, corrections, plannings, gardes, échanges, absences, profils de paie, journal, notifications et catégorie de période.
 2. `20261012145131_allow_legacy_audit_events.exs` : journal pour les comptes historiques sans organisation.
 3. `20261012164950_add_absence_payable_hours.exs` : quantité d’heures rémunérables confirmée sur une absence.
@@ -75,11 +77,11 @@ Le guide de lecture vocale se teste dans un navigateur compatible, via Mon compt
 
 ## Emails et pipeline du 13 octobre
 
-Travis exécute maintenant une étape **Test** avant **Build & Push Image**, puis **Deploy**. Backend : format, compilation sans avertissements et tests PostgreSQL. Frontend : ESLint, tests et build. Publication et déploiement sont limités à main hors pull request et ne s’exécutent pas après un échec des tests. Les jobs utilisent `scripts/check_workflows.sh` : Docker Compose v2 est préféré, avec repli sur `docker-compose` si nécessaire. Le script supprime uniquement les ressources de la composition de test à la fin.
+La configuration Travis est conservée telle qu’elle existe sur main : publication des images puis déploiement. Les tests ajoutés ne sont pas inscrits automatiquement dans ce pipeline. Les exécuter avant la fusion : backend avec `mix precommit`, frontend avec `npm run check`, ou `scripts/check_workflows.sh` pour les conteneurs isolés. Le raccordement des tests au pipeline relève de la personne responsable de la CI.
 
 La composition `docker-compose.test.yml` utilise sa propre base éphémère. Les tests locaux peuvent aussi être lancés avec `mix precommit` et `npm run check`. Voir la [recette](RECETTE_VALIDATIONS.md).
 
-Le serveur conserve Mailpit par défaut. Pour que les emails arrivent dans des boîtes réelles, configurer les variables protégées Travis (ou le fichier d’environnement privé du serveur pour un déploiement manuel) :
+Le serveur conserve Mailpit par défaut. Pour que les emails arrivent dans des boîtes réelles, faire configurer l’environnement privé du serveur par la personne responsable du déploiement :
 
 ```env
 EMAIL_DELIVERY=resend
@@ -88,6 +90,6 @@ RESEND_FROM=Time Manager <notifications@votre-domaine>
 RESEND_FROM_EMAIL=notifications@votre-domaine
 ```
 
-L’expéditeur doit être autorisé chez le fournisseur. Ne pas committer ces valeurs. Le pipeline transmet ces paramètres et Compose respecte désormais EMAIL_DELIVERY au lieu d’imposer Mailpit. En recette, garder `EMAIL_DELIVERY=mailpit` et vérifier les messages dans Mailpit. La réussite des tests avec l’adaptateur de test ne garantit pas la délivrance par le fournisseur distant.
+L’expéditeur doit être autorisé chez le fournisseur. Ne pas committer ces valeurs. Compose respecte EMAIL_DELIVERY. Attention : le pipeline Travis existant réécrit le fichier serveur avec EMAIL_DELIVERY=mailpit et ne transmet pas les variables Resend. Toute configuration durable de Resend doit être coordonnée avec la personne responsable du déploiement ; ce travail ne modifie pas Travis. En recette, garder `EMAIL_DELIVERY=mailpit` et vérifier les messages dans Mailpit. La réussite des tests avec l’adaptateur de test ne garantit pas la délivrance par le fournisseur distant.
 
 Après déploiement, vérifier dans OpenAPI `/auth/forgot-password`, `/auth/reset-password` et `/notifications/count`. Faire un essai sur un compte de recette : récupération, connexion avec le nouveau mot de passe, refus de l’ancienne session et réception de l’alerte. Aucune réinitialisation de base ni recréation des comptes existants n’est nécessaire.
