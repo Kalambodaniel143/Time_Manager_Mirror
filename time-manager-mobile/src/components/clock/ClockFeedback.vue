@@ -1,18 +1,19 @@
 <template>
   <p v-if="refusal" class="notice-danger" role="alert">
-    {{ KIND_LABELS[refusal.kind] }} refusé(e) par le serveur : {{ refusal.reason }}.
-    <RouterLink :to="{ name: 'account' }">Voir le détail</RouterLink>
+    {{ $t('{0} refusé(e) par le serveur : {1}.', [KIND_LABELS[refusal.kind], refusal.reason]) }}
+    <RouterLink :to="{ name: 'account' }">{{ $t('Voir le détail') }}</RouterLink>
   </p>
   <p v-else-if="kind" class="notice-ok" role="status">
-    ✓ {{ SAVED[kind] }}<template v-if="pending"> sur ce téléphone · ⚠️ En attente d’envoi</template>
+    ✓ {{ SAVED[kind] }}<template v-if="pending">&nbsp;{{ $t('sur ce téléphone · ⚠️ En attente d’envoi') }}</template>
   </p>
 </template>
 
 <script>
+import { t } from '@/i18n/index.js'
 import { app } from '@/services/appState.js'
 import { KIND_LABELS } from '@/ui/format.js'
 
-const SAVED = { arrival: 'Arrivée enregistrée', departure: 'Départ enregistré', pause: 'Pause enregistrée', resume: 'Reprise enregistrée' }
+const SAVED = { arrival: t('Arrivée enregistrée'), departure: t('Départ enregistré'), pause: t('Pause enregistrée'), resume: t('Reprise enregistrée') }
 
 // Retour après un pointage : refus du serveur (avec sa raison) ou confirmation.
 export default {

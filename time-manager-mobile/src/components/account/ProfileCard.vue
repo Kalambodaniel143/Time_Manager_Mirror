@@ -4,20 +4,18 @@
       <span class="avatar" aria-hidden="true">{{ initials(displayName(user)) }}</span>
       <span><strong>{{ displayName(user) }}</strong><br><span class="muted small">{{ ROLE_LABELS[user.role] }} · {{ user.email }}</span><br><span v-if="organization" class="muted small">{{ organization.name }}</span></span>
     </div>
-    <button v-if="!editing" type="button" class="btn-quiet" @click="start">Modifier mes informations</button>
+    <button v-if="!editing" type="button" class="btn-quiet" @click="start">{{ $t('Modifier mes informations') }}</button>
     <form v-else class="form-grid" @submit.prevent="save">
       <div class="dates">
-        <label>Prénom <input v-model.trim="form.first_name" autocomplete="given-name" maxlength="100" /></label>
-        <label>Nom <input v-model.trim="form.last_name" autocomplete="family-name" maxlength="100" /></label>
+        <label>{{ $t('Prénom') }} <input v-model.trim="form.first_name" autocomplete="given-name" maxlength="100" /></label>
+        <label>{{ $t('Nom') }} <input v-model.trim="form.last_name" autocomplete="family-name" maxlength="100" /></label>
       </div>
-      <label for="username">Nom d’utilisateur</label>
-      <input id="username" v-model.trim="form.username" required autocomplete="name" />
-      <label for="user-email">Adresse e-mail</label>
+      <label for="user-email">{{ $t('Adresse e-mail') }}</label>
       <input id="user-email" v-model.trim="form.email" type="email" required autocomplete="email" />
       <p v-if="message" class="notice-danger small" role="alert">{{ message }}</p>
       <div class="row">
-        <button type="button" class="btn-outline" @click="editing = false">Annuler</button>
-        <button type="submit" :disabled="busy">Enregistrer</button>
+        <button type="button" class="btn-outline" @click="editing = false">{{ $t('Annuler') }}</button>
+        <button type="submit" :disabled="busy">{{ $t('Enregistrer') }}</button>
       </div>
     </form>
   </section>
@@ -36,8 +34,8 @@ export default {
   methods: {
     initials, displayName,
     start() {
-      const { first_name: first = '', last_name: last = '', username, email } = this.user
-      this.form = { first_name: first ?? '', last_name: last ?? '', username, email }
+      const { first_name: first, last_name: last, email } = this.user
+      this.form = { first_name: first ?? '', last_name: last ?? '', email }
       this.message = ''
       this.editing = true
     },

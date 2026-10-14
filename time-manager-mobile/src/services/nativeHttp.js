@@ -29,7 +29,8 @@ export function nativeRequest(url, { method = 'GET', headers = {}, body } = {}) 
       resolve(payload.data)
     }, (response) => {
       noteServerDate(response.headers?.date)
-      if (response.status <= 0) return reject(new ApiError(0, null, NETWORK_KINDS[response.status] ?? 'network'))
+      // Réseau : on garde la raison donnée par Android (affichée sous le message, pour le diagnostic).
+      if (response.status <= 0) return reject(Object.assign(new ApiError(0, null, NETWORK_KINDS[response.status] ?? 'network'), { detail: response.error }))
       reject(new ApiError(response.status, parse(response.error) ?? null))
     })
   })

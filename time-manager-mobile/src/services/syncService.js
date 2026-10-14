@@ -1,3 +1,4 @@
+import { t } from '@/i18n/index.js'
 import { api } from './source.js'
 import { app } from './appState.js'
 import { handleError, reportServer } from './network.js'
@@ -57,7 +58,7 @@ async function send() {
   } finally {
     app.syncing = false
     refreshCounts()
-    if (before > 0 && app.pending === 0) showNotice('Synchronisation terminée')
+    if (before > 0 && app.pending === 0) showNotice(t('Synchronisation terminée'))
   }
 }
 

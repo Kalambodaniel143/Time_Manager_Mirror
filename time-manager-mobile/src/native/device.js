@@ -1,3 +1,4 @@
+import { t } from '@/i18n/index.js'
 // Fonctions natives (plugins Cordova), avec repli dans le navigateur.
 
 // cordova-plugin-network-information : type de connexion du téléphone.
@@ -11,7 +12,7 @@ export function hasInternet() {
 export function confirmAction(message, button = 'Confirmer') {
   if (!navigator.notification?.confirm) return Promise.resolve(window.confirm(message))
   return new Promise((resolve) => {
-    navigator.notification.confirm(message, (choice) => resolve(choice === 1), 'Time Manager', [button, 'Annuler'])
+    navigator.notification.confirm(message, (choice) => resolve(choice === 1), t('Time Manager'), [button, 'Annuler'])
   })
 }
 

@@ -1,3 +1,4 @@
+import { t } from '@/i18n/index.js'
 import { api } from './source.js'
 import { app } from './appState.js'
 import { handleError, isUnreachable, reportServer } from './network.js'
@@ -7,8 +8,8 @@ import { restoreSession } from './authService.js'
 // Actions de gestion (profil, comptes, rôles, équipes, heures) : elles demandent le serveur.
 // Contrairement aux pointages, elles ne sont pas mises en file d'attente.
 const MESSAGES = {
-  forbidden: 'Le serveur n’autorise pas cette action pour votre rôle.',
-  conflict: 'Action refusée : il doit rester au moins un administrateur.',
+  forbidden: t('Le serveur n’autorise pas cette action pour votre rôle.'),
+  conflict: t('Action refusée : il doit rester au moins un administrateur.'),
 }
 
 async function online(call) {
@@ -18,8 +19,8 @@ async function online(call) {
     return result
   } catch (error) {
     handleError(error)
-    if (isUnreachable(error) || !error.kind) throw new Error('Connexion au serveur nécessaire pour cette action.')
-    if (error.message.includes('current_password')) throw new Error('Mot de passe actuel incorrect.')
+    if (isUnreachable(error) || !error.kind) throw new Error(t('Connexion au serveur nécessaire pour cette action.'))
+    if (error.message.includes('current_password')) throw new Error(t('Mot de passe actuel incorrect.'))
     throw new Error(MESSAGES[error.kind] ?? error.message)
   }
 }
@@ -40,7 +41,6 @@ export async function deleteOwnAccount(currentPassword) {
 }
 
 // Administration des comptes
-export const createUser = (user) => online(() => api.createUser(user))
 export const updateUser = (id, attrs) => online(() => api.updateUser(id, attrs))
 export const resetPassword = (id, password) => online(() => api.updateUser(id, { password }))
 export const deleteUser = (id) => online(() => api.deleteUser(id))

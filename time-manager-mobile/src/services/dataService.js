@@ -24,6 +24,5 @@ const me = () => app.user.id
 export const getUser = (userId = me()) => load(`user:${userId}`, () => api.getUser(userId))
 export const getPointages = (userId = me()) => load(`clocks:${userId}`, () => api.getClocks(userId))
 export const getMesHeures = (userId = me()) => load(`hours:${userId}`, () => api.getWorkingTimes(userId))
-export const getPlanning = (userId = me()) => load(`planning:${userId}`, () => api.getPlanning(userId))
 export const getTeams = () => load('teams', () => api.getTeams())
 export const getUsers = () => load('users', () => api.getUsers())

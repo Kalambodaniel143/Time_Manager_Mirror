@@ -1,6 +1,6 @@
 <template>
   <p v-for="m in alerts" :key="`alert-${m.id}`" class="card notice-card">
-    ⚠️ <strong>{{ displayName(m) }}</strong> · {{ m.nights }} nuits d’affilée, au-delà du seuil de {{ NIGHT_LIMIT }}.
+    ⚠️ <strong>{{ displayName(m) }}</strong> {{ $t('· {0} nuits d’affilée, au-delà du seuil de {1}.', [m.nights, NIGHT_LIMIT]) }}
   </p>
   <ul class="list card">
     <li v-for="m in rows" :key="m.id">
@@ -13,6 +13,7 @@
 </template>
 
 <script>
+import { t } from '@/i18n/index.js'
 import { stats } from '@/ui/aggregate.js'
 import { maxConsecutiveNights } from '@/ui/shifts.js'
 import { displayName, hours } from '@/ui/format.js'
@@ -29,9 +30,9 @@ export default {
   computed: {
     rows() {
       return this.members.map((m) => {
-        if (!m.periods) return { ...m, sub: 'Heures indisponibles', total: '—' }
+        if (!m.periods) return { ...m, sub: t('Heures indisponibles'), total: '—' }
         const s = stats(m.periods, this.range.from, this.range.to)
-        return { ...m, sub: `${s.days} jours travaillés`, total: hours(s.total) }
+        return { ...m, sub: t('{0} jours travaillés', [s.days]), total: hours(s.total) }
       })
     },
     alerts() {

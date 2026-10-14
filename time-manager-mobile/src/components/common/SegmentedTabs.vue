@@ -6,13 +6,14 @@
 </template>
 
 <script>
+import { t } from '@/i18n/index.js'
 // Onglets à deux ou trois choix. v-model = valeur choisie ; options = [{ value, label }].
 export default {
   name: 'SegmentedTabs',
   props: {
     modelValue: { type: [String, Number], required: true },
     options: { type: Array, required: true },
-    label: { type: String, default: 'Affichage' },
+    label: { type: String, default: t('Affichage') },
   },
   emits: ['update:modelValue'],
 }

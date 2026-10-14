@@ -1,8 +1,7 @@
 import { request } from './http.js'
 import { toUtcIso } from '@/ui/dates.js'
 
-// Appels à l'API existante (voir time_manager/lib/time_manager_web/router.ex).
-// Même interface que mockApi.js : les écrans ne voient pas la différence.
+// Appels à l'API existante (routes décrites dans le Swagger du serveur).
 const post = (path, body) => request(path, { method: 'POST', body })
 const put = (path, body) => request(path, { method: 'PUT', body })
 const patch = (path, body) => request(path, { method: 'PATCH', body })
@@ -41,15 +40,12 @@ export const api = {
   createWorkingTime: (userId, period) => post(`/workingtime/${userId}`, { workingtime: period }),
   updateWorkingTime: (id, period) => put(`/workingtime/${id}`, { workingtime: period }),
   deleteWorkingTime: (id) => del(`/workingtime/${id}`),
-  // Le serveur n'a pas encore de route « planning » : rien à afficher.
-  getPlanning: async () => [],
 
   // Comptes
   getUser: (id) => request(`/users/${id}`),
   getUsers: () => request('/users'),
-  // Champs lus par le serveur : username, email, first_name, last_name, password (+ current_password pour soi).
+  // Champs lus par le serveur : email, first_name, last_name, password (+ current_password pour soi).
   updateUser: (id, user) => put(`/users/${id}`, { user }),
-  createUser: (user) => post('/users', { user }),
   updateRole: (id, role) => put(`/users/${id}/role`, { role }),
   // Supprimer son propre compte exige le mot de passe actuel ; l'admin n'en a pas besoin pour un autre.
   deleteUser: (id, currentPassword) => del(`/users/${id}`, currentPassword ? { current_password: currentPassword } : undefined),

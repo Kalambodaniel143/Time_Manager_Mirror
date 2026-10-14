@@ -1,5 +1,5 @@
 <template>
-  <PageHeader :eyebrow="longDate(now)" :title="`Bonjour ${firstName}`">
+  <PageHeader :eyebrow="longDate(now)" :title="$t('Bonjour {0}', [firstName])">
     <p class="status-line">{{ status }}</p>
   </PageHeader>
 
@@ -8,9 +8,10 @@
       <MissingDeparture v-if="state.missingDeparture" :arrival="state.arrival" @complete="complete" />
       <ClockCard v-else :now="now" :worked="worked" :kind="mainKind" :disabled="busy" @record="record" />
 
-      <p v-if="state.arrival" class="center muted">Arrivée pointée à {{ hhmm(state.arrival) }}</p>
-      <button v-if="breakKind" type="button" class="btn-outline btn-block" :disabled="busy" @click="record(breakKind)">
-        {{ breakKind === 'pause' ? 'Prendre une pause' : 'Reprendre le service' }}
+      <p v-if="state.arrival" class="center muted">{{ $t('Arrivée pointée à {0}', [hhmm(state.arrival)]) }}</p>
+      <button v-if="breakKind && !state.missingDeparture" type="button" class="btn-outline btn-block btn-card" :disabled="busy" @click="record(breakKind)">
+        <component :is="breakKind === 'pause' ? Coffee : Play" :size="18" aria-hidden="true" />
+        {{ breakKind === 'pause' ? $t('Prendre une pause') : $t('Reprendre le service') }}
       </button>
       <ClockFeedback :kind="lastKind" />
     </template>
@@ -18,6 +19,9 @@
 </template>
 
 <script>
+import { t } from '@/i18n/index.js'
+import { markRaw } from 'vue'
+import { Coffee, Play } from 'lucide-vue-next'
 import PageHeader from '@/components/common/PageHeader.vue'
 import DataState from '@/components/common/DataState.vue'
 import ClockCard from '@/components/clock/ClockCard.vue'
@@ -35,9 +39,9 @@ export default {
   name: 'TodayView',
   components: { PageHeader, DataState, ClockCard, MissingDeparture, ClockFeedback },
   mixins: [loadable],
-  data: () => ({ state: null, loadedAt: new Date(), now: new Date(), lastKind: null, busy: false }),
+  data: () => ({ Coffee: markRaw(Coffee), Play: markRaw(Play), state: null, loadedAt: new Date(), now: new Date(), lastKind: null, busy: false }),
   computed: {
-    firstName: () => app.user.first_name || app.user.username.split(/[\s@]/)[0],
+    firstName: () => app.user.first_name || (app.user.email ?? '').split('@')[0],
     status() { return this.state ? statusLabel(this.state.last) : '' },
     mainKind() { return ['arrival', 'departure'].find((k) => this.state.allowed.includes(k)) },
     breakKind() { return ['pause', 'resume'].find((k) => this.state.allowed.includes(k)) },
@@ -80,7 +84,7 @@ export default {
         recordClock(kind, time)
         this.lastKind = kind
       } catch {
-        this.error = 'Impossible d’enregistrer sur ce téléphone (stockage plein ?).'
+        this.error = t('Impossible d’enregistrer sur ce téléphone (stockage plein ?).')
       }
       await Promise.all([syncNow(), new Promise((resolve) => setTimeout(resolve, 800))])
       await this.load({ quiet: true })

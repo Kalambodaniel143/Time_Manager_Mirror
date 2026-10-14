@@ -8,6 +8,3 @@ export const API_URL = window.cordova ? SERVER_URL : (import.meta.env.DEV ? '/ap
 
 // Comme le web (utils/gotham.js) : une seule organisation, retrouvée par son nom exact.
 export const ORGANIZATION_NAME = import.meta.env.VITE_ORGANIZATION_NAME?.trim() || 'Gotham City'
-
-// 'mock' : données fictives, sans serveur · 'api' : serveur réel.
-export const DATA_SOURCE = import.meta.env.VITE_DATA_SOURCE === 'mock' ? 'mock' : 'api'

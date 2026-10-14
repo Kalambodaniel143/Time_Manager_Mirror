@@ -2,7 +2,7 @@
   <div class="password-field">
     <input :id="id" :value="modelValue" :type="visible ? 'text' : 'password'" :autocomplete="autocomplete"
       :minlength="autocomplete === 'new-password' ? 8 : null" maxlength="128" required @input="$emit('update:modelValue', $event.target.value)" />
-    <button type="button" class="btn-quiet" :aria-label="visible ? 'Masquer le mot de passe' : 'Afficher le mot de passe'" @click="visible = !visible">
+    <button type="button" class="btn-quiet" :aria-label="visible ? $t('Masquer le mot de passe') : $t('Afficher le mot de passe')" @click="visible = !visible">
       <component :is="visible ? EyeOff : Eye" :size="20" />
     </button>
   </div>

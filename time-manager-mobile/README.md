@@ -8,16 +8,27 @@ les sujets Time Manager (projet principal, API, mobile).
 | Pointer arrivée, pause, reprise, départ (même hors ligne) | ✓ | ✓ | ✓ |
 | Tableau de bord : heures par jour / par semaine sur une période, jour/nuit | ✓ | ✓ | ✓ |
 | Historique des pointages | ✓ | ✓ | ✓ |
-| Modifier prénom, nom, identifiant, e-mail ; changer son mot de passe | ✓ | ✓ | ✓ |
+| Modifier prénom, nom, identifiant, e-mail | ✓ | ✓ | ✓ |
+| Mot de passe oublié / changer son mot de passe : code reçu par e-mail (`/auth/forgot-password`, `/auth/reset-password`) | ✓ | ✓ | |
+| Changer son mot de passe ou celui d'un membre | | | ✓ |
 | Supprimer son compte (mot de passe actuel demandé) | ✓ | ✓ | ✓ |
 | Compléter un départ oublié (route `complete` du serveur) | ✓ | ✓ | ✓ |
 | Corriger les heures d'un agent (ajouter, modifier, supprimer une période) | | son équipe | l'organisation |
 | Moyennes quotidiennes / hebdomadaires de l'équipe sur une période | | ✓ | ✓ (toutes) |
 | Tableau de bord et historique d'un agent | | ses équipes | tous |
-| Planning d'équipe | | ✓ | |
+| Mon planning sur la période choisie (gardes publiées, lisible hors ligne) | ✓ | ✓ | ✓ |
+| Demandes : absences (congé, maladie, récup), corrections d'heures (aussi depuis Mes heures), échanges de gardes | ✓ | ✓ | ✓ |
+| Note de semaine et état de la feuille | ✓ | ✓ | ✓ |
+| Notifications (planning publié, décisions), filtre lues / non lues, tout marquer comme lu | ✓ | ✓ | ✓ |
+| Planning d'équipe : période libre (du … au …), créneaux ajoutés / modifiés / supprimés sans doublon, publication, suppression | | ✓ | ✓ |
+| À traiter : accepter / refuser corrections, absences, échanges | | ✓ | ✓ |
+| Semaines : valider en groupe, clôturer, rouvrir | | ✓ | ✓ |
+| Paie du mois : heures jour, nuit, sup. (au-delà du seuil hebdomadaire), récup, astreinte, congé, par service et par agent, export CSV (calcul comme le backend) | | | ✓ |
+| Règles de l'organisation et droits des responsables par équipe | | | ✓ |
+| Journal des actions | | | ✓ |
 | Tableau de bord de l'organisation : demandes, membres, managers, employés, équipes, heures | | | ✓ (accueil) |
 | Demandes d'adhésion : accepter (mot de passe confirmé) ou refuser (motif), historique | | | ✓ |
-| Créer un compte, réinitialiser un mot de passe, promouvoir / rétrograder, supprimer | | | ✓ |
+| Réinitialiser un mot de passe, promouvoir / rétrograder, supprimer (les comptes naissent des demandes d'adhésion) | | | ✓ |
 | Créer / renommer / supprimer une équipe, responsable, membres | | | ✓ |
 
 
@@ -33,15 +44,14 @@ src/
 ├── layouts/MobileLayout.vue       # bandeau réseau + page + barre d'onglets
 ├── views/                         # un fichier par écran
 ├── components/                    # morceaux d'écran (dashboard/, history/, admin/…)
-├── data/mock.js                   # données fictives
 ├── services/
-│   ├── source.js                  # choisit api.js ou mockApi.js
-│   ├── api.js / mockApi.js        # même interface : vrai serveur / faux serveur
-│   ├── mock/                      # faux serveur : mêmes règles d'accès que le backend
+│   ├── source.js                  # réunit api.js et workforceApi.js
+│   ├── api.js, workforceApi.js    # routes du serveur (Swagger + section 13 du contrat)
+│   ├── workforce.js               # lectures/actions des nouvelles fonctions (404 = « pas installée »)
 │   ├── manageService.js           # profil, rôles, équipes (en ligne seulement)
 │   ├── http.js                    # cookie + en-tête X-CSRF-Token
 │   ├── authService.js             # connexion, session, expiration
-│   ├── dataService.js             # getUser, getPlanning, getMesHeures, getPointages (+ cache)
+│   ├── dataService.js             # getUser, getMesHeures, getPointages, équipes (+ cache)
 │   ├── clockService.js            # état du pointage, recordClock()
 │   ├── syncService.js             # file d'attente -> serveur, dans l'ordre, sans doublon
 │   ├── network.js, appState.js    # en ligne / hors ligne / serveur injoignable
@@ -79,7 +89,6 @@ Pour changer, créer `.env.local` (modèle : `.env.example`) :
 
 | Variable | Valeur |
 | --- | --- |
-| `VITE_DATA_SOURCE` | `api` (serveur réel, par défaut) ou `mock` (données fictives, sans serveur) |
 | `VITE_API_URL` | adresse du serveur terminée par `/api` |
 
 Relancer `npm run dev` (ou reconstruire l'APK) après chaque changement.
@@ -108,15 +117,24 @@ statut s'actualise depuis le même onglet. Pas de création d'organisation ni
 d'inscription directe : le super administrateur est créé côté serveur, puis il
 accepte les demandes en choisissant le mot de passe à transmettre.
 
-### Mode démo
+## Performance
 
-Comptes de démonstration (mot de passe `demo1234`) : `messline@example.com`
-(agent), `manager@example.com` (responsable), `admin@example.com` (administration).
+Les écrans sont chargés à la demande : au démarrage, seuls la connexion et l'écran
+Aujourd'hui sont téléchargés (≈ 90 Ko de JavaScript au lieu de 250 Ko). Les listes
+lues récemment restent sur le téléphone et s'affichent hors ligne.
 
-En mode mock, la carte « Outils de test » de Mon compte coupe le serveur fictif,
-perd une réponse ou fait expirer la session : elle sert à montrer le hors ligne
-en démonstration sans toucher au Wi-Fi. Elle n'existe pas en mode API.
-Pour repartir de zéro : vider le stockage du site (outils du navigateur).
+## Langues
+
+L'application existe en **français** et en **anglais**. Le choix se fait sur l'écran de
+connexion (en haut à droite) ou dans Mon compte › Préférences d'affichage ; il est gardé
+sur le téléphone et l'écran se recharge dans la nouvelle langue.
+
+- `src/i18n/index.js` : `t('texte français')` dans le code, `$t('…')` dans les gabarits.
+  La clé est le texte français lui-même : le code reste lisible.
+- `src/i18n/en.js` : la traduction anglaise de chaque phrase. Une phrase absente
+  s'affiche en français : ajouter toute nouvelle phrase dans ce fichier.
+- Les dates et nombres suivent la langue (`fr-FR` / `en-GB`). Les données saisies
+  par les utilisateurs (motifs, noms d'équipe…) ne sont pas traduites.
 
 ## Plugins Cordova
 
@@ -135,7 +153,14 @@ les endpoints de son Swagger sont utilisés, voir `src/services/api.js`.
 
 ## À régler côté serveur (hors du dossier mobile)
 
-- Aucune route « planning » : en mode api, le planning affiche « Aucun planning publié ».
+- **Planning** : modifier la période d'un planning qui contient déjà des créneaux
+  (`PATCH /plans/:id`, aujourd'hui limité aux brouillons vides) et refuser les créneaux
+  qui se chevauchent pour un même agent (le mobile le vérifie déjà avant d'envoyer).
+
+- Planning, demandes, semaines, paie, règles, journal et notifications utilisent les
+  routes de la section 13 du contrat backend. Tant que le serveur n'a pas reçu ce code
+  et ses migrations, ces écrans affichent « Cette fonction n'est pas encore installée
+  sur le serveur » ; le relevé mensuel se replie sur un total d'heures calculé ici.
 - Composer les équipes est réservé à l'administration : le responsable consulte
   ses équipes mais ne peut pas les modifier.
 - Pas d'identifiant d'action côté serveur : l'anti-doublon des pointages repose
@@ -171,13 +196,12 @@ attend `deviceready`. Le navigateur démarre sans ce script.
 
 ## Vérifier
 
-Scénarios testés dans le navigateur (mode mock) : connexion, consultation,
+Scénarios testés dans le navigateur, contre un faux serveur qui imite les réponses Phoenix : connexion, consultation,
 arrivée hors ligne, fermeture/réouverture, retour du réseau, arrivée + pause +
 départ hors ligne dans l'ordre, réponse perdue sans doublon, session expirée,
 changement de compte, serveur indisponible avec données en cache, largeur 320 px,
 retour arrière et second onglet après changement de compte, pointage des trois
-rôles, promotion, création d'équipe. Le mode API a été testé contre un serveur
-qui imite les réponses Phoenix (cookie HttpOnly + X-CSRF-Token).
+rôles, promotion, création d'équipe.
 À refaire sur un vrai téléphone : Wi-Fi/données coupés, vibration, fermeture
 forcée de l'app.
 

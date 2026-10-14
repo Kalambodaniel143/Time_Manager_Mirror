@@ -1,5 +1,0 @@
-_build/
-deps/
-.git/
-.elixir_ls/
-*.log

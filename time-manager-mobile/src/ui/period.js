@@ -1,10 +1,11 @@
+import { t } from '@/i18n/index.js'
 import { addDays, localDay, mondayOf } from './dates.js'
 
 // Périodes proposées par le sélecteur des tableaux de bord.
 export const PRESETS = [
-  { label: 'Cette semaine', make: (today) => ({ from: mondayOf(today), to: today, unit: 'day' }) },
-  { label: '4 semaines', make: (today) => ({ from: addDays(today, -27), to: today, unit: 'week' }) },
-  { label: '3 mois', make: (today) => ({ from: addDays(today, -89), to: today, unit: 'week' }) },
+  { label: t('Cette semaine'), make: (today) => ({ from: mondayOf(today), to: today, unit: 'day' }) },
+  { label: t('4 semaines'), make: (today) => ({ from: addDays(today, -27), to: today, unit: 'week' }) },
+  { label: t('3 mois'), make: (today) => ({ from: addDays(today, -89), to: today, unit: 'week' }) },
 ]
 
 // Le modèle garde des dates « AAAA-MM-JJ » (format des champs date natifs).

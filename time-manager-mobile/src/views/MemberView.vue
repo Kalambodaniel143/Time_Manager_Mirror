@@ -1,6 +1,6 @@
 <template>
-  <PageHeader :title="user ? displayName(user) : 'Agent'" :eyebrow="user ? `${ROLE_LABELS[user.role]} · ${user.email}` : ''">
-    <button type="button" class="btn-quiet back-link" @click="$router.back()">‹ Retour</button>
+  <PageHeader :title="user ? displayName(user) : $t('Agent')" :eyebrow="user ? `${ROLE_LABELS[user.role]} · ${user.email}` : ''">
+    <button type="button" class="btn-quiet back-link" @click="$router.back()">{{ $t('‹ Retour') }}</button>
   </PageHeader>
   <p v-if="error" class="notice-danger">{{ error }}</p>
   <UserAdminCard v-if="isAdmin && user && user.id !== me.id" :user="user" @changed="load" @deleted="$router.replace({ name: 'organization' })" />
@@ -11,6 +11,7 @@
 </template>
 
 <script>
+import { t } from '@/i18n/index.js'
 import PageHeader from '@/components/common/PageHeader.vue'
 import SegmentedTabs from '@/components/common/SegmentedTabs.vue'
 import HoursDashboard from '@/components/dashboard/HoursDashboard.vue'
@@ -39,8 +40,8 @@ export default {
     // Droits du serveur : l'administration, ou le responsable mais jamais pour ses propres heures.
     canEditHours() { return this.isAdmin || (app.user.role === 'manager' && this.userId !== app.user.id) },
     TABS() {
-      const tabs = [{ value: 'dashboard', label: 'Tableau de bord' }, { value: 'history', label: 'Historique' }]
-      return this.canEditHours ? [...tabs, { value: 'edit', label: 'Corriger' }] : tabs
+      const tabs = [{ value: 'dashboard', label: t('Graphiques') }, { value: 'history', label: t('Historique') }]
+      return this.canEditHours ? [...tabs, { value: 'edit', label: t('Corriger') }] : tabs
     },
   },
   created() { this.load() },

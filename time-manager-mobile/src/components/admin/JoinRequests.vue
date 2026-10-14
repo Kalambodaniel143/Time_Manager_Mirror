@@ -1,25 +1,27 @@
 <template>
   <section class="card form-grid">
-    <h2>Demandes à examiner · {{ pending.length }}</h2>
-    <p class="small muted">Une personne n’accède à l’organisation qu’après votre accord.</p>
+    <h2>{{ $t('Demandes à examiner · {0}', [pending.length]) }}</h2>
+    <p class="small muted">{{ $t('Une personne n’accède à l’organisation qu’après votre accord.') }}</p>
     <p v-if="error" class="notice-danger small" role="alert">{{ error }}</p>
     <p v-if="created" class="notice-ok small" role="status">
-      Compte créé pour <strong>{{ created.email }}</strong>. Transmettez-lui ce mot de passe : <strong>{{ created.password }}</strong>
-      (il ne sera plus affiché).
+      {{ $t('Compte créé pour') }} <strong>{{ created.email }}</strong>{{ $t('. Transmettez-lui ce mot de passe :') }} <strong>{{ created.password }}</strong>
+      {{ $t('(il ne sera plus affiché).') }}
     </p>
-    <p v-if="!pending.length" class="muted small">Aucune demande en attente.</p>
+    <p v-if="!pending.length" class="muted small">{{ $t('Aucune demande en attente.') }}</p>
+    <div v-if="pending.length" class="scroll-box">
     <article v-for="r in pending" :key="r.id" class="request">
-      <p><strong>{{ r.profile.first_name }} {{ r.profile.last_name }}</strong> <span class="badge badge-warn">En attente</span><br>
-        <span class="small muted">{{ r.profile.email }} · {{ GENDERS[r.profile.gender] ?? '' }} · né(e) le {{ date(r.profile.birth_date) }} à {{ r.profile.birth_place }}</span></p>
+      <p><strong>{{ r.profile.first_name }} {{ r.profile.last_name }}</strong> <span class="badge badge-warn">{{ $t('En attente') }}</span><br>
+        <span class="small muted">{{ $t('{0} · {1} · né(e) le {2} à {3}', [r.profile.email, GENDERS[r.profile.gender] ?? '', date(r.profile.birth_date), r.profile.birth_place]) }}</span></p>
       <ReviewForm v-if="open === r.id" :busy="busy" @approve="approve(r, $event)" @reject="reject(r, $event)" @cancel="open = null" />
-      <button v-else type="button" class="btn-outline btn-block" @click="start(r)">Examiner la demande</button>
+      <button v-else type="button" class="btn-outline btn-block" @click="start(r)">{{ $t('Examiner la demande') }}</button>
     </article>
+    </div>
     <template v-if="history.length">
-      <h3 class="small">Demandes traitées</h3>
-      <ul class="list flush">
+      <h3 class="small">{{ $t('Demandes traitées') }}</h3>
+      <ul class="list flush scroll-box short">
         <li v-for="r in history" :key="r.id" class="row">
           <span>{{ r.profile.first_name }} {{ r.profile.last_name }}<br><span class="small muted">{{ r.rejection_reason || r.profile.email }}</span></span>
-          <span class="badge" :class="r.status === 'approved' ? 'badge-ok' : 'badge-danger'">{{ r.status === 'approved' ? 'Acceptée' : 'Refusée' }}</span>
+          <span class="badge" :class="r.status === 'approved' ? 'badge-ok' : 'badge-danger'">{{ r.status === 'approved' ? $t('Acceptée') : $t('Refusée') }}</span>
         </li>
       </ul>
     </template>
@@ -27,12 +29,13 @@
 </template>
 
 <script>
+import { locale, t } from '@/i18n/index.js'
 import ReviewForm from './ReviewForm.vue'
 import { app } from '@/services/appState.js'
 import { api } from '@/services/source.js'
 import { authError } from '@/ui/authErrors.js'
 
-const GENDERS = { female: 'Femme', male: 'Homme', non_binary: 'Non binaire', unspecified: 'Non précisé' }
+const GENDERS = { female: t('Femme'), male: t('Homme'), non_binary: t('Non binaire'), unspecified: t('Non précisé') }
 
 // Demandes d'adhésion : accepter (mot de passe choisi par l'admin) ou refuser (motif).
 // Le mot de passe n'est affiché qu'une fois, puis oublié par l'application.
@@ -47,7 +50,7 @@ export default {
   },
   created() { this.load() },
   methods: {
-    date: (value) => (value ? new Date(`${value.slice(0, 10)}T12:00`).toLocaleDateString('fr-FR') : '—'),
+    date: (value) => (value ? new Date(`${value.slice(0, 10)}T12:00`).toLocaleDateString(locale()) : '—'),
     async load() {
       try {
         this.requests = await api.listJoinRequests(app.organization.id)

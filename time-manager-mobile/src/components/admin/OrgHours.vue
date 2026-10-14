@@ -1,5 +1,5 @@
 <template>
-  <BarChart v-if="members.length" title="Heures de l’organisation · moyenne par agent, cette semaine" :bars="bars" />
+  <BarChart v-if="members.length" :title="$t('Heures de l’organisation · moyenne par agent, cette semaine')" :bars="bars" />
 </template>
 
 <script>

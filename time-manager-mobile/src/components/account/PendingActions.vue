@@ -1,20 +1,20 @@
 <template>
   <section v-if="actions.length" class="card">
-    <h2>Pointages sur ce téléphone</h2>
+    <h2>{{ $t('Pointages sur ce téléphone') }}</h2>
     <button v-if="refused > 1" type="button" class="btn-outline btn-block" @click="dismissAll">
-      Retirer les {{ refused }} pointages refusés
+      {{ $t('Retirer les {0} pointages refusés', [refused]) }}
     </button>
     <ul class="list">
       <li v-for="a in actions" :key="a.id">
         <div class="row">
           <span>{{ KIND_LABELS[a.kind] }} · {{ longDate(a.time) }} {{ hhmm(a.time) }}</span>
           <span class="badge" :class="a.status === 'conflict' ? 'badge-danger' : 'badge-warn'">
-            {{ a.status === 'conflict' ? 'À vérifier' : 'En attente' }}
+            {{ a.status === 'conflict' ? $t('À vérifier') : $t('En attente') }}
           </span>
         </div>
         <template v-if="a.status === 'conflict'">
-          <p class="small muted">Refusé par le serveur : {{ a.error }}. {{ WHO_FIXES[role] }}</p>
-          <button type="button" class="btn-quiet" @click="dismiss(a)">J’ai compris, retirer</button>
+          <p class="small muted">{{ $t('Refusé par le serveur : {0}. {1}', [a.error, WHO_FIXES[role]]) }}</p>
+          <button type="button" class="btn-quiet" @click="dismiss(a)">{{ $t('J’ai compris, retirer') }}</button>
         </template>
       </li>
     </ul>

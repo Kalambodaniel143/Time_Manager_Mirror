@@ -1,7 +1,7 @@
 <template>
   <div class="dates">
-    <label>Début <input type="datetime-local" :value="modelValue.start" required @input="update('start', $event)" /></label>
-    <label>Fin <input type="datetime-local" :value="modelValue.end" :min="modelValue.start" required @input="update('end', $event)" /></label>
+    <label>{{ $t('Début') }} <input type="datetime-local" :value="modelValue.start" required @input="update('start', $event)" /></label>
+    <label>{{ $t('Fin') }} <input type="datetime-local" :value="modelValue.end" :min="modelValue.start" required @input="update('end', $event)" /></label>
   </div>
 </template>
 

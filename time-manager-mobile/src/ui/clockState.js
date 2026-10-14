@@ -1,3 +1,4 @@
+import { t } from '@/i18n/index.js'
 import { sameDay, startOfDay } from './dates.js'
 
 // Actions permises après chaque pointage (copie de @next_kinds dans clocks.ex).
@@ -43,6 +44,6 @@ export function summarize(events, now = new Date()) {
 }
 
 export function statusLabel(last, now = new Date()) {
-  if (!last || (last.kind === 'departure' && !sameDay(last.time, now))) return 'Pas encore pointé aujourd’hui'
-  return { arrival: 'Service en cours', resume: 'Service en cours', pause: 'En pause', departure: 'Service terminé' }[last.kind]
+  if (!last || (last.kind === 'departure' && !sameDay(last.time, now))) return t('Pas encore pointé aujourd’hui')
+  return { arrival: t('Service en cours'), resume: t('Service en cours'), pause: t('En pause'), departure: t('Service terminé') }[last.kind]
 }

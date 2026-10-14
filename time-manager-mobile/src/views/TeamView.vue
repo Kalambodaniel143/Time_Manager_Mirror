@@ -1,23 +1,26 @@
 <template>
-  <PageHeader :title="isAdmin ? 'Équipes' : 'Mon équipe'" eyebrow="Moyennes et heures des agents">
-    <RouterLink v-if="isAdmin" class="button-link btn-outline" :to="{ name: 'teamsManage' }">Gérer les équipes</RouterLink>
+  <PageHeader :title="isAdmin ? $t('Équipes') : $t('Mon équipe')" :eyebrow="$t('Moyennes et heures des agents')">
+    <template #action>
+      <RouterLink v-if="isAdmin" class="button-link btn-outline btn-small" :to="{ name: 'teamsManage' }">{{ $t('Gérer') }}</RouterLink>
+    </template>
   </PageHeader>
   <template v-if="teams.length > 1">
-    <label for="team">Équipe</label>
+    <label for="team">{{ $t('Équipe') }}</label>
     <select id="team" v-model="teamId" @change="loadMembers">
       <option v-for="t in teams" :key="t.id" :value="t.id">{{ t.name }}</option>
     </select>
   </template>
   <DataState :loading="loading" :error="error" :stale="stale" :updated-at="updatedAt"
-    :empty="!members.length" empty-text="Aucun agent dans cette équipe." @retry="load">
+    :empty="!members.length" :empty-text="$t('Aucun agent dans cette équipe.')" @retry="load">
     <PeriodPicker v-model="period" />
-    <StatTiles :tiles="tiles" />
-    <BarChart title="Moyenne par agent" :bars="bars" />
+    <StatTiles :tiles="tiles" hero />
+    <BarChart :title="$t('Moyenne par agent')" :bars="bars" />
     <MemberList :members="members" :range="range" />
   </DataState>
 </template>
 
 <script>
+import { t } from '@/i18n/index.js'
 import PageHeader from '@/components/common/PageHeader.vue'
 import DataState from '@/components/common/DataState.vue'
 import PeriodPicker from '@/components/dashboard/PeriodPicker.vue'
@@ -29,7 +32,7 @@ import { app } from '@/services/appState.js'
 import { getMesHeures, getTeams } from '@/services/dataService.js'
 import { teamAggregate, teamStats, toPeriods } from '@/ui/aggregate.js'
 import { preset, toRange } from '@/ui/period.js'
-import { hours } from '@/ui/format.js'
+import { hours, plural } from '@/ui/format.js'
 
 // Tableau de bord d'équipe (responsable : ses équipes · administration : toutes).
 export default {
@@ -45,10 +48,9 @@ export default {
     tiles() {
       const s = teamStats(this.withHours, this.range.from, this.range.to)
       return [
-        { label: 'Agents', value: String(this.members.length) },
-        { label: 'Total équipe', value: hours(s.total) },
-        { label: 'Moyenne / jour / agent', value: hours(s.perDay) },
-        { label: 'Moyenne / semaine / agent', value: hours(s.perWeek) },
+        { label: t('Total de l’équipe'), value: hours(s.total), hint: t('{0} · moyennes par agent', [plural(this.members.length, 'agent')]) },
+        { label: t('Par jour'), value: hours(s.perDay) },
+        { label: t('Par semaine'), value: hours(s.perWeek) },
       ]
     },
   },

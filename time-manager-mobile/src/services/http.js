@@ -1,3 +1,4 @@
+import { t } from '@/i18n/index.js'
 import { createApiClient } from '@shared/services/apiClient.js'
 import { API_URL } from '@/config/api.js'
 import { hasNativeHttp, nativeRequest } from './nativeHttp.js'
@@ -16,7 +17,7 @@ export const setCsrfToken = (token) => { csrfToken = token }
 
 // Téléphone : réseau natif. Navigateur : fetch vers /api (relayé par Vite).
 export async function request(path, { method = 'GET', body } = {}) {
-  if (!API_URL) throw new Error('Adresse du serveur manquante : renseigner VITE_API_URL dans .env.local.')
+  if (!API_URL) throw new Error(t('Adresse du serveur manquante : renseigner VITE_API_URL dans .env.local.'))
   const headers = csrfToken ? { 'X-CSRF-Token': csrfToken } : {}
   if (hasNativeHttp()) return nativeRequest(`${API_URL.replace(/\/+$/, '')}${path}`, { method, headers, body })
   return createApiClient({ baseUrl: API_URL, fetchImpl: fetchNotingDate })(path, {

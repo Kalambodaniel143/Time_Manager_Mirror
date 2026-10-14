@@ -1,32 +1,33 @@
 <template>
   <section class="card form-grid">
-    <h2>Administration du compte</h2>
+    <h2>{{ $t('Administration du compte') }}</h2>
     <dl v-if="user.birth_date || user.gender" class="details small">
-      <div><dt>Genre</dt><dd>{{ GENDERS[user.gender] ?? '—' }}</dd></div>
-      <div><dt>Naissance</dt><dd>{{ user.birth_date ?? '—' }} {{ user.birth_place ? `à ${user.birth_place}` : '' }}</dd></div>
+      <div><dt>{{ $t('Genre') }}</dt><dd>{{ GENDERS[user.gender] ?? '—' }}</dd></div>
+      <div><dt>{{ $t('Naissance') }}</dt><dd>{{ user.birth_date ?? '—' }} {{ user.birth_place ? $t('à {0}', [user.birth_place]) : '' }}</dd></div>
     </dl>
-    <label for="role">Rôle</label>
+    <label for="role">{{ $t('Rôle') }}</label>
     <select id="role" :value="user.role" :disabled="busy" @change="changeRole($event.target)">
       <option v-for="r in roles" :key="r" :value="r">{{ ROLE_LABELS[r] ?? r }}</option>
     </select>
-    <label for="reset-password">Nouveau mot de passe <span class="muted small">(réinitialisation, {{ PASSWORD_RULE }})</span></label>
+    <label for="reset-password">{{ $t('Nouveau mot de passe') }} <span class="muted small">{{ $t('(réinitialisation, {0})', [PASSWORD_RULE]) }}</span></label>
     <div class="request-actions">
       <input id="reset-password" v-model="password" type="text" autocomplete="off" />
-      <button type="button" class="btn-outline" :disabled="busy || !valid" @click="reset">Réinitialiser</button>
+      <button type="button" class="btn-outline" :disabled="busy || !valid" @click="reset">{{ $t('Réinitialiser') }}</button>
     </div>
     <p v-if="message" class="small" :class="ok ? 'notice-ok' : 'notice-danger'" role="status">{{ message }}</p>
-    <button type="button" class="btn-danger btn-block" :disabled="busy" @click="remove">Supprimer ce compte</button>
+    <button type="button" class="btn-danger btn-block" :disabled="busy" @click="remove">{{ $t('Supprimer ce compte') }}</button>
   </section>
 </template>
 
 <script>
+import { t } from '@/i18n/index.js'
 import { api } from '@/services/source.js'
 import { changeRole, deleteUser, resetPassword } from '@/services/manageService.js'
 import { ROLE_LABELS, displayName } from '@/ui/format.js'
 import { PASSWORD_RULE, validPassword } from '@/ui/authErrors.js'
 import { confirmAction } from '@/native/device.js'
 
-const GENDERS = { female: 'Femme', male: 'Homme', non_binary: 'Non binaire', unspecified: 'Non précisé' }
+const GENDERS = { female: t('Femme'), male: t('Homme'), non_binary: t('Non binaire'), unspecified: t('Non précisé') }
 
 // Administration : informations personnelles, rôle, réinitialisation du mot de passe, suppression.
 export default {
@@ -47,16 +48,16 @@ export default {
     },
     async changeRole(select) {
       const role = select.value
-      if (await this.act(() => changeRole(this.user.id, role), `Rôle changé : ${ROLE_LABELS[role]}.`)) this.$emit('changed')
+      if (await this.act(() => changeRole(this.user.id, role), t('Rôle changé : {0}.', [ROLE_LABELS[role]]))) this.$emit('changed')
       else select.value = this.user.role // refusé : on remet l'ancien rôle
     },
     async reset() {
       const password = this.password
-      if (await this.act(() => resetPassword(this.user.id, password), `Mot de passe réinitialisé : transmettez « ${password} ».`)) this.password = ''
+      if (await this.act(() => resetPassword(this.user.id, password), t('Mot de passe réinitialisé : transmettez « {0} ».', [password]))) this.password = ''
     },
     async remove() {
-      if (!await confirmAction(`Supprimer définitivement le compte de ${displayName(this.user)} et ses heures ?`)) return
-      if (await this.act(() => deleteUser(this.user.id), 'Compte supprimé.')) this.$emit('deleted')
+      if (!await confirmAction(t('Supprimer définitivement le compte de {0} et ses heures ?', [displayName(this.user)]))) return
+      if (await this.act(() => deleteUser(this.user.id), t('Compte supprimé.'))) this.$emit('deleted')
     },
   },
 }

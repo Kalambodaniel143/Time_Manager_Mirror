@@ -1,11 +1,12 @@
 <template>
   <div class="sync-banner" :class="`tone-${state.tone}`">
     <p role="status"><span class="dot" aria-hidden="true" />{{ state.text }}</p>
-    <time class="top-clock" :datetime="now.toISOString()" aria-label="Heure actuelle">{{ hhmm(now) }}</time>
+    <time class="top-clock" :datetime="now.toISOString()" :aria-label="$t('Heure actuelle')">{{ hhmm(now) }}</time>
   </div>
 </template>
 
 <script>
+import { t } from '@/i18n/index.js'
 import { app } from '@/services/appState.js'
 import { hhmm } from '@/ui/format.js'
 
@@ -17,13 +18,13 @@ export default {
   data: () => ({ now: new Date() }),
   computed: {
     state() {
-      const waiting = app.pending ? ` · ${plural(app.pending, 'action')} en attente` : ''
-      if (app.syncing && app.pending) return { tone: 'info', text: 'Synchronisation en cours…' }
-      if (app.network === 'offline') return { tone: 'danger', text: `Hors ligne${waiting}` }
-      if (app.network === 'server-down') return { tone: 'warn', text: `Serveur inaccessible${waiting}` }
-      if (app.conflicts) return { tone: 'warn', text: `${plural(app.conflicts, 'action')} à vérifier (Mon compte)` }
-      if (app.pending) return { tone: 'warn', text: `${plural(app.pending, 'action')} en attente` }
-      return { tone: 'ok', text: app.notice || 'En ligne' }
+      const waiting = app.pending ? ` · ${t('{0} en attente', [plural(app.pending, 'action')])}` : ''
+      if (app.syncing && app.pending) return { tone: 'info', text: t('Synchronisation en cours…') }
+      if (app.network === 'offline') return { tone: 'danger', text: t('Hors ligne{0}', [waiting]) }
+      if (app.network === 'server-down') return { tone: 'warn', text: t('Serveur inaccessible{0}', [waiting]) }
+      if (app.conflicts) return { tone: 'warn', text: t('{0} à vérifier (Mon compte)', [plural(app.conflicts, 'action')]) }
+      if (app.pending) return { tone: 'warn', text: t('{0} en attente', [plural(app.pending, 'action')]) }
+      return { tone: 'ok', text: app.notice || t('En ligne') }
     },
   },
   created() { this.timer = setInterval(() => { this.now = new Date() }, 1000) },

@@ -1,3 +1,4 @@
+import { t } from '@/i18n/index.js'
 // Mixin des écrans qui chargent des données : chargement, erreur, données anciennes.
 // Utilisation : this.items = await this.run(() => getMesHeures())
 export default {
@@ -12,7 +13,7 @@ export default {
         this.updatedAt = result.updatedAt
         return result.data
       } catch (error) {
-        this.error = error.message || 'Chargement impossible.'
+        this.error = error.message || t('Chargement impossible.')
         return null
       } finally {
         this.loading = false

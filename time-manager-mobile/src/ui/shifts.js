@@ -1,5 +1,6 @@
+import { t } from '@/i18n/index.js'
 // Type de garde, comme les étiquettes de la maquette (Jour, Nuit ×1,5…).
-export const SHIFT_LABELS = { jour: 'Jour', nuit: 'Nuit ×1,5', astreinte: 'Astreinte', repos: 'Repos' }
+export const SHIFT_LABELS = { jour: t('Jour'), nuit: t('Nuit ×1,5'), astreinte: t('Astreinte'), repos: t('Repos') }
 
 // Règle simple côté mobile : une garde qui commence entre 20 h et 5 h est une nuit.
 export function shiftType(start) {

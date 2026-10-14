@@ -1,11 +1,11 @@
 <template>
   <section class="card form-grid">
-    <h2>Membres et rôles · {{ users.length }}</h2>
-    <p class="small muted">Un appui ouvre le tableau de bord de la personne, son rôle et la suppression du compte.</p>
-    <label for="search" class="sr-only">Rechercher</label>
-    <input id="search" v-model.trim="search" type="search" placeholder="Rechercher un nom ou un e-mail" />
-    <p v-if="!filtered.length" class="muted small">Aucun compte trouvé.</p>
-    <ul class="list flush">
+    <h2>{{ $t('Membres et rôles · {0}', [users.length]) }}</h2>
+    <p class="small muted">{{ $t('Un appui ouvre le tableau de bord de la personne, son rôle et la suppression du compte.') }}</p>
+    <label for="search" class="sr-only">{{ $t('Rechercher') }}</label>
+    <input id="search" v-model.trim="search" type="search" :placeholder="$t('Rechercher un nom ou un e-mail')" />
+    <p v-if="!filtered.length" class="muted small">{{ $t('Aucun compte trouvé.') }}</p>
+    <ul class="list flush scroll-box">
       <li v-for="u in filtered" :key="u.id">
         <RouterLink class="row member-link" :to="{ name: 'member', params: { id: u.id } }">
           <span><strong>{{ displayName(u) }}</strong><br><span class="muted small">{{ u.email }}</span></span>
@@ -27,7 +27,7 @@ export default {
   computed: {
     filtered() {
       const q = this.search.toLowerCase()
-      return this.users.filter((u) => `${displayName(u)} ${u.username} ${u.email}`.toLowerCase().includes(q))
+      return this.users.filter((u) => `${displayName(u)} ${u.email}`.toLowerCase().includes(q))
     },
   },
   methods: { displayName },

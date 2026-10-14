@@ -1,3 +1,4 @@
+import { locale, t } from '@/i18n/index.js'
 // Mise en forme des textes affichés (français).
 const pad = (n) => String(n).padStart(2, '0')
 
@@ -17,31 +18,34 @@ export const hours = (ms) => {
 }
 
 export const longDate = (date) =>
-  capitalize(new Date(date).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' }))
+  capitalize(new Date(date).toLocaleDateString(locale(), { weekday: 'long', day: 'numeric', month: 'long' }))
 
 export const shortDay = (date) =>
-  capitalize(new Date(date).toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric' }))
+  capitalize(new Date(date).toLocaleDateString(locale(), { weekday: 'short', day: 'numeric' }))
 
 export const dayMonth = (date) =>
-  new Date(date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })
+  new Date(date).toLocaleDateString(locale(), { day: 'numeric', month: 'short' })
 
 export function ago(date) {
   const min = Math.round((Date.now() - new Date(date)) / 60000)
-  if (min < 1) return 'à l’instant'
-  if (min < 60) return `il y a ${min} min`
-  if (min < 1440) return `il y a ${Math.round(min / 60)} h`
-  return `le ${dayMonth(date)} à ${hhmm(date)}`
+  if (min < 1) return t('à l’instant')
+  if (min < 60) return t('il y a {0} min', [min])
+  if (min < 1440) return t('il y a {0} h', [Math.round(min / 60)])
+  return t('le {0} à {1}', [dayMonth(date), hhmm(date)])
 }
 
 // Nom affiché : prénom + nom si le serveur les connaît, sinon l'identifiant.
 export const displayName = (user) =>
-  [user?.first_name, user?.last_name].filter(Boolean).join(' ') || user?.username || ''
+  [user?.first_name, user?.last_name].filter(Boolean).join(' ') || user?.email || ''
+
+// « 1 agent », « 3 agents ».
+export const plural = (n, word) => `${n} ${word}${n > 1 ? 's' : ''}`
 
 export const initials = (name = '') =>
   name.split(/\s+/).map((w) => w[0]).join('').slice(0, 2).toUpperCase()
 
-export const ROLE_LABELS = { employee: 'Agent', manager: 'Responsable', administrator: 'Administration' }
-export const KIND_LABELS = { arrival: 'Arrivée', departure: 'Départ', pause: 'Pause', resume: 'Reprise' }
+export const ROLE_LABELS = { employee: t('Agent'), manager: t('Responsable'), administrator: t('Administration') }
+export const KIND_LABELS = { arrival: t('Arrivée'), departure: t('Départ'), pause: t('Pause'), resume: t('Reprise') }
 
 function capitalize(text) {
   return text.charAt(0).toUpperCase() + text.slice(1)
