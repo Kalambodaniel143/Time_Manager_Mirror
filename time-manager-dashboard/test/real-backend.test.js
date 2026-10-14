@@ -32,15 +32,15 @@ const response = (data, status = 200) => ({ ok: status < 400, status, json: asyn
 
 test('legacy login accepts a real account without inventing a Gotham membership; role mismatches still fail', async () => {
   globalThis.fetch = async () => response({ role: 'administrator', user, organization: null, csrf_token: 'test-csrf' })
-  await store.login(user.email, 'Password8')
+  await store.login(user.email, 'Lantern8')
   assert.equal(store.auth.user.id, 17)
   assert.equal(store.auth.user.role, 'administrator')
   assert.equal(store.auth.organization, null)
   assert.equal(store.auth.organizationSession, null)
   globalThis.fetch = async () => response({ role: 'administrator', user: { ...user, organization_id: 'fake' }, organization: null, csrf_token: 'test-csrf' })
-  await assert.rejects(store.login(user.email, 'Password8'), /session invalide/)
+  await assert.rejects(store.login(user.email, 'Lantern8'), /session invalide/)
   globalThis.fetch = async () => response({ role: 'manager', user, organization: null, csrf_token: 'test-csrf' })
-  await assert.rejects(store.login(user.email, 'Password8'), /session invalide/)
+  await assert.rejects(store.login(user.email, 'Lantern8'), /session invalide/)
 })
 
 test('real sessions ignore historical demo data and never persist local business actions', () => {

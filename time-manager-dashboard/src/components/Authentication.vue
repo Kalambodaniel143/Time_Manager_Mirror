@@ -1,31 +1,29 @@
 <template>
   <AuthLayout>
     <form class="auth-form" novalidate @submit.prevent="submit">
-      <h2 class="page-title">Connexion</h2>
-      <p class="lede">Connectez-vous avec l’adresse e-mail et le mot de passe fournis par l’administration.</p>
+      <h2 class="page-title">{{ $t("Connexion") }}</h2>
+      <p class="lede">{{ $t("Connectez-vous avec l’adresse e-mail et le mot de passe fournis par l’administration.") }}</p>
 
       <label class="field">
-        <span class="field-label">Adresse e-mail</span>
+        <span class="field-label">{{ $t("Adresse e-mail") }}</span>
         <input ref="email" v-model.trim="email" class="input" type="email" autocomplete="username" required />
       </label>
 
       <label class="field">
-        <span class="field-label">Mot de passe</span>
-        <span class="password-control"><input v-model="password" class="input" :type="showLoginPassword ? 'text' : 'password'" autocomplete="current-password" required /><button class="password-toggle" type="button" :aria-label="showLoginPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'" :aria-pressed="showLoginPassword" @click="showLoginPassword = !showLoginPassword"><AppIcon :name="showLoginPassword ? 'eye-off' : 'eye'" /></button></span>
+        <span class="field-label">{{ $t("Mot de passe") }}</span>
+        <span class="password-control"><input v-model="password" class="input" :type="showLoginPassword ? 'text' : 'password'" autocomplete="current-password" required /><button class="password-toggle" type="button" :aria-label="$t(showLoginPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe')" :aria-pressed="showLoginPassword" @click="showLoginPassword = !showLoginPassword"><AppIcon :name="showLoginPassword ? 'eye-off' : 'eye'" /></button></span>
       </label>
 
-      <p v-if="error" class="field-error" role="alert">{{ error }}</p>
+      <p v-if="error" class="field-error" role="alert">{{ $t(error) }}</p>
 
       <div>
         <button class="btn btn-primary btn-login" type="submit" :disabled="loading">
           <AppIcon name="login" />
-          {{ loading ? 'Connexion…' : 'Se connecter' }}
+          {{ $t(loading ? 'Connexion…' : 'Se connecter') }}
         </button>
       </div>
 
-      <p class="switch">
-        Pas encore de compte ?
-        <RouterLink class="link" :to="{ name: 'register' }">Rejoindre Gotham City</RouterLink>
+      <p class="switch"> {{ $t("Pas encore de compte ?") }} <RouterLink class="link" :to="{ name: 'register' }">{{ $t("Rejoindre Gotham City") }}</RouterLink>
       </p>
     </form>
   </AuthLayout>

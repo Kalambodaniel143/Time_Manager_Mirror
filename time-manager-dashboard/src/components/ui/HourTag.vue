@@ -1,8 +1,8 @@
 <template>
   <span class="tag" :class="`tag-${kind}`">
     <AppIcon v-if="icon" :name="icon" />
-    {{ label }}
-    <span v-if="hours !== null" class="tag-hours num">{{ hoursLabel }}</span>
+    {{ $t(label) }}
+    <span v-if="hours !== null" class="tag-hours num">{{ $t(hoursLabel) }}</span>
   </span>
 </template>
 

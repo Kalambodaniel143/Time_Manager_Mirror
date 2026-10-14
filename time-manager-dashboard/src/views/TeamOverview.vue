@@ -1,28 +1,27 @@
 <template>
   <div class="team">
-    <PageHeader :eyebrow="`Semaine ${weekNumber} · ${rangeLabel}`" :title="teamName">
+    <PageHeader :eyebrow="$t(`Semaine ${weekNumber} · ${rangeLabel}`)" :title="$t(teamName)">
       <button class="btn btn-outline" type="button" :disabled="loading" @click="loadTeam">
-        {{ loading ? 'Actualisation…' : 'Actualiser' }}
+        {{ $t(loading ? 'Actualisation…' : 'Actualiser') }}
       </button>
       <button v-if="canValidate" class="btn btn-primary" type="button" :disabled="loading || !!error || selection.length === 0" @click="validate">
-        <AppIcon name="check" />
-        Valider {{ selection.length }} feuille{{ selection.length > 1 ? 's' : '' }}
+        <AppIcon name="check" /> {{ $t("Valider") }} {{ selection.length }} {{ $t("feuille") }}{{ $t(selection.length > 1 ? 's' : '') }}
       </button>
     </PageHeader>
 
-    <label v-if="teams.length > 1" class="field team-picker"><span class="field-label">Équipe affichée</span><select v-model="selectedTeamId" class="input" :disabled="loading" @change="loadTeam"><option v-for="item in teams" :key="item.id" :value="item.id">{{ item.name }}</option></select></label>
-    <div v-if="!loading && !error" class="summary-grid"><article class="card summary-metric"><p>Agents</p><strong>{{ rows.length }}</strong><span>{{ cleanRows.length }} sans alerte de pointage</span></article><article class="card summary-metric"><p>Heures enregistrées</p><strong>{{ formatHours(totalHours) }}</strong><span>Durées des périodes de la semaine</span></article><article class="card summary-metric"><p>Alertes</p><strong>{{ alertCount }}</strong><span>Pointages à vérifier</span></article><article v-if="demo" class="card summary-metric"><p>À valider</p><strong>{{ selection.length }}</strong><span>Feuilles sélectionnées</span></article></div>
-    <p v-if="demo" class="demo-notice validation-notice">La validation des semaines est enregistrée localement. Un seuil de nuits dépassé nécessite un examen, sans effacer les heures travaillées.</p>
-    <p v-else class="field-hint validation-notice">Les équipes, périodes et pointages viennent de votre espace. La validation enregistre votre décision et protège ensuite les périodes de la semaine.</p>
+    <label v-if="teams.length > 1" class="field team-picker"><span class="field-label">{{ $t("Équipe affichée") }}</span><select v-model="selectedTeamId" class="input" :disabled="loading" @change="loadTeam"><option v-for="item in teams" :key="item.id" :value="item.id">{{ item.name }}</option></select></label>
+    <div v-if="!loading && !error" class="summary-grid"><article class="card summary-metric"><p>{{ $t("Agents") }}</p><strong>{{ rows.length }}</strong><span>{{ cleanRows.length }} {{ $t("sans alerte de pointage") }}</span></article><article class="card summary-metric"><p>{{ $t("Heures enregistrées") }}</p><strong>{{ formatHours(totalHours) }}</strong><span>{{ $t("Durées des périodes de la semaine") }}</span></article><article class="card summary-metric"><p>{{ $t("Alertes") }}</p><strong>{{ alertCount }}</strong><span>{{ $t("Pointages à vérifier") }}</span></article><article v-if="demo" class="card summary-metric"><p>{{ $t("À valider") }}</p><strong>{{ selection.length }}</strong><span>{{ $t("Feuilles sélectionnées") }}</span></article></div>
+    <p v-if="demo" class="demo-notice validation-notice">{{ $t("La validation des semaines est enregistrée localement. Un seuil de nuits dépassé nécessite un examen, sans effacer les heures travaillées.") }}</p>
+    <p v-else class="field-hint validation-notice">{{ $t("Les équipes, périodes et pointages viennent de votre espace. La validation enregistre votre décision et protège ensuite les périodes de la semaine.") }}</p>
     <div class="stack">
       <AlertBanner
         v-for="alert in nightAlerts"
         :key="alert.username"
         tone="danger"
-        :title="alert.frequencyExceeded ? `${alert.short} : fréquence de nuits à examiner` : `${alert.short} a fait ${alert.nightRun} nuits d’affilée la semaine dernière`"
-        :text="alert.text"
+        :title="$t(alert.frequencyExceeded ? `${alert.short} : fréquence de nuits à examiner` : `${alert.short} a fait ${alert.nightRun} nuits d’affilée la semaine dernière`)"
+        :text="$t(alert.text)"
       >
-        <RouterLink class="btn btn-on-dark btn-sm" :to="{ name: 'teamPlanning' }">Voir le planning à venir</RouterLink>
+        <RouterLink class="btn btn-on-dark btn-sm" :to="{ name: 'teamPlanning' }">{{ $t("Voir le planning à venir") }}</RouterLink>
       </AlertBanner>
 
       <!-- Les alertes viennent des pointages de l'API, pour chaque membre connu. -->
@@ -31,33 +30,28 @@
           v-for="row in departureAlerts"
           :key="`departure-${row.username}`"
           class="departure-alert"
-          :title="`${row.short} : départ à vérifier`"
-          :text="`Service commencé le ${arrivalLabel(row)}. Aucun départ enregistré depuis plus de 24 heures.`"
+          :title="$t(`${row.short} : départ à vérifier`)"
+          :text="$t(`Service commencé le ${arrivalLabel(row)}. Aucun départ enregistré depuis plus de 24 heures.`)"
         >
-          <a v-if="departureMail(row)" class="btn btn-outline btn-sm" :href="departureMail(row)">
-            Demander l’heure à {{ row.name.split(' ')[0] }}
+          <a v-if="departureMail(row)" class="btn btn-outline btn-sm" :href="departureMail(row)"> {{ $t("Demander l’heure à") }} {{ row.name.split(' ')[0] }}
           </a>
-          <span v-else class="mail-hint">Adresse e-mail indisponible : contactez directement ce salarié.</span>
+          <span v-else class="mail-hint">{{ $t("Adresse e-mail indisponible : contactez directement ce salarié.") }}</span>
         </AlertBanner>
-        <p v-if="departureAlerts.length" class="mail-hint">
-          « Demander l’heure » prépare un e-mail dans votre messagerie. Vous choisissez de l’envoyer.
-          Après la correction du salarié, cliquez sur « Actualiser ».
-        </p>
-        <AlertBanner v-if="clockProblems.length" title="Pointages non vérifiés" :text="clockProblems.join(' · ')" />
+        <p v-if="departureAlerts.length" class="mail-hint"> {{ $t("« Demander l’heure » prépare un e-mail dans votre messagerie. Vous choisissez de l’envoyer. Après la correction du salarié, cliquez sur « Actualiser ».") }} </p>
+        <AlertBanner v-if="clockProblems.length" :title="$t(&quot;Pointages non vérifiés&quot;)" :text="$t(clockProblems.join(' · '))" />
       </template>
 
       <section class="card list">
         <header class="list-header">
           <label v-if="canValidate" class="select-all">
-            <input type="checkbox" class="check" :checked="allClean" :disabled="loading || !!error || cleanRows.length === 0" @change="toggleAll" />
-            Tout sélectionner sans anomalie ({{ cleanRows.length }})
+            <input type="checkbox" class="check" :checked="allClean" :disabled="loading || !!error || cleanRows.length === 0" @change="toggleAll" /> {{ $t("Tout sélectionner sans anomalie (") }}{{ cleanRows.length }})
           </label>
-          <p class="list-hint">{{ demo ? 'Anomalies en premier · notes des agents visibles sans clic' : 'Pointages à vérifier en premier' }}</p>
+          <p class="list-hint">{{ $t(demo ? 'Anomalies en premier · notes des agents visibles sans clic' : 'Pointages à vérifier en premier') }}</p>
         </header>
 
         <div v-if="loading" class="skeleton list-skeleton"></div>
-        <p v-else-if="error" class="field-error list-error" role="alert">Impossible de charger l’équipe : {{ error }}</p>
-        <p v-else-if="!rows.length" class="list-error muted">Aucun membre dans l’équipe sélectionnée. La composition des équipes se gère depuis « Équipes ».</p>
+        <p v-else-if="error" class="field-error list-error" role="alert">{{ $t("Impossible de charger l’équipe :") }} {{ $t(error) }}</p>
+        <p v-else-if="!rows.length" class="list-error muted">{{ $t("Aucun membre dans l’équipe sélectionnée. La composition des équipes se gère depuis « Équipes ».") }}</p>
         <ul v-else class="rows">
           <TeamMemberRow
             v-for="row in sortedRows"
@@ -71,13 +65,15 @@
           />
         </ul>
       </section>
-      <section v-if="canValidate && !loading && !error" class="card validation-footer"><div><strong>{{ selection.length }} feuille{{ selection.length > 1 ? 's' : '' }} sélectionnée{{ selection.length > 1 ? 's' : '' }}</strong><p class="field-hint">Les départs manquants doivent être régularisés avant validation.</p></div><button class="btn btn-primary" type="button" :disabled="!selection.length" @click="validate">Valider {{ selection.length }} feuille{{ selection.length > 1 ? 's' : '' }}</button></section>
+      <section v-if="canValidate && !loading && !error" class="card validation-footer"><div><strong>{{ selection.length }} {{ $t("feuille") }}{{ $t(selection.length > 1 ? 's' : '') }} {{ $t("sélectionnée") }}{{ $t(selection.length > 1 ? 's' : '') }}</strong><p class="field-hint">{{ $t("Les départs manquants doivent être régularisés avant validation.") }}</p></div><button class="btn btn-primary" type="button" :disabled="!selection.length" @click="validate">{{ $t("Valider") }} {{ selection.length }} {{ $t("feuille") }}{{ $t(selection.length > 1 ? 's' : '') }}</button></section>
       <CorrectionPanel can-review @changed="loadTeam" />
     </div>
   </div>
 </template>
 
 <script>
+import { intlLocale } from '../utils/i18n.js'
+
 import { RouterLink } from 'vue-router'
 import CorrectionPanel from '../components/reviews/CorrectionPanel.vue'
 import { auth } from '../stores/auth'
@@ -239,7 +235,7 @@ export default {
     },
 
     arrivalLabel(row) {
-      return clockDate(row.missingDeparture.arrival.time).toLocaleString('fr-FR', { dateStyle: 'full', timeStyle: 'long' })
+      return clockDate(row.missingDeparture.arrival.time).toLocaleString(intlLocale(), { dateStyle: 'full', timeStyle: 'long' })
     },
 
     departureMail(row) {

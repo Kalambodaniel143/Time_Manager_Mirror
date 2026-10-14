@@ -4,12 +4,12 @@
     <table class="plan">
       <thead>
         <tr>
-          <th scope="col" class="agent-col">Agent</th>
+          <th scope="col" class="agent-col">{{ $t("Agent") }}</th>
           <th v-for="day in columns" :key="day.key" scope="col" class="day-col" :class="{ 'is-weekend': day.weekend }">
             <span class="day-name">{{ day.name }}</span>
             <span class="day-number serif num">{{ day.number }}</span>
           </th>
-          <th scope="col" class="run-col">Nuits d’affilée</th>
+          <th scope="col" class="run-col">{{ $t("Nuits d’affilée") }}</th>
         </tr>
       </thead>
       <tbody>
@@ -23,25 +23,27 @@
               class="cell"
               :class="[`cell-${kind}`, { 'is-flagged': isFlagged(row, index) }]"
               type="button"
-              :title="`${row.short} · ${columns[index].label} : ${labels[kind]} (cliquer pour changer)`"
+              :title="$t(`${row.short} · ${columns[index].label} : ${labels[kind]} (cliquer pour changer)`)"
               @click="$emit('cycle', row.username, index + offset)"
             >
-              {{ labels[kind] }}
+              {{ $t(labels[kind]) }}
             </button>
           </td>
           <td class="run">
-            <span v-if="row.run.length > maxNights" class="pill pill-danger"><AppIcon name="alert" />{{ nightsLabel(row.run.length) }}</span>
-            <span v-else class="pill pill-ok"><AppIcon name="check" />{{ nightsLabel(row.run.length) }}</span>
+            <span v-if="row.run.length > maxNights" class="pill pill-danger"><AppIcon name="alert" />{{ $t(nightsLabel(row.run.length)) }}</span>
+            <span v-else class="pill pill-ok"><AppIcon name="check" />{{ $t(nightsLabel(row.run.length)) }}</span>
           </td>
         </tr>
       </tbody>
     </table>
   </div>
-  <div v-if="mobileRow" class="mobile-plan card"><article v-for="(kind, index) in mobileRow.shifts" :key="index"><strong>{{ columns[index].label }}</strong><button class="cell" :class="`cell-${kind}`" type="button" :aria-label="`${columns[index].label} : ${labels[kind]}, modifier`" @click="$emit('cycle', mobileRow.username, index + offset)">{{ labels[kind] }}</button></article></div>
+  <div v-if="mobileRow" class="mobile-plan card"><article v-for="(kind, index) in mobileRow.shifts" :key="index"><strong>{{ $t(columns[index].label) }}</strong><button class="cell" :class="`cell-${kind}`" type="button" :aria-label="$t(`${columns[index].label} : ${labels[kind]}, modifier`)" @click="$emit('cycle', mobileRow.username, index + offset)">{{ $t(labels[kind]) }}</button></article></div>
   </div>
 </template>
 
 <script>
+import { intlLocale } from '../../utils/i18n.js'
+
 import AppIcon from '../ui/AppIcon.vue'
 import { toDateInput } from '../../utils/date'
 import { weekdayUpper } from '../../utils/hours'
@@ -74,7 +76,7 @@ export default {
         key: toDateInput(date),
         name: `${weekdayUpper(date).replace('.', '')}.`,
         number: date.getDate(),
-        label: date.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' }),
+        label: date.toLocaleDateString(intlLocale(), { weekday: 'long', day: 'numeric', month: 'long' }),
         weekend: date.getDay() === 0 || date.getDay() === 6,
       }))
     },

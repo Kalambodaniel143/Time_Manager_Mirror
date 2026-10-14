@@ -21,8 +21,8 @@ test('organization sessions restore through the shared store with compatible rol
     globalThis.fetch = () => { throw new Error('The organization demo must not call the backend') }
     const service = await server.ssrLoadModule('/src/services/organizationService.js')
     const demo = await server.ssrLoadModule('/src/mocks/organizationAuth.js')
-    await demo.mockProvisionSuperAdministrator({ profile: { first_name: 'Nando', last_name: 'Martin', email: 'admin@example.com' }, password: 'Password8' })
-    const session = await service.loginAccount({ email: 'admin@example.com', password: 'Password8' })
+    await demo.mockProvisionSuperAdministrator({ profile: { first_name: 'Nando', last_name: 'Martin', email: 'admin@example.com' }, password: 'Lantern8' })
+    const session = await service.loginAccount({ email: 'admin@example.com', password: 'Lantern8' })
     store.startOrganizationSession(session)
     assert.equal(store.auth.user.role, 'administrator')
     assert.equal(store.auth.organizationSession.role, 'admin')
@@ -52,7 +52,7 @@ test('backend login, restoration and logout retain the existing CSRF transport a
       const data = url.endsWith('/auth/login') ? { user, role: 'employee', organization, csrf_token: 'test-csrf' } : url.endsWith('/auth/session') ? { user, role: 'employee', organization } : null
       return { status: 200, ok: true, json: async () => ({ data }) }
     }
-    await store.login(user.email, 'Password8')
+    await store.login(user.email, 'Lantern8')
     assert.equal(store.auth.csrfToken, 'test-csrf')
     assert.equal(globalThis.sessionStorage.getItem('tm-csrf'), 'test-csrf')
     assert.equal(store.auth.organizationSession, null)

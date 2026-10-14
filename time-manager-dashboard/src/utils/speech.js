@@ -1,3 +1,4 @@
+import { intlLocale } from './i18n.js'
 import { reactive } from 'vue'
 import { workforce } from '../services/workforceService'
 let generation = 0
@@ -10,7 +11,7 @@ export function readAloud(text, overrides = {}) {
   const current = generation
   const preferences = { ...workforce.preferences, ...overrides }
   const utterance = new window.SpeechSynthesisUtterance(String(text).trim())
-  utterance.lang = 'fr-FR'; utterance.rate = preferences.speech_rate || 1
+  utterance.lang = intlLocale(); utterance.rate = preferences.speech_rate || 1
   utterance.voice = window.speechSynthesis.getVoices().find(voice => voice.name === preferences.speech_voice) || null
   utterance.onstart = () => { if (current === generation) speech.speaking = true }
   utterance.onend = () => { if (current === generation) speech.speaking = false }

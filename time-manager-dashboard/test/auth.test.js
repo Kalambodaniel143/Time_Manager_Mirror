@@ -35,16 +35,16 @@ test('organization creation only requires name, surname and email; joining still
   assert.throws(() => auth.mockJoinOrganization({ organization_id: session.organization.id, profile: applicant }), hasStatus(422))
 })
 
-test('eight-character passwords work for administrators and employees; seven characters are rejected', async () => {
+test('non-trivial eight-character passwords work; seven characters are rejected', async () => {
   const body = { name: 'Atelier', profile: profile() }
   await assert.rejects(() => auth.mockCreateOrganization({ ...body, password: '1234567' }), hasStatus(422))
-  const admin = await auth.mockCreateOrganization({ ...body, password: '12345678' })
+  const admin = await auth.mockCreateOrganization({ ...body, password: 'Lantern8' })
   const request = auth.mockJoinOrganization({ organization_id: admin.organization.id, profile: profile('employee@example.com') })
   await assert.rejects(() => auth.mockApproveRequest(admin.organization.id, request.id, '1234567'), hasStatus(422))
-  await auth.mockApproveRequest(admin.organization.id, request.id, '87654321')
+  await auth.mockApproveRequest(admin.organization.id, request.id, 'Rivage82')
   auth.mockLogout()
-  assert.equal((await auth.mockLogin({ email: 'employee@example.com', password: '87654321' })).role, 'employee')
-  assert.equal((await auth.mockLogin({ email: admin.user.email, password: '12345678' })).role, 'admin')
+  assert.equal((await auth.mockLogin({ email: 'employee@example.com', password: 'Rivage82' })).role, 'employee')
+  assert.equal((await auth.mockLogin({ email: admin.user.email, password: 'Lantern8' })).role, 'admin')
 })
 
 test('invalid profile, impossible/future dates and short passwords cannot create an account', async () => {

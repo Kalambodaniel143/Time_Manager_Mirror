@@ -1,4 +1,5 @@
 import { API_URL, MOCK_LATENCY } from '../config'
+import { apiErrorMessage } from '../utils/apiErrors'
 
 export class ApiError extends Error {
   constructor(status, payload) {
@@ -9,20 +10,7 @@ export class ApiError extends Error {
   }
 
   static buildMessage(status, payload) {
-    const errors = payload && payload.errors
-
-    if (errors && typeof errors === 'object' && !errors.detail) {
-      const details = Object.entries(errors)
-        .map(([field, messages]) => `${field} ${[].concat(messages).join(', ')}`)
-        .join(' · ')
-
-      if (details) return details
-    }
-
-    if (status === 403) return 'Accès refusé'
-    if (errors && errors.detail) return errors.detail
-
-    return `Erreur ${status}`
+    return apiErrorMessage(status, payload)
   }
 }
 
@@ -41,13 +29,14 @@ export async function request(path, options = {}) {
   const csrfToken = csrfTokenProvider()
   if (csrfToken) headers['X-CSRF-Token'] = csrfToken
 
-  const response = await fetch(`${API_URL}${path}`, {
+  let response
+  try { response = await fetch(`${API_URL}${path}`, {
     ...options,
     headers,
     // Sends the HttpOnly jwt cookie. The API is served under the same origin
     // (/api, through the Nginx or Vite proxy), so no CORS setup is needed.
     credentials: 'same-origin',
-  })
+  }) } catch (error) { if (error.name === 'AbortError') throw error; throw new ApiError(0, null) }
 
   if (response.status === 204) return null
 

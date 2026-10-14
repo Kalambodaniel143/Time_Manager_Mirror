@@ -101,9 +101,9 @@ Validation serveur obligatoire, même si le front vérifie déjà :
 | `birth_place` | Obligatoire uniquement pour rejoindre ; maximum 100 caractères après trim |
 | `email` | Adresse valide, maximum 254 caractères ; normalisation trim/minuscules et unicité globale |
 | `gender` | Obligatoire uniquement pour rejoindre : `female`, `male`, `non_binary`, `unspecified` ; la dernière valeur permet de ne pas préciser |
-| `birth_date` | Obligatoire uniquement pour rejoindre : date civile `YYYY-MM-DD` valide, entre `1900-01-01` et aujourd’hui |
+| `birth_date` | Obligatoire uniquement pour rejoindre : date civile `YYYY-MM-DD` valide, depuis `1900-01-01`, âge de 18 ans révolus (section 14) |
 | Organisation | Valeur fixe Gotham City, provisionnée manuellement ; aucun nom libre fourni par le formulaire |
-| Mot de passe | 8 à 128 caractères, pas uniquement des espaces ; ne pas modifier silencieusement la valeur |
+| Mot de passe | 8 à 128 caractères, refus des valeurs trop simples (section 14) ; ne pas modifier silencieusement la valeur |
 | Motif de refus | 1 à 500 caractères après trim |
 
 Le mot de passe n’apparaît jamais dans le profil. La confirmation est vérifiée par le front et n’est pas envoyée au serveur.
@@ -704,7 +704,7 @@ Toutes les nouvelles routes sont sous `/api`, dans les pipelines API/auth exista
 | GET/PUT | `/users/:id/payroll-profile` | Lecture personnelle ou administration ; taux/devise modifiés uniquement par son administration. |
 | GET/PATCH | `/auth/preferences` | Préférences du compte authentifié, sans identifiant d’utilisateur dans le corps. |
 | GET | `/audit-events` | 200 dernières actions de son organisation, pour l’administration. |
-| GET | `/notifications` | 100 dernières notifications personnelles. |
+| GET | `/notifications` | Notifications personnelles filtrables et paginées, 50 par page (section 14). |
 | PATCH | `/notifications/:id/read` | Marquage comme lue uniquement pour leur destinataire. |
 
 Les routes existantes de pointage/périodes, utilisateurs et équipes sont conservées, avec protection des semaines et journalisation supplémentaires. L’index de périodes filtre désormais les **chevauchements** de la fenêtre start/end : les périodes originales sont renvoyées sans découpage, et le front répartit leur affichage sur les journées. Cela conserve les services traversant minuit, une semaine ou un mois.
@@ -772,3 +772,63 @@ npm run build
 ```
 
 La mise en ligne doit installer les nouveaux backend/frontend et exécuter les migrations sur la base du serveur existant. Le code local n’active pas de nouvelles routes sur le serveur distant à lui seul.
+
+## 14. Validations, récupération et accessibilité — 13 octobre 2026
+
+Cette section décrit les changements implémentés dans le dépôt. Elle complète les parcours précédents ; leur disponibilité distante exige le déploiement et les migrations.
+
+### Identité, âge et mots de passe
+
+- Admission : **18 ans révolus**, date évaluée en UTC, date civile valide depuis 1900. Le jour du dix-huitième anniversaire est accepté. Un anniversaire du 29 février est considéré au 28 février dans une année non bissextile. Le front limite la date et le serveur répète la validation.
+- Prénom/nom : lettres Unicode, espaces, apostrophes droites/courbes et traits d’union ; les chiffres sont interdits, y compris les chiffres Unicode. Les champs obligatoires et la limite de 100 caractères restent applicables.
+- Nouveau mot de passe : 8–128 caractères ; refus des valeurs uniquement numériques, des mots de passe courants même suivis de chiffres (`Password2026!`, `azerty123`), des répétitions courtes et des valeurs avec moins de quatre caractères distincts après normalisation. Les phrases secrètes sont acceptées sans imposer majuscule/symbole. Cette règle s’applique à la création, l’approbation et au changement/rétablissement. Elle ne bloque pas la connexion d’un ancien compte sur la seule base de la nouvelle politique.
+- L’employé et le manager conservent le changement personnel dans **Mon compte**, avec le mot de passe actuel. Un email informe le titulaire après modification ; il ne contient aucun mot de passe. Le front déconnecte le compte après succès et demande une nouvelle connexion.
+- `users.session_version` augmente lors d’un changement/rétablissement. Le JWT porte cette version et le serveur la compare à la base à chaque requête authentifiée. Les anciennes sessions deviennent invalides (`401`), même sur un autre appareil. La version ne fait pas partie des champs modifiables par le client.
+
+### Récupération publique du mot de passe
+
+Préfixe `/api`, JSON, sans session requise ; contrôle d’origine et limitation de débit actifs.
+
+| Méthode et chemin | Corps attendu | Succès | Erreurs |
+|---|---|---|---|
+| `POST /auth/forgot-password` | `{"email":"agent@example.test"}` | `202 {"data":{"message":"Si un compte actif correspond…"}}`, même réponse pour compte absent/non vérifié/présent | `400` structure incorrecte ; `422` format email ; `429` débit dépassé. |
+| `POST /auth/reset-password` | `{"email":"agent@example.test","code":"01234567","password":"<nouvelle phrase secrète>"}` | `200 {"data":{"message":"Mot de passe réinitialisé. Connectez-vous avec votre nouveau mot de passe."}}` | `400` structure incorrecte ; `422` code incorrect/expiré/utilisé ou mot de passe faible ; `429` débit dépassé. |
+
+Le code comporte **8 chiffres**, expire après **15 minutes**, s’utilise une seule fois et est remplacé à chaque nouvelle demande. Seul son SHA-256 est conservé dans `password_recoveries`. Après cinq mauvais codes, demander un nouveau code est obligatoire. Une erreur de qualité du nouveau mot de passe ne consomme pas le code. Un changement personnel/administratif invalide également les codes précédents.
+
+La requête publique n’expose ni code, ni existence du compte, ni diagnostic de délivrance. L’envoi de récupération est délégué à une tâche supervisée pour que la réponse publique n’attende pas le fournisseur. Il n’existe pas de file persistante de réessai : après interruption du serveur, demander un nouveau code. Un échec d’envoi est journalisé côté serveur ; l’utilisateur peut réessayer ou contacter l’administration. Le code et le mot de passe sont filtrés des logs Phoenix. Les emails de récupération et d’alerte sont bilingues FR/EN. L’envoi utilise `EMAIL_DELIVERY` : Mailpit pour les essais, Resend pour les boîtes réelles. En mode mock, la récupération explique qu’aucun email ne peut être envoyé ; aucun faux succès n’est affiché.
+
+Limites actuelles : demande de code 5/minute/email et 50/minute/IP ; rétablissement 10/minute/email et 100/minute/IP, en plus des cinq essais par code. La réponse ne connecte pas automatiquement l’utilisateur.
+
+### Équipes
+
+`POST /teams/:id/members` refuse le manager de cette même équipe : `422`, avec un `errors.detail` explicite. La vérification porte sur le manager courant sous verrou transactionnel, pas sur un objet chargé avant une modification concurrente. Nommer un membre manager via `PUT /teams/:id` supprime son appartenance redondante à cette équipe. Il reste manager et conserve ses heures.
+
+Le front exclut le manager de la liste des candidats et aligne les boutons Retirer. La migration de nettoyage retire les appartenances redondantes déjà présentes ; elle ne supprime ni utilisateur, ni équipe, ni heures. La composition reste réservée à l’administration.
+
+### Notifications et langue
+
+| Méthode et chemin | Paramètres | Succès |
+|---|---|---|
+| `GET /notifications` | `status=all` (défaut), `read` ou `unread` ; `page=1` par défaut, entier 1–100000 | `200 {"data":[Notification]}` ; filtrage **avant** pagination, 50 résultats par page. Paramètre invalide : `422`. |
+| `GET /notifications/count` | Aucun ; compte connecté | `200 {"data":{"unread":3}}` ; compte toutes les notifications personnelles non lues. |
+| `PATCH /notifications/:id/read` | Aucun corps requis | `200 {"data":Notification}` ; destinataire uniquement (`403` sinon, `404` identifiant absent). |
+| `PATCH /auth/preferences` | `{"language":"fr"}` ou `{"language":"en"}`, en plus des champs existants | `200 {"data":Preferences}` fusionnées ; langue inconnue : `422`. |
+
+La langue par défaut est `fr`. Le navigateur conserve le choix avant connexion ; la préférence du compte est restaurée après connexion. Les libellés, dates et commandes vocales suivent la langue. Les noms, notes et raisons saisis par les personnes ne sont pas traduits automatiquement. Les erreurs API conservent leur structure `errors.detail`/champs ; le front les présente avec le champ concerné et une action à effectuer. Les erreurs en notification flottante restent visibles jusqu’à fermeture.
+
+Le badge est actualisé après connexion, lecture d’une notification, retour au premier plan et toutes les 30 secondes lorsque la page est visible. Ce n’est pas du WebSocket. Les nouvelles décisions de correction annoncent « Correction acceptée » ou « Correction refusée » et expliquent l’effet sur les horaires ; les anciennes notifications déjà stockées ne sont pas réécrites.
+
+### Déploiement et vérification
+
+Deux migrations : `20261013143422_add_password_recovery_and_session_version.exs`, puis `20261013203307_remove_managers_from_own_team_memberships.exs`. Consulter [le déploiement](DEPLOIEMENT_WORKFLOWS.md) et [la recette](RECETTE_VALIDATIONS.md). Les tests frontend/backend peuvent être exécutés localement avant publication. Travis est conservé à l’identique de main ; le raccordement des tests au pipeline est à coordonner avec son responsable. Aucun déploiement distant n’est effectué par ces modifications locales.
+
+## 15. Fusion avec main — 14 octobre 2026
+
+Le parcours réel d’adhésion conserve la vérification email de main. Après `POST /api/join-requests`, l’interface demande un code de **6 chiffres**, distinct du code de récupération du mot de passe (8 chiffres). `POST /api/join-requests/verify-email` prend `{"email":"agent@example.test","code":"012345"}` et répond `200 {"data":{"request_submitted":true,"organization_name":"Gotham City"}}`. `POST /api/join-requests/resend-verification` prend `{"email":"agent@example.test"}` et répond `200 {"data":{"verification_required":true}}`. Code de vérification : 10 minutes, cinq essais, hash en base. Les demandes non vérifiées ne figurent pas dans la liste administrative. La simulation locale reste sans email ni faux code à recopier.
+
+Après acceptation réelle, main envoie les identifiants choisis par l’administrateur via `Email.credentials/4`. En simulation, la transmission reste manuelle. Les mentions de transmission exclusivement manuelle dans les sections précédentes sont remplacées par ce fonctionnement. Un échec du fournisseur lors de l’acceptation renvoie `503`, alors que le compte a déjà été créé : actualiser la liste et gérer la transmission, sans tenter de recréer le compte.
+
+Conserver la migration `20261013100000_add_join_request_email_verification.exs` de main et appliquer aussi `allow_join_request_verification_without_user` : une vérification d’adhésion appartient à une demande, avant qu’un utilisateur n’existe. `email_verifications.user_id` doit donc pouvoir être null ; la contrainte exige toujours exactement un propriétaire (user_id ou join_request_id). Cette correction est additive et ne supprime aucune vérification.
+
+La configuration `.travis.yml` est restaurée à l’identique de main, conformément à la règle du projet. Les scripts et tests locaux restent disponibles.

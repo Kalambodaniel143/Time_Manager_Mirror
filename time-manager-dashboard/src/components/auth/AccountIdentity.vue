@@ -1,7 +1,7 @@
 <template>
   <div class="account-identity">
     <span class="avatar" aria-hidden="true">{{ initials }}</span>
-    <div class="identity"><RouterLink :to="{ name: 'profile' }">{{ session.user.first_name }} {{ session.user.last_name }}</RouterLink><span>{{ roleLabel }}</span><span class="email">{{ session.user.email }}</span><button type="button" @click="$emit('logout')">Se déconnecter</button></div>
+    <div class="identity"><RouterLink :to="{ name: 'profile' }">{{ session.user.first_name }} {{ session.user.last_name }}</RouterLink><span>{{ $t(roleLabel) }}</span><span class="email">{{ session.user.email }}</span><button type="button" @click="$emit('logout')">{{ $t("Se déconnecter") }}</button></div>
   </div>
 </template>
 <script>

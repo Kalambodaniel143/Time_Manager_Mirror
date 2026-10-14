@@ -61,11 +61,21 @@ defmodule TimeManager.Teams do
   end
 
   def update_team(%Team{} = team, attrs) do
-    team
-    |> Team.changeset(attrs)
-    |> validate_manager()
-    |> Repo.update()
-    |> preload_result()
+    Repo.transact(fn ->
+      current = Repo.one!(from t in Team, where: t.id == ^team.id, lock: "FOR UPDATE")
+
+      with {:ok, updated} <-
+             current |> Team.changeset(attrs) |> validate_manager() |> Repo.update() do
+        if updated.manager_id do
+          from(m in "team_members",
+            where: m.team_id == ^team.id and m.user_id == ^updated.manager_id
+          )
+          |> Repo.delete_all()
+        end
+
+        {:ok, preload_team(updated, force: true)}
+      end
+    end)
   end
 
   def delete_team(%Team{} = team), do: Repo.delete(team)
@@ -76,11 +86,21 @@ defmodule TimeManager.Teams do
       do: {:error, :not_found}
 
   def add_member(%Team{id: team_id} = team, %User{id: user_id}) do
-    Repo.insert_all("team_members", [%{team_id: team_id, user_id: user_id}],
-      on_conflict: :nothing
-    )
+    Repo.transact(fn ->
+      current = Repo.one!(from t in Team, where: t.id == ^team_id, lock: "FOR UPDATE")
 
-    {:ok, preload_team(team, force: true)}
+      if current.manager_id == user_id do
+        {:error,
+         {:unprocessable_entity,
+          "Cette personne est déjà le manager de l’équipe. Elle ne peut pas être ajoutée comme membre de sa propre équipe. Choisissez un autre utilisateur."}}
+      else
+        Repo.insert_all("team_members", [%{team_id: team_id, user_id: user_id}],
+          on_conflict: :nothing
+        )
+
+        {:ok, preload_team(team, force: true)}
+      end
+    end)
   end
 
   def remove_member(%Team{id: team_id} = team, %User{id: user_id}) do

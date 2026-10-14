@@ -25,7 +25,17 @@ defmodule TimeManager.Accounts.Profile do
     |> validate_required([:first_name, :last_name, :email])
     |> validate_length(:first_name, max: 100)
     |> validate_length(:last_name, max: 100)
+    |> validate_names()
     |> validate_email()
+  end
+
+  def validate_names(changeset) do
+    Enum.reduce([:first_name, :last_name], changeset, fn field, acc ->
+      validate_format(acc, field, ~r/^[\p{L}\p{M} '\x{2019}-]+$/u,
+        message:
+          "Utilisez des lettres, des espaces, des apostrophes ou des traits d’union, sans chiffres."
+      )
+    end)
   end
 
   @doc "Trims and lower-cases the e-mail, then checks its format and length."
@@ -47,11 +57,18 @@ defmodule TimeManager.Accounts.Profile do
 
   defp validate_birth_date(changeset) do
     validate_change(changeset, :birth_date, fn :birth_date, date ->
-      if Date.compare(date, @oldest_birth_date) == :lt or
-           Date.compare(date, Date.utc_today()) == :gt do
-        [birth_date: "must be between 1900-01-01 and today"]
-      else
-        []
+      today = Date.utc_today()
+      eighteenth_birthday = Date.shift(date, year: 18)
+
+      cond do
+        Date.compare(date, @oldest_birth_date) == :lt or Date.compare(date, today) == :gt ->
+          [birth_date: "Saisissez une date de naissance valide, entre 1900 et aujourd’hui."]
+
+        Date.compare(eighteenth_birthday, today) == :gt ->
+          [birth_date: "Vous devez avoir au moins 18 ans pour rejoindre l’organisation."]
+
+        true ->
+          []
       end
     end)
   end

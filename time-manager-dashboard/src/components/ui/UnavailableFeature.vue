@@ -1,6 +1,6 @@
 <template>
   <section class="card unavailable" role="status">
-    <h2 class="card-title">{{ title }}</h2>
+    <h2 class="card-title">{{ $t(title) }}</h2>
     <p class="muted">{{ text }}</p>
   </section>
 </template>

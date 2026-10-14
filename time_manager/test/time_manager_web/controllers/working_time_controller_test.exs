@@ -12,7 +12,7 @@ defmodule TimeManagerWeb.WorkingTimeControllerTest do
     manager = user_fixture(role: "manager")
     member = user_fixture()
     outsider = user_fixture()
-    team_fixture(manager_id: manager.id, members: [member, manager])
+    team_fixture(manager_id: manager.id, members: [member])
 
     {:ok, period} = WorkingTimes.create_working_time(member.id, @period)
     {:ok, outsider_period} = WorkingTimes.create_working_time(outsider.id, @period)
@@ -89,7 +89,7 @@ defmodule TimeManagerWeb.WorkingTimeControllerTest do
       assert response(delete(conn, ~p"/api/workingtime/#{ctx.period.id}"), 204)
     end
 
-    test "a manager never edits their own hours, even as a team member", %{conn: conn} = ctx do
+    test "a manager never edits their own hours", %{conn: conn} = ctx do
       conn =
         conn
         |> log_in(ctx.manager)

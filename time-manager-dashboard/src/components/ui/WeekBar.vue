@@ -1,17 +1,17 @@
 <template>
   <div class="week-bar">
-    <div class="track" role="img" :aria-label="ariaLabel">
+    <div class="track" role="img" :aria-label="$t(ariaLabel)">
       <span
         v-for="segment in segments"
         :key="segment.kind"
         class="segment"
         :class="`segment-${segment.kind}`"
         :style="{ width: `${segment.width}%` }"
-        :title="`${segment.label} · ${segment.hoursLabel}`"
+        :title="$t(`${segment.label} · ${segment.hoursLabel}`)"
       ></span>
       <span v-if="hasTarget" class="target" :style="{ left: `calc(${(target / scale) * 100}% - 3px)` }" aria-hidden="true"></span>
     </div>
-    <p class="caption">{{ totalLabel }} enregistrées<template v-if="hasTarget"> · seuil d’heures supplémentaires : {{ targetLabel }} / semaine.</template><template v-else> · répartition jour/nuit estimée d’après les horaires, sans calcul de paie.</template></p>
+    <p class="caption">{{ $t(totalLabel) }} {{ $t("enregistrées") }}<template v-if="hasTarget"> {{ $t("· seuil d’heures supplémentaires :") }} {{ $t(targetLabel) }} {{ $t("/ semaine.") }}</template><template v-else> {{ $t("· répartition jour/nuit estimée d’après les horaires, sans calcul de paie.") }}</template></p>
     <div class="legend">
       <HourTag v-for="segment in legend" :key="segment.kind" :kind="segment.kind" :hours="segment.hours" />
     </div>

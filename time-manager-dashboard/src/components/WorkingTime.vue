@@ -4,17 +4,17 @@
       <form class="dialog card" novalidate @submit.prevent="submit">
         <header class="dialog-header">
           <div>
-            <p class="eyebrow">{{ isEditing ? `Période n° ${form.id}` : 'Nouvelle période' }}</p>
-            <h3 class="card-title">{{ title }}</h3>
+            <p class="eyebrow">{{ $t(isEditing ? `Période n° ${form.id}` : 'Nouvelle période') }}</p>
+            <h3 class="card-title">{{ $t(title) }}</h3>
           </div>
-          <button class="btn btn-quiet btn-icon btn-sm" type="button" aria-label="Fermer" @click="close">
+          <button class="btn btn-quiet btn-icon btn-sm" type="button" :aria-label="$t(&quot;Fermer&quot;)" @click="close">
             <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" /></svg>
           </button>
         </header>
 
         <div class="dialog-body">
           <div v-if="!isEditing" class="presets">
-            <span class="field-label">Raccourcis</span>
+            <span class="field-label">{{ $t("Raccourcis") }}</span>
             <div class="preset-list">
               <button
                 v-for="preset in presets"
@@ -24,13 +24,13 @@
                 type="button"
                 @click="applyPreset(preset)"
               >
-                {{ preset.label }} <span class="preset-hours num">{{ preset.hint }}</span>
+                {{ $t(preset.label) }} <span class="preset-hours num">{{ $t(preset.hint) }}</span>
               </button>
             </div>
           </div>
 
           <div class="field">
-            <label class="field-label" for="wt-day">Jour</label>
+            <label class="field-label" for="wt-day">{{ $t("Jour") }}</label>
             <input
               id="wt-day"
               v-model="fields.day"
@@ -38,12 +38,12 @@
               :class="{ 'has-error': showErrors && errors.day }"
               type="date"
             />
-            <span v-if="showErrors && errors.day" class="field-error">{{ errors.day }}</span>
+            <span v-if="showErrors && errors.day" class="field-error">{{ $t(errors.day) }}</span>
           </div>
 
           <div class="time-row">
             <div class="field">
-              <label class="field-label" for="wt-start">Début</label>
+              <label class="field-label" for="wt-start">{{ $t("Début") }}</label>
               <input
                 id="wt-start"
                 v-model="fields.startTime"
@@ -55,7 +55,7 @@
             </div>
             <span class="time-arrow" aria-hidden="true">→</span>
             <div class="field">
-              <label class="field-label" for="wt-end">Fin</label>
+              <label class="field-label" for="wt-end">{{ $t("Fin") }}</label>
               <input
                 id="wt-end"
                 v-model="fields.endTime"
@@ -67,38 +67,32 @@
             </div>
           </div>
           <span v-if="showErrors && (errors.start || errors.end)" class="field-error time-error">
-            {{ errors.start || errors.end }}
+            {{ $t(errors.start || errors.end) }}
           </span>
 
-          <label class="field"><span class="field-label">Catégorie de rémunération</span><select v-model="form.kind" class="input"><option value="work">Travail normal (jour/nuit calculés)</option><option value="oncall">Astreinte</option><option value="recup">Travail donnant droit à récupération</option></select><span class="field-hint">Horaires en UTC. La catégorie s’applique à toute la période.</span></label>
+          <label class="field"><span class="field-label">{{ $t("Catégorie de rémunération") }}</span><select v-model="form.kind" class="input"><option value="work">{{ $t("Travail normal (jour/nuit calculés)") }}</option><option value="oncall">{{ $t("Astreinte") }}</option><option value="recup">{{ $t("Travail donnant droit à récupération") }}</option></select><span class="field-hint">{{ $t("Horaires en UTC. La catégorie s’applique à toute la période.") }}</span></label>
           <label class="switch-row">
             <input v-model="fields.nextDay" class="switch-input" type="checkbox" />
             <span class="switch" aria-hidden="true"></span>
-            <span>
-              Se termine le lendemain
-              <span class="switch-hint">pour les horaires de nuit</span>
+            <span> {{ $t("Se termine le lendemain") }} <span class="switch-hint">{{ $t("pour les horaires de nuit") }}</span>
             </span>
           </label>
 
-          <p v-if="suggestNextDay" class="suggestion">
-            L'heure de fin est avant l'heure de début.
-            <button class="link-btn" type="button" @click="fields.nextDay = true">
-              Terminer le lendemain ?
-            </button>
+          <p v-if="suggestNextDay" class="suggestion"> {{ $t("L'heure de fin est avant l'heure de début.") }} <button class="link-btn" type="button" @click="fields.nextDay = true"> {{ $t("Terminer le lendemain ?") }} </button>
           </p>
 
           <div class="summary" :class="{ muted: durationHours <= 0 }">
             <div>
-              <p class="eyebrow">Durée</p>
-              <p class="summary-value serif num">{{ durationLabel }}</p>
+              <p class="eyebrow">{{ $t("Durée") }}</p>
+              <p class="summary-value serif num">{{ $t(durationLabel) }}</p>
             </div>
-            <div class="summary-range num" title="Format envoyé à l'API">
-              <span>{{ form.start || '—' }}</span>
-              <span>{{ form.end || '—' }}</span>
+            <div class="summary-range num" :title="$t(&quot;Format envoyé à l'API&quot;)">
+              <span>{{ $t(form.start || '—') }}</span>
+              <span>{{ $t(form.end || '—') }}</span>
             </div>
           </div>
 
-          <p v-if="submitError" class="form-error">{{ submitError }}</p>
+          <p v-if="submitError" class="form-error">{{ $t(submitError) }}</p>
         </div>
 
         <footer class="dialog-footer">
@@ -110,12 +104,12 @@
             :disabled="saving"
             @click="deleteArmed ? deleteWorkingTime() : armDelete()"
           >
-            {{ deleteArmed ? 'Vraiment supprimer ?' : 'Supprimer' }}
+            {{ $t(deleteArmed ? 'Vraiment supprimer ?' : 'Supprimer') }}
           </button>
           <span class="spacer"></span>
-          <button class="btn btn-ghost" type="button" :disabled="saving" @click="close">Annuler</button>
+          <button class="btn btn-ghost" type="button" :disabled="saving" @click="close">{{ $t("Annuler") }}</button>
           <button class="btn btn-primary" type="submit" :disabled="saving">
-            {{ saving ? 'Enregistrement…' : isEditing ? 'Enregistrer' : 'Ajouter la période' }}
+            {{ $t(saving ? 'Enregistrement…' : isEditing ? 'Enregistrer' : 'Ajouter la période') }}
           </button>
         </footer>
       </form>
