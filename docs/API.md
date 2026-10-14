@@ -1,4 +1,4 @@
-> Les nouvelles routes métier, les restrictions de création directe et leurs payloads sont décrits dans la [section 13 du contrat](CONTRAT_BACKEND_ORGANISATIONS.md#13-implementation-complete-des-workflows--12-octobre-2026). OpenAPI `/api/openapi` est généré depuis le routeur actuellement exécuté.
+> Pour les routes et comportements actuels, consulter la [documentation backend](BACKEND.md#4-contrats-des-endpoints-backend) et la [section 13 du contrat](CONTRAT_BACKEND_ORGANISATIONS.md#13-implementation-complete-des-workflows-12-octobre-2026). Cette page décrit aussi des parcours historiques : `POST /auth/register`, `POST /organizations` et `POST /users` sont désormais désactivés (403). Les payloads, formats de dates et autorisations actuels sont détaillés dans BACKEND.md. OpenAPI `/api/openapi` décrit le routeur du serveur actuellement exécuté.
 
 # API du Time Manager
 

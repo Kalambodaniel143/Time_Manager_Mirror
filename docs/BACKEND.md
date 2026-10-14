@@ -1,771 +1,560 @@
-# Backend du Time Manager — architecture et fonctionnement
+# Backend — architecture, code métier et endpoints
 
-*Oct 5, 2026 · @KALAMBO DANIEL*
+Documentation du code de `Theme_5_authentification_security/time_manager`, revue le **13 octobre 2026**. Elle décrit le dépôt ; la version d'un serveur dépend du code effectivement déployé. Les chemins de fichiers ci-dessous sont relatifs à `time_manager/`.
 
-Le backend du Time Manager est une API REST écrite en **Elixir** avec le framework **Phoenix**. Il stocke ses données dans **PostgreSQL** via **Ecto**. Il gère les comptes et leurs rôles, les équipes, les pointages (arrivée, pause, reprise, départ) et les temps de travail qui en découlent.
+API HTTP en **Elixir/Phoenix**, servie par **Bandit**, avec **Ecto/PostgreSQL** pour la persistance : admission Gotham City, comptes, équipes, pointages, heures, corrections, validations, plannings, échanges, absences, paie, préférences et notifications.
 
-Ce document explique comment le code est organisé, ce que contient chaque fichier important, et ce qui se passe réellement quand une requête arrive. Le détail de chaque route (paramètres, réponses, exemples `curl`) est dans la [documentation de l'API](API.md) ; le déploiement est dans la [documentation DevOps](DEVOPS.md).
+## 1. Architecture du backend
 
-## Sommaire
+### 1.1 Pattern utilisé
 
-1. [Vue d'ensemble](#1-vue-densemble)
-2. [Les technologies et pourquoi](#2-les-technologies-et-pourquoi)
-3. [L'arborescence du projet](#3-larborescence-du-projet)
-4. [Le trajet d'une requête](#4-le-trajet-dune-requete)
-5. [Le modèle de données](#5-le-modele-de-donnees)
-6. [Les contextes métier, fichier par fichier](#6-les-contextes-metier-fichier-par-fichier)
-7. [La couche web, fichier par fichier](#7-la-couche-web-fichier-par-fichier)
-8. [L'authentification en détail](#8-lauthentification-en-detail)
-9. [Les autorisations : rôle et périmètre](#9-les-autorisations-role-et-perimetre)
-10. [Les pointages : la machine à états](#10-les-pointages-la-machine-a-etats)
-11. [La gestion des erreurs](#11-la-gestion-des-erreurs)
-12. [Configuration et variables d'environnement](#12-configuration-et-variables-denvironnement)
-13. [Migrations et données de référence](#13-migrations-et-donnees-de-reference)
-14. [Les tests](#14-les-tests)
-15. [Lancer le backend](#15-lancer-le-backend)
-16. [Ajouter une fonctionnalité : la marche à suivre](#16-ajouter-une-fonctionnalite-la-marche-a-suivre)
-17. [Limites connues et pistes](#17-limites-connues-et-pistes)
+Le backend suit l'architecture Phoenix **par contextes métier**, dans un monolithe modulaire. La couche web ressemble à MVC : routeur, contrôleurs, schémas et modules de présentation `*JSON`. Les réponses JSON remplacent les vues HTML pour le métier.
 
----
+Ce n'est pas une Clean Architecture stricte : les contextes utilisent directement Ecto et `Repo`, sans interfaces de repository indépendantes.
 
-## 1. Vue d'ensemble
-
-Le backend ne sert aucune page HTML : il reçoit du JSON et renvoie du JSON. Le tableau de bord Vue.js (`time-manager-dashboard/`) est son unique client.
-
-```
- Navigateur (Vue.js)                  Backend Phoenix                         PostgreSQL
- ───────────────────                  ───────────────                         ──────────
-  cookie jwt (HttpOnly)  ───────▶  Endpoint ─▶ Router ─▶ Plug Authenticate
-  en-tête X-CSRF-Token                                     │
-                                                           ▼
-                                              Contrôleur (couche web)
-                                                │  1. lit les paramètres
-                                                │  2. demande à Authorization
-                                                │  3. appelle un contexte
-                                                ▼
-                                              Contexte (couche métier)  ───▶  Ecto ─▶ tables
-                                                │
-                                                ▼
-                                              Vue JSON  ───▶  réponse { "data": ... }
-```
-
-Le code est découpé en **deux couches** qui ne se mélangent pas :
-
-| Couche | Dossier | Rôle | Connaît HTTP ? |
-|---|---|---|---|
-| **Métier** | `lib/time_manager/` | Les règles : qui est un utilisateur, ce qu'est un pointage valide, quand créer une période de travail. Parle à la base. | Non |
-| **Web** | `lib/time_manager_web/` | Traduire HTTP en appels métier : routes, authentification, contrôle d'accès, format JSON, codes HTTP. | Oui |
-
-Cette séparation est la convention de Phoenix. Elle a une conséquence pratique : les règles métier se testent sans serveur HTTP (voir les tests de `test/time_manager/`), et un contrôleur ne contient jamais de requête SQL.
-
-**Les quatre domaines** gérés par l'API :
-
-- **Comptes** — utilisateurs, mot de passe, rôle (`employee`, `manager`, `administrator`).
-- **Équipes** — un manager, des membres. Elles définissent ce qu'un manager a le droit de voir.
-- **Pointages** (`clocks`) — les événements bruts : arrivée, pause, reprise, départ.
-- **Temps de travail** (`workingtime`) — les périodes travaillées, avec un début et une fin. Elles sont créées automatiquement par les pointages, ou saisies et corrigées par un manager.
-
----
-
-## 2. Les technologies et pourquoi
-
-| Outil | Version | Rôle dans le projet |
+| Couche | Emplacement | Responsabilité |
 |---|---|---|
-| Elixir / OTP | 1.17 / 27 | Le langage. Fonctionnel, immuable : une fonction ne modifie jamais ses arguments, ce qui rend le flux des données facile à suivre. |
-| Phoenix | 1.8 | Le framework web : endpoint, routeur, contrôleurs, vues JSON. |
-| Bandit | 1.5+ | Le serveur HTTP qui exécute Phoenix. |
-| Ecto / ecto_sql | 3.13+ | L'accès à la base : schémas, *changesets* (validation), requêtes, transactions, migrations. |
-| Postgrex | — | Le pilote PostgreSQL utilisé par Ecto. |
-| PostgreSQL | 16 | La base de données. Elle porte aussi des contraintes (clés étrangères, `CHECK`, index uniques) qui protègent les données même si le code se trompe. |
-| Joken | 2.6+ | Signature et vérification des JWT de session (HS256). |
-| bcrypt_elixir | 3.3+ | Hachage des mots de passe. |
-| OpenApiSpex | 3.21+ | Description OpenAPI de chaque route, servie en JSON et dans Swagger UI. |
-| Jason | 1.2+ | Encodage et décodage JSON. |
+| Entrée HTTP | `lib/time_manager_web/endpoint.ex`, `router.ex`, `plugs/` | Décoder la requête, vérifier origine/session, sélectionner l'action. |
+| Contrôleurs et présentation | `lib/time_manager_web/controllers/` | Lire les paramètres, contrôler l'accès, appeler le métier, produire statut et JSON. |
+| Contextes métier | `lib/time_manager/*.ex`, `workforce/` | Règles, transitions, périmètres, transactions et calculs. |
+| Données | Schémas Ecto des sous-dossiers métier, `repo.ex` | Décrire les tables, valider les modifications et exécuter les requêtes. |
+| Infrastructure | `config/`, `application.ex`, `priv/repo/` | Configuration, supervision OTP, migrations et données de référence. |
 
-Swoosh, LiveDashboard, Gettext et DNSCluster viennent du générateur Phoenix ; ils sont présents mais ne jouent pas de rôle dans le métier.
+Un **changeset** décrit et valide des modifications ; il ne persiste rien à lui seul. `Repo.insert/update/delete` effectue l'écriture. Un contexte regroupe les opérations du domaine, par exemple `Clocks.create_clock/2` ou `Workforce.Planning.publish/3`.
 
----
+### 1.2 Flux du client à la base
 
-## 3. L'arborescence du projet
-
-Seuls les fichiers qui comptent sont listés. Tout se trouve dans `time_manager/`.
-
-```
-time_manager/
-├── mix.exs                         Projet, dépendances, alias (setup, test, precommit)
-├── Dockerfile, entrypoint.sh       Image Docker et script de démarrage du conteneur
-├── config/
-│   ├── config.exs                  Configuration commune (endpoint, JSON, logger)
-│   ├── dev.exs / test.exs / prod.exs   Réglages par environnement
-│   └── runtime.exs                 Lu au démarrage : secrets et variables d'environnement
-├── lib/
-│   ├── time_manager/               ── COUCHE MÉTIER ──
-│   │   ├── application.ex          Arbre de supervision : ce qui démarre avec l'application
-│   │   ├── repo.ex                 Le dépôt Ecto (la connexion à PostgreSQL)
-│   │   ├── accounts.ex             Contexte Comptes : utilisateurs, mot de passe, rôles
-│   │   ├── accounts/user.ex        Schéma users + validations
-│   │   ├── accounts/role.ex        Schéma roles (lecture seule)
-│   │   ├── authorization.ex        La matrice des permissions (rôle × périmètre)
-│   │   ├── token.ex                Création du JWT de session et du token CSRF
-│   │   ├── teams.ex                Contexte Équipes
-│   │   ├── teams/team.ex           Schéma teams
-│   │   ├── clocks.ex               Contexte Pointages : machine à états, transaction, verrou
-│   │   ├── clocks/clock.ex         Schéma clocks
-│   │   ├── working_times.ex        Contexte Temps de travail
-│   │   └── working_times/working_time.ex   Schéma workingtime
-│   └── time_manager_web/           ── COUCHE WEB ──
-│       ├── endpoint.ex             Premier point d'entrée HTTP : chaîne de plugs
-│       ├── router.ex               Table des routes et pipelines
-│       ├── plugs/authenticate.ex   Vérifie cookie + CSRF, charge l'utilisateur
-│       ├── api_spec.ex             Racine de la spécification OpenAPI
-│       ├── controllers/
-│       │   ├── authz.ex            Petites aides partagées : current_user, authorize, cast_id
-│       │   ├── auth_controller.ex  Connexion, inscription, session, déconnexion
-│       │   ├── user_controller.ex, team_controller.ex, role_controller.ex
-│       │   ├── clock_controller.ex, working_time_controller.ex
-│       │   ├── *_json.ex           Vues : transforment les structures en JSON
-│       │   ├── fallback_controller.ex  Transforme {:error, ...} en réponse HTTP
-│       │   └── changeset_json.ex, error_json.ex   Format des erreurs
-│       └── schemas/                Schémas OpenAPI des requêtes et réponses
-├── priv/repo/
-│   ├── migrations/                 Historique des changements de structure de la base
-│   └── seeds.exs                   Rôles + premier administrateur
-└── test/
-    ├── support/                    ConnCase, DataCase, fixtures (utilisateurs, équipes)
-    ├── time_manager/               Tests de la couche métier
-    └── time_manager_web/           Tests HTTP des contrôleurs
+```text
+Client Vue / client HTTP
+  → proxy Vite ou Nginx pour /api
+  → Bandit → Endpoint : parsing JSON, identifiant de requête, télémétrie
+  → Router : pipelines :api puis :auth pour les routes protégées
+  → CheckOrigin → Authenticate → conn.assigns.current_user
+  → Controller → Authorization / Workforce → contexte métier
+  → Ecto.Query / Changeset → Repo → PostgreSQL
+  → *JSON ou json(conn, %{data: résultat}) → réponse HTTP
 ```
 
-**Le vocabulaire Phoenix utilisé dans ce document :**
+Le proxy n'est pas obligatoire pour un client serveur. Il permet au navigateur d'appeler l'API sur l'hôte du frontend et de transmettre le cookie.
 
-- **Plug** — une fonction qui reçoit la connexion (`conn`) et la renvoie modifiée. Une requête traverse une chaîne de plugs. Un plug peut l'arrêter (`halt`), par exemple pour répondre 401.
-- **Contexte** — un module métier qui regroupe tout ce qui concerne un domaine (`Accounts`, `Clocks`…). C'est la seule porte d'entrée vers ses tables.
-- **Schéma** — la correspondance entre une table et une structure Elixir (`%User{}`).
-- **Changeset** — la description d'une modification : quels champs changent, sont-ils valides, quelles erreurs. Rien n'est écrit en base tant qu'un changeset n'est pas valide.
-- **`with`** — la forme Elixir pour enchaîner des étapes qui peuvent échouer. Dès qu'une étape ne renvoie pas le motif attendu (`{:ok, ...}` ou `:ok`), le `with` s'arrête et renvoie l'erreur telle quelle.
-
----
-
-## 4. Le trajet d'une requête
-
-Prenons une vraie requête : un employé connecté pointe son arrivée.
-
-```
-POST /api/clocks/42
-Cookie: jwt=eyJhbGciOi...
-X-CSRF-Token: 3vQb9...
-Content-Type: application/json
-
-{ "clock": { "time": "2026-10-05 09:00:00", "status": true } }
-```
-
-**Étape 1 — `TimeManagerWeb.Endpoint`** (`endpoint.ex`). Chaque requête traverse dans l'ordre : `Plug.RequestId` (un identifiant pour les logs), `Plug.Telemetry` (mesures), `Plug.Parsers` (le corps JSON devient une map Elixir), `Plug.MethodOverride`, `Plug.Head`, `Plug.Session`, puis le routeur.
-
-**Étape 2 — `TimeManagerWeb.Router`** (`router.ex`). Le chemin `/api/clocks/:userID` est déclaré dans le scope `/api` qui traverse deux pipelines :
-
-- `:api` — n'accepte que le JSON et attache la spec OpenAPI à la connexion ;
-- `:auth` — exécute le plug `Authenticate`.
-
-**Étape 3 — `TimeManagerWeb.Plugs.Authenticate`**. Il lit le cookie `jwt` et l'en-tête `X-CSRF-Token`, vérifie la signature et l'expiration du JWT, compare le token CSRF à celui gravé dans le JWT, puis **recharge l'utilisateur depuis la base**. Si une seule étape échoue, la requête s'arrête ici avec **401**. Sinon, l'utilisateur est rangé dans `conn.assigns.current_user`. Le détail est en [section 8](#8-lauthentification-en-detail).
-
-**Étape 4 — `ClockController.create/2`**.
+Extrait réel de `controllers/clock_controller.ex` :
 
 ```elixir
 def create(conn, %{"clock" => attrs}) when is_map(attrs) do
-  with {:ok, user_id} <- cast_id(conn.path_params["userID"]),                     # "42" -> 42
-       :ok <- authorize(Authorization.can_clock?(current_user(conn), user_id)),   # 403 sinon
-       {:ok, user} <- fetch_user(user_id),                                        # 404 sinon
-       {:ok, clock} <- Clocks.create_clock(user, attrs) do                        # 422 sinon
-    conn |> put_status(:created) |> render(:show, clock: clock)
+  with {:ok, user_id} <- cast_id(conn.path_params["userID"]),
+       :ok <- authorize(Authorization.can_clock?(current_user(conn), user_id)),
+       {:ok, user} <- Accounts.fetch_user(user_id),
+       {:ok, clock} <- Clocks.create_clock(user, attrs) do
+    conn
+    |> put_status(:created)
+    |> render(:show, clock: clock)
   end
 end
 ```
 
-Chaque ligne du `with` correspond à un code d'erreur possible. L'ordre compte : le droit d'accès est vérifié **avant** de charger l'utilisateur ciblé, pour ne pas révéler par un 404 si un compte existe.
+Le contrôleur vérifie l'appelant ; `Clocks` verrouille le salarié, vérifie la transition, insère le pointage et ferme éventuellement une période travaillée dans la même transaction. `ClockJSON` choisit les champs retournés. Une erreur du `with` est traduite par `FallbackController`.
 
-**Étape 5 — `Clocks.create_clock/2`** (couche métier). Elle valide le pointage, ouvre une transaction, verrouille la ligne de l'utilisateur, vérifie que l'arrivée est permise après le dernier pointage, l'insère, et crée une période de travail s'il s'agit d'une fin de segment. Voir la [section 10](#10-les-pointages-la-machine-a-etats).
+### 1.3 Sécurité et cohérence
 
-**Étape 6 — `ClockJSON.show/1`**. La structure `%Clock{}` devient :
+- `Token` signe un JWT **HS256**, valable huit heures, contenant notamment `user_id`, `role`, `xsrf`, `jti`. Il est signé, pas chiffré.
+- `AuthController` place le JWT dans le cookie `jwt`, `HttpOnly`, `SameSite=Strict`, chemin `/`. `COOKIE_SECURE=true` active `Secure`.
+- `Authenticate` exige cookie et `X-CSRF-Token`, **même sur les GET protégés**. Il vérifie signature, expiration, révocation et correspondance CSRF, puis recharge utilisateur et rôle en base.
+- `Authorization` définit rôle et périmètre. `Workforce` ajoute les permissions `correct`, `validate`, `publish` des équipes.
+- Le manager intervient sur les membres des équipes qu'il dirige actuellement ; l'administrateur dans son organisation. Aucun responsable ne corrige directement ses propres périodes ni ne valide sa propre feuille, correction ou absence.
+- `Repo.transact` et les verrous de lignes protègent les mutations concurrentes. Les validations groupées verrouillent les salariés par ID croissant. Le planning vérifie `revision` ; publication et modification des règles partagent un verrou d'organisation.
+
+La déconnexion inscrit le `jti` dans `revoked_tokens`. Un rôle modifié ou un compte supprimé est pris en compte dès la requête suivante. Les comptes historiques sans organisation restent dans un espace distinct ; ils ne sont pas automatiquement rattachés à Gotham City.
+
+## 2. Organisation des fichiers
+
+```text
+time_manager/
+├── mix.exs / mix.lock                 Projet, dépendances et alias Mix
+├── Dockerfile / entrypoint.sh         Construction et démarrage du conteneur
+├── config/
+│   ├── config.exs                     Configuration commune
+│   ├── dev.exs / test.exs / prod.exs   Configuration selon MIX_ENV
+│   └── runtime.exs                    Variables et secrets lus au démarrage
+├── lib/
+│   ├── time_manager.ex               Module d'entrée du domaine
+│   ├── time_manager_web.ex           Macros partagées : controller, router, etc.
+│   ├── time_manager/
+│   │   ├── application.ex / repo.ex  Supervision OTP et dépôt Ecto
+│   │   ├── accounts.ex               Comptes, mots de passe, sessions et vérification email
+│   │   ├── accounts/                 User, Role, Profile, RevokedToken, EmailVerification
+│   │   ├── organizations.ex          Provisionnement interne et demandes d'adhésion
+│   │   ├── organizations/            Organization et JoinRequest
+│   │   ├── authorization.ex          Droits généraux et isolation des organisations
+│   │   ├── token.ex                  Signature JWT et génération CSRF
+│   │   ├── teams.ex / teams/         Gestion et schéma des équipes
+│   │   ├── clocks.ex / clocks/       Machine à états et schéma des pointages
+│   │   ├── working_times.ex          Écriture et lecture des périodes
+│   │   ├── working_times/            Schéma WorkingTime et validations
+│   │   ├── workforce.ex             Règles, permissions, verrouillage, audit, préférences
+│   │   ├── workforce/
+│   │   │   ├── time_sheets.ex        Notes, validation/clôture et corrections
+│   │   │   ├── planning.ex           Plannings, gardes, publication et échanges
+│   │   │   ├── absences.ex           Demandes, décisions et heures rémunérables
+│   │   │   ├── payroll.ex            Calcul mensuel, taux et CSV
+│   │   │   └── autres *.ex           Schémas Ecto : Sheet, Plan, Shift, Swap, etc.
+│   │   └── email*.ex / mailer.ex / resend.ex  Construction et transport des emails
+│   └── time_manager_web/
+│       ├── endpoint.ex / router.ex   Chaîne HTTP, routes et pipelines
+│       ├── api_spec.ex               Spécification OpenAPI issue du routeur
+│       ├── plugs/                    Authenticate, CheckOrigin et RateLimit
+│       ├── rate_limiter.ex           Compteurs de limitation, en mémoire sur ce nœud
+│       ├── controllers/              Actions HTTP, *JSON, Authz et FallbackController
+│       ├── schemas/                  Descriptions OpenAPI, distinctes des schémas Ecto
+│       └── telemetry.ex / gettext.ex Mesures et infrastructure Phoenix
+├── priv/
+│   ├── repo/migrations/              Évolution versionnée du schéma PostgreSQL
+│   ├── repo/seeds.exs                Rôles et premier compte administrateur
+│   └── static/                       Ressources statiques du backend
+└── test/
+    ├── support/                      DataCase, ConnCase et fixtures
+    ├── time_manager/                 Tests métier et concurrence PostgreSQL
+    └── time_manager_web/             Tests HTTP, autorisations, plugs et OpenAPI
+```
+
+`workforce/planning.ex` est un contexte ; `workforce/plan.ex` est un schéma. Les **middlewares** sont les plugs. Les fonctions habituellement appelées « services » résident dans les contextes et modules d'infrastructure ; il n'existe pas de dossier backend `services/`.
+
+| Domaine | Tables principales | Relations |
+|---|---|---|
+| Identité | roles, users, organizations | Utilisateur → rôle/organisation ; organisation identifiée par UUID. |
+| Admission/session | join_requests, email_verifications, revoked_tokens | Demandes, codes email et sessions révoquées. |
+| Équipes | teams, team_members, team_permissions | Manager, membres et permissions d'équipe. |
+| Temps | clocks, workingtime, weekly_sheets, correction_requests | Événements, intervalles, état hebdomadaire et corrections proposées. |
+| Planning | workforce_plans, planned_shifts, shift_swaps | Brouillon/version publiée, affectations et échanges. |
+| Absences/paie | absence_requests, payroll_profiles | Absences, heures rémunérables et taux personnel. |
+| Réglages/suivi | workforce_settings, account_preferences, workforce_events, workforce_notifications | Règles, préférences, historique et notifications. |
+
+Les migrations portent clés étrangères, index uniques et contraintes. La suppression d'un compte supprime ses données opérationnelles selon ces relations ; certaines références d'acteurs/relecteurs conservées deviennent `null`. Consulter les migrations pour les cascades exactes.
+
+## 3. Fichiers clés et implémentation des fonctionnalités
+
+| Fichier critique | Logique à rechercher |
+|---|---|
+| accounts.ex, accounts/user.ex, accounts/profile.ex | Identité, Argon2id, compatibilité bcrypt, changement de mot de passe et dernier administrateur. |
+| organizations.ex | Création interne d'organisation/admin, nom normalisé, référence privée, approbation atomique et employé par défaut. |
+| authorization.ex, workforce.ex | Périmètres, flags des managers, règles, préférences, audit, notifications et semaines verrouillées. |
+| teams.ex | Composition, manager, appartenance et équipes gérées. |
+| clocks.ex | Transitions arrival/pause/resume/departure, départ oublié sur sept jours et création atomique des périodes. |
+| working_times.ex, working_times/working_time.ex | Durées positives, fin non future, chevauchements et catégories work/oncall/recup. |
+| workforce/time_sheets.ex | Notes ; open → validated → closed ; réouverture ; corrections avec vérification des horaires d'origine. |
+| workforce/planning.ex | Revision, copie publiée, quotas, délai, absences/chevauchements et consentement avant échange. |
+| workforce/absences.ex | pending/approved/rejected/cancelled et confirmation de payable_hours. |
+| workforce/payroll.ex | Découpage UTC, majorations exclusives, rémunération d'absence, Decimal et CSV. |
+| controllers/workforce_controller.ex | Adaptateur HTTP commun des workflows ; délégation aux contextes. |
+| controllers/*_json.ex, fallback_controller.ex | Forme publique des objets, confidentialité et erreurs HTTP. |
+
+Mots de passe : **8 à 128 caractères**, nouveaux hashes Argon2id. Les anciens bcrypt sont migrés à la connexion réussie. Aucun hash/mot de passe n'est retourné.
+
+Une semaine validated/closed bloque les périodes, pointages concernés, notes et régularisations d'absence. La réouverture motivée exige un responsable autorisé autre que le salarié.
+
+Le planning conserve un snapshot interne : l'employé lit les gardes publiées pendant que le responsable modifie le brouillon. La réponse peut inclure les métadonnées d'un brouillon sans affectations publiées ; elle ne lui expose pas les gardes non publiées. `published` indique si la révision courante correspond à la révision publiée.
+
+### Routage : déclaration et enregistrement
+
+Les routes sont définies dans **lib/time_manager_web/router.ex**. L'endpoint termine sa chaîne par `plug TimeManagerWeb.Router`. Phoenix compile ces déclarations : aucune inscription manuelle supplémentaire n'est nécessaire.
+
+Extrait réel :
+
+```elixir
+pipeline :api do
+  plug :accepts, ["json"]
+  plug TimeManagerWeb.Plugs.CheckOrigin
+  plug OpenApiSpex.Plug.PutApiSpec, module: TimeManagerWeb.ApiSpec
+end
+
+pipeline :auth do
+  plug TimeManagerWeb.Plugs.Authenticate
+end
+```
+
+Les scopes publics utilisent `pipe_through :api`, les protégés `pipe_through [:api, :auth]`. `scope "/api", TimeManagerWeb` ajoute préfixe d'URL et namespace des contrôleurs. `resources "/teams", TeamController, except: [:new, :edit]` génère les actions REST ; **update accepte PUT et PATCH**. Les routes workingtime sont déclarées explicitement et ont des chemins différents selon l'action.
+
+`AdmissionPolicyController` traite actuellement les POST /auth/register, /organizations, /users. Les anciennes actions create/register présentes dans d'autres contrôleurs ne sont pas celles enregistrées pour ces chemins.
+
+`mix phx.routes` liste les routes ; `/api/openapi` expose la spécification et `/swaggerui` son interface. Les schémas WorkflowRequest/WorkflowResponse restent génériques : les tableaux ci-dessous précisent leurs champs. Aucun plug global CastAndValidate n'est installé ; contrôleurs et contextes effectuent la validation réelle.
+
+## 4. Contrats des endpoints backend
+
+### 4.1 Conventions communes
+
+**Tous les chemins des tableaux sont préfixés par `/api`.** Identifiants de comptes, équipes, périodes et workflows : entiers. org_id et ID de demande d'adhésion : UUID.
+
+```http
+Accept: application/json
+Content-Type: application/json
+Cookie: jwt=<cookie obtenu à la connexion>
+X-CSRF-Token: <csrf_token obtenu à la connexion>
+```
+
+Content-Type concerne les requêtes avec corps. Cookie et CSRF sont obligatoires sur les routes protégées ; `Authorization: Bearer` n'est pas utilisé. Pour l'export CSV, conserver les en-têtes d'authentification et l'acceptation JSON du pipeline ; la **réponse** sera text/csv.
+
+CheckOrigin contrôle POST/PUT/PATCH/DELETE, routes publiques incluses : il compare le **nom d'hôte** d'Origin ou, à défaut, Referer à conn.host, sans comparer port et schéma. Sans ces en-têtes, ce contrôle passe. Il ne remplace pas les autorisations.
+
+Succès JSON : `{"data": objet}` ou `{"data": [objets]}`. La notation **data: User** signifie `{"data": {...champs de User...}}`. Liste vide : `{"data": []}`. Un 204 a un corps vide. Les créations de workflows de WorkforceController répondent actuellement **200**, pas 201.
+
+Erreurs réelles :
 
 ```json
-{ "data": { "id": 7, "time": "2026-10-05T09:00:00Z", "status": true, "kind": "arrival", "user_id": 42 } }
+{"errors":{"detail":"Cette période chevauche des heures déjà enregistrées."}}
 ```
 
-**Étape 7 — en cas d'erreur.** Si une étape du `with` renvoie `{:error, quelque_chose}`, Phoenix passe ce résultat au `FallbackController` déclaré par `action_fallback`, qui choisit le code HTTP (voir la [section 11](#11-la-gestion-des-erreurs)).
-
----
-
-## 5. Le modèle de données
-
-```
-┌──────────────┐        ┌───────────────────────┐        ┌───────────────────────┐
-│    roles     │        │         users         │        │        clocks         │
-├──────────────┤        ├───────────────────────┤        ├───────────────────────┤
-│ id           │◀──┐    │ id                    │◀──┬────│ user_id  (CASCADE)    │
-│ name UNIQUE  │   └────│ role_id  (RESTRICT)   │   │    │ time      utc         │
-└──────────────┘        │ username              │   │    │ status    bool        │
-                        │ email    UNIQUE lower │   │    │ kind      arrival|... │
-                        │ password_hash         │   │    └───────────────────────┘
-                        └───────────────────────┘   │
-                          ▲          ▲              │    ┌───────────────────────┐
-                          │          │              │    │      workingtime      │
-           manager_id     │          │ user_id      │    ├───────────────────────┤
-           (NULLIFY)      │          │ (CASCADE)    └────│ user_id  (CASCADE)    │
-┌──────────────────┐      │   ┌──────────────────┐       │ start     utc         │
-│      teams       │──────┘   │   team_members   │       │ end       utc         │
-├──────────────────┤          ├──────────────────┤       │ CHECK end > start     │
-│ id               │◀─────────│ team_id (CASCADE)│       └───────────────────────┘
-│ name UNIQUE      │          │ user_id (CASCADE)│
-└──────────────────┘          │ UNIQUE(team,user)│
-                              └──────────────────┘
+```json
+{"errors":{"email":["has already been taken"]}}
 ```
 
-### Les tables
-
-| Table | Contenu | Contraintes importantes |
-|---|---|---|
-| `roles` | Les trois rôles : `employee`, `manager`, `administrator`. | `name` unique. Insérés par la migration et par les seeds ; aucune route ne les modifie. |
-| `users` | Le compte : `username`, `email`, `password_hash`, `role_id`. | Index unique sur `lower(email)` : un e-mail = un compte, sans tenir compte de la casse. `role_id` obligatoire, `ON DELETE RESTRICT` (impossible de supprimer un rôle utilisé). Le mot de passe en clair n'est **jamais** stocké. |
-| `teams` | Une équipe et son manager. | `name` unique. `manager_id` passe à `NULL` si le manager est supprimé : l'équipe survit. |
-| `team_members` | Table de jointure équipe ↔ membre. | Couple `(team_id, user_id)` unique. Suppression en cascade des deux côtés. |
-| `clocks` | Les événements de pointage bruts. | `kind` obligatoire ; contrainte `clocks_kind_matches_status` : `status = true` ⇔ `kind ∈ {arrival, resume}`. Supprimés avec l'utilisateur. |
-| `workingtime` | Les périodes travaillées. | `CHECK ("end" > start)` : une période a toujours une durée positive. Supprimées avec l'utilisateur. |
-
-### Pourquoi deux tables pour le temps ?
-
-`clocks` et `workingtime` ne stockent pas la même chose :
-
-- un **pointage** est un *instant* : « Alice est arrivée à 9 h ». Il n'a pas de durée ;
-- une **période** est un *intervalle* : « Alice a travaillé de 9 h à 12 h ». C'est ce qu'on additionne pour les totaux et les graphiques.
-
-Le backend fabrique les périodes à partir des pointages : quand un segment de travail se ferme (pause ou départ), il crée la période correspondante **dans la même transaction**. Les deux tables restent ainsi toujours cohérentes. Un manager peut aussi créer ou corriger une période à la main, sans pointage (oubli, erreur de saisie).
-
-### Les dates
-
-Toutes les dates sont en **UTC** (`:utc_datetime`, précision à la seconde). L'API accepte `"2026-10-05 09:00:00"` ou le format ISO 8601 (`"2026-10-05T11:00:00+02:00"`, converti en UTC) et renvoie de l'ISO 8601 en UTC. La conversion vers l'heure locale est l'affaire du front-end. Stocker en UTC évite les erreurs aux changements d'heure : une journée du 29 mars dure bien 8 h, pas 7.
-
----
-
-## 6. Les contextes métier, fichier par fichier
-
-### 6.1 `application.ex` — ce qui démarre
-
-Au lancement, l'application démarre un **superviseur** qui lance, dans l'ordre : la télémétrie, le dépôt Ecto (`Repo`, le pool de connexions à PostgreSQL), DNSCluster, PubSub, puis l'`Endpoint` HTTP. La stratégie `:one_for_one` signifie que si un de ces processus plante, seul celui-là est redémarré. C'est le principe OTP « *let it crash* » : on ne protège pas chaque ligne contre les pannes, un superviseur remet le système dans un état sain.
-
-### 6.2 `accounts.ex`, `accounts/user.ex`, `accounts/role.ex` — les comptes
-
-**`User`** définit **quatre changesets** distincts, et c'est un choix de sécurité :
-
-| Changeset | Champs acceptés | Utilisé pour |
-|---|---|---|
-| `changeset/2` | `username`, `email` | Modifier son profil |
-| `registration_changeset/3` | profil + `password` ; le rôle est imposé par le code | Créer un compte |
-| `password_changeset/2` | `password` | Changer ou réinitialiser le mot de passe |
-| `role_changeset/2` | `role_id` | Promouvoir ou rétrograder |
-
-Comme le formulaire de profil ne passe que par `changeset/2`, un client qui ajoute `"role": "administrator"` à sa requête ne change rien : le champ n'est même pas lu. C'est la protection contre l'**assignation de masse** (*mass assignment*).
-
-Validations appliquées :
-
-- e-mail mis en minuscules, au format `x@x.x`, 160 caractères au plus, unique ;
-- mot de passe de 8 à 72 caractères. 72 est la limite de bcrypt : au-delà, les octets sont ignorés ;
-- le mot de passe est remplacé par son hachage bcrypt (`hash_password/1`) puis **retiré** du changeset. Les champs `password` et `password_hash` sont marqués `redact: true` : ils n'apparaissent jamais dans les logs ni dans `inspect`.
-
-`valid_password?/2` compare un mot de passe au hachage en **temps constant**. Si l'utilisateur n'existe pas, elle appelle quand même `Bcrypt.no_user_verify()`, qui prend le même temps : un attaquant ne peut pas deviner quels e-mails existent en mesurant le temps de réponse.
-
-**`Accounts`** expose les opérations sur les comptes :
-
-| Fonction | Ce qu'elle fait |
+| Code | Signification |
 |---|---|
-| `list_users/2` | Liste filtrable par `email` et `username`, restreinte à une liste d'ids (le périmètre de l'appelant) ou `:all`. |
-| `fetch_user/1` | Renvoie `{:ok, user}` ou `{:error, :not_found}`, y compris pour un id mal formé. Le rôle est toujours préchargé. |
-| `authenticate/2` | Vérifie le couple e-mail / mot de passe. Même réponse et même durée pour « e-mail inconnu » et « mauvais mot de passe ». |
-| `create_user/2` | Crée un compte avec un rôle (`employee` par défaut). |
-| `update_account/3` | Met à jour le profil **et** le mot de passe dans une seule transaction : les deux réussissent ou aucun. |
-| `change_password/3` | Changement par l'utilisateur lui-même : exige le mot de passe actuel. Une session volée ne suffit pas à prendre le compte. |
-| `reset_password/2` | Réinitialisation par un administrateur, sans l'ancien mot de passe. |
-| `change_role/2`, `delete_user/1` | Refusent de rétrograder ou de supprimer le **dernier administrateur** (`{:error, :last_administrator}` → 409). L'application garde toujours quelqu'un capable de l'administrer. |
-
-**`Role`** est en lecture seule. `Role.names/0` donne l'ordre du moins au plus privilégié ; `list_roles/0` l'utilise pour trier.
-
-### 6.3 `authorization.ex` — qui peut faire quoi
-
-C'est **le seul endroit** où sont écrites les règles d'accès. Chaque contrôleur l'interroge avant d'agir. Détail en [section 9](#9-les-autorisations-role-et-perimetre).
-
-### 6.4 `token.ex` — le JWT de session
-
-Utilise `Joken.Config`. Le token contient :
-
-| Claim | Valeur |
-|---|---|
-| `user_id` | L'id de l'utilisateur |
-| `role` | Son rôle au moment de la connexion (informatif : le serveur ne s'en sert pas pour décider) |
-| `xsrf` | Le token CSRF de cette session |
-| `exp` | Expiration : 8 heures |
-| `iss`, `aud` | `"time_manager"` : un JWT émis pour une autre application est refusé |
-
-`generate_csrf_token/0` produit 32 octets aléatoires cryptographiquement sûrs (`:crypto.strong_rand_bytes`), encodés en Base64 URL.
-
-Un JWT est **signé, pas chiffré** : n'importe qui peut lire son contenu en le décodant. Il ne contient donc rien de confidentiel. La signature garantit seulement qu'il n'a pas été modifié.
-
-### 6.5 `teams.ex`, `teams/team.ex` — les équipes
-
-Une équipe a **au plus un manager** (`manager_id`) et **des membres** (`team_members`). Un employé peut appartenir à plusieurs équipes.
-
-| Fonction | Rôle |
-|---|---|
-| `list_teams/0`, `list_managed_teams/1`, `list_member_teams/1` | Lister toutes les équipes, celles que l'on manage, celles dont on est membre. |
-| `create_team/1`, `update_team/2` | Vérifient que le manager désigné existe et a le rôle `manager` ou `administrator`. |
-| `add_member/2` | Idempotent (`on_conflict: :nothing`) : ajouter deux fois le même membre ne provoque pas d'erreur. |
-| `manages?/2` | `true` si l'utilisateur appartient à une équipe dirigée par ce manager. C'est la base du périmètre « mes équipes ». |
-| `managed_member_ids/1` | Les ids de tous les membres des équipes d'un manager. |
-
-Composer les équipes est réservé à l'administrateur. Si un manager pouvait ajouter des personnes à son équipe, il s'ouvrirait lui-même l'accès à leurs heures.
-
-### 6.6 `clocks.ex`, `clocks/clock.ex` — les pointages
-
-Le module le plus subtil du backend, détaillé en [section 10](#10-les-pointages-la-machine-a-etats). En bref :
-
-- `Clock.changeset/2` complète `kind` à partir de `status` quand le client ne l'envoie pas (`true` → `arrival`, `false` → `departure`), pour rester compatible avec les anciens clients. Il vérifie aussi que `kind` et `status` concordent ;
-- `Clocks.create_clock/2` enregistre un pointage ;
-- `Clocks.complete_clock/3` enregistre un départ oublié, après coup ;
-- `Clocks.list_clocks/1` renvoie l'historique, du plus ancien au plus récent.
-
-### 6.7 `working_times.ex`, `working_times/working_time.ex` — les périodes
-
-| Fonction | Rôle |
-|---|---|
-| `list_working_times/2` | Périodes d'un utilisateur, filtrables par `start` (début ≥) et `end` (fin ≤). Un filtre de date mal formé renvoie `{:error, :bad_request}`. |
-| `get_working_time/2` | Cherche une période **et** vérifie qu'elle appartient à l'utilisateur de l'URL. |
-| `get_working_time/1` | Cherche une période par son seul id (utilisé pour la modifier ou la supprimer). |
-| `create_working_time/2`, `update_working_time/2`, `delete_working_time/1` | Écriture. Le changeset refuse une fin qui ne suit pas le début ; la contrainte `CHECK` de la base le refuse aussi. |
-
-Le propriétaire d'une période vient toujours du code (`%WorkingTime{user_id: user_id}`) et jamais du corps de la requête : `user_id` n'est pas dans la liste des champs que le changeset accepte.
-
-### 6.8 `organizations.ex`, `organizations/*.ex` — organisations et demandes d'adhésion
-
-Ce contexte implémente [CONTRAT_BACKEND_ORGANISATIONS.md](CONTRAT_BACKEND_ORGANISATIONS.md). Les règles de validation du profil (prénom, nom, e-mail, genre, date et lieu de naissance) sont dans `accounts/profile.ex`, partagées par `User` et `JoinRequest`.
-
-| Fonction | Rôle |
-|---|---|
-| `create_organization/3` | Valide l'organisation et son administrateur ensemble (toutes les erreurs d'un coup), puis les insère dans une transaction. Nom ou e-mail déjà pris : `409`. |
-| `lookup_organization/1` | Cherche le nom normalisé exact (casse, accents et espaces successifs ignorés, comme `normalizeName` côté front). |
-| `submit_join_request/2` | Enregistre une demande `pending` sans compte ni mot de passe. Renvoie une référence aléatoire dont seule l'empreinte SHA-256 est stockée. |
-| `approve_join_request/4` | Verrouille la demande (`FOR UPDATE`), vérifie qu'elle est `pending`, crée l'employé et marque la demande, dans une transaction : deux acceptations simultanées ne créent qu'un compte. |
-| `reject_join_request/4` | Même verrou ; motif de 1 à 500 caractères, erreurs rapportées sur le champ `reason`. |
-| `set_member_role/3` | `employee` ou `manager` uniquement, jamais sur un administrateur. |
-
-Une demande en attente est unique par organisation et par e-mail grâce à un index unique partiel (`WHERE status = 'pending'`). Une demande refusée n'empêche donc pas d'en déposer une nouvelle.
-
----
-
-## 7. La couche web, fichier par fichier
-
-### 7.1 `router.ex`
-
-```elixir
-pipeline :api  do plug :accepts, ["json"]; plug OpenApiSpex.Plug.PutApiSpec, ... end
-pipeline :auth do plug TimeManagerWeb.Plugs.Authenticate end
-
-scope "/api/auth"  → pipe_through :api           # public : login, register
-scope "/api"       → pipe_through [:api, :auth]  # tout le reste : session obligatoire
-scope "/api"       → /openapi                    # la spec, publique
-scope "/"          → /swaggerui                  # l'interface de test
-```
-
-Il n'existe que **deux** routes publiques : `POST /api/auth/login` et `POST /api/auth/register`. Toute nouvelle route ajoutée au second scope est protégée d'office : l'oubli n'est pas possible.
-
-### 7.2 Les contrôleurs
-
-Tous les contrôleurs suivent le même modèle :
-
-1. `use OpenApiSpex.ControllerSpecs` et une macro `operation(...)` au-dessus de chaque action. Elle décrit la route pour Swagger et n'a aucun effet sur l'exécution.
-2. `action_fallback TimeManagerWeb.FallbackController` pour convertir les erreurs.
-3. Un `with` qui enchaîne : convertir l'id → vérifier le droit → charger → agir → répondre.
-4. Une clause de repli `def action(_conn, _params), do: {:error, :bad_request}` quand le corps n'a pas la forme attendue (par exemple, pas de clé `"clock"`).
-
-| Contrôleur | Actions | Particularités |
-|---|---|---|
-| `AuthController` | `login`, `register`, `me`, `logout` | Pose et supprime le cookie. `register` ne garde que `username`, `email` et `password` : un `role` envoyé est ignoré, et le compte est toujours `employee`. |
-| `UserController` | `index`, `create`, `show`, `update`, `update_role`, `delete` | `index` renvoie le périmètre de l'appelant (403 pour un employé). `update` distingue le changement de son propre mot de passe (ancien mot de passe requis) de la réinitialisation par un administrateur. `update_role` est interdit sur soi-même. |
-| `TeamController` | CRUD + `add_member`, `remove_member` | Un employé voit le nom de ses équipes mais pas la liste des autres membres. |
-| `RoleController` | `index` | Lecture seule. |
-| `ClockController` | `index`, `create`, `complete` | On ne pointe **que pour soi**, même un administrateur. |
-| `WorkingTimeController` | `index`, `show`, `create`, `update`, `delete` | Pour `update` et `delete`, l'URL ne contient que l'id de la période : le contrôleur la charge d'abord pour savoir à qui elle appartient, puis vérifie le droit sur ce propriétaire. |
-
-### 7.3 `authz.ex` — les aides partagées
-
-```elixir
-current_user(conn)    # l'utilisateur posé par le plug Authenticate
-authorize(true)  -> :ok
-authorize(false) -> {:error, :forbidden}       # devient 403
-cast_id("42")    -> {:ok, 42}
-cast_id("abc")   -> {:error, :not_found}       # devient 404
-```
-
-Les paramètres d'URL sont des chaînes de caractères. Sans `cast_id`, la comparaison `"42" == 42` serait fausse, et une règle comme « on peut voir son propre profil » refuserait à tort.
-
-### 7.4 Les vues JSON (`*_json.ex`)
-
-Elles choisissent **explicitement** les champs exposés. `UserJSON.data/1` renvoie `id`, `username`, `email`, `role` et `inserted_at`. Le hachage du mot de passe n'y figure pas, et un champ ajouté plus tard au schéma ne sera jamais exposé par accident. Toutes les réponses de succès sont enveloppées dans `{ "data": ... }`.
-
-### 7.5 `schemas/` — la spécification OpenAPI
-
-Un module par forme de requête ou de réponse (`ClockRequest`, `UserResponse`, `ValidationErrorResponse`…). `api_spec.ex` les rassemble, lit les routes du routeur et déclare les deux mécanismes de sécurité (`jwtCookie` et `csrfToken`). Le test `api_spec_test.exs` vérifie que la spec se construit sans erreur.
-
----
-
-## 8. L'authentification en détail
-
-### 8.1 Le principe : cookie HttpOnly + token CSRF
-
-Le backend combine deux secrets, chacun bloquant une attaque différente :
-
-| Secret | Où il vit | Qui l'envoie | Ce qu'il bloque |
-|---|---|---|---|
-| **JWT** | Cookie `jwt`, `HttpOnly`, `SameSite=Strict` | Le navigateur, automatiquement | **XSS** : un script injecté dans la page ne peut pas lire un cookie `HttpOnly`, donc ne peut pas voler la session. |
-| **Token CSRF** | Mémoire du front-end, et une copie signée dans le JWT (`xsrf`) | Le front-end, dans l'en-tête `X-CSRF-Token` | **CSRF** : un site tiers peut pousser le navigateur à envoyer le cookie, mais il ne connaît pas le token et ne peut pas poser cet en-tête. |
-
-Une requête n'est acceptée que si **les deux** sont présents et correspondent.
-
-### 8.2 La connexion, pas à pas
-
-```
-Front-end                                   Backend
-────────                                    ───────
-POST /api/auth/login
-{ email, password }      ─────────────▶   Accounts.authenticate/2
-                                            ├─ cherche l'e-mail (en minuscules)
-                                            └─ Argon2id, temps constant
-                                          csrf = 32 octets aléatoires
-                                          jwt  = signe { user_id, role, xsrf: csrf, jti, exp: +8 h }
-                         ◀─────────────   Set-Cookie: jwt=...; HttpOnly; SameSite=Strict; Max-Age=28800
-                                          200 { data: { csrf_token, role, user, organization } }
-garde csrf_token en mémoire
-```
-
-L'inscription (`register`) et la création d'une organisation (`POST /api/organizations`) suivent le même chemin après avoir créé le compte, et répondent **201**. Un hash bcrypt antérieur au passage à Argon2id est vérifié avec bcrypt puis remplacé par un hash Argon2id, puisque le mot de passe est alors connu.
-
-### 8.3 Chaque requête protégée
-
-Le plug `Authenticate` exécute ces vérifications dans l'ordre ; la moindre erreur donne **401** :
-
-1. le cookie `jwt` est présent ;
-2. l'en-tête `X-CSRF-Token` est présent ;
-3. la signature HS256 est valide, le token n'est pas expiré, `iss` et `aud` sont corrects (`Token.verify_and_validate/1`) ;
-4. le claim `xsrf` est égal à l'en-tête, comparé en temps constant (`Plug.Crypto.secure_compare`) ;
-5. le `jti` du JWT ne figure pas dans `revoked_tokens` (session fermée par une déconnexion) ;
-6. l'utilisateur `user_id` existe **encore** en base. Il est rechargé avec son rôle.
-
-Le point 6 est important : le rôle utilisé pour les autorisations est **celui de la base**, pas celui du token. Rétrograder un manager ou supprimer un compte prend effet dès la requête suivante, sans attendre l'expiration du JWT.
-
-### 8.4 La déconnexion
-
-`POST /api/auth/logout` inscrit le `jti` du JWT dans la table `revoked_tokens` jusqu'à son expiration, puis demande au navigateur de supprimer le cookie (mêmes options que lors de sa création, sinon le navigateur ne le reconnaît pas) et répond **204**. Un JWT copié avant la déconnexion est donc refusé. Les entrées expirées sont purgées à chaque déconnexion.
-
-### 8.6 Les protections des routes publiques
-
-Les routes publiques (connexion, inscription, organisations, demandes d'adhésion) n'ont pas encore de token CSRF. Deux plugs les protègent :
-
-- `Plugs.CheckOrigin` (pipeline `:api`) refuse en **403** une requête d'écriture dont l'`Origin` ou le `Referer` désigne un autre hôte que celui de l'API ;
-- `Plugs.RateLimit` (déclaré dans chaque contrôleur) répond **429** au-delà d'un seuil par minute, par adresse IP ou, pour la connexion, aussi par e-mail. Les compteurs vivent dans une table ETS tenue par `TimeManagerWeb.RateLimiter`. La configuration de test le désactive (`config :time_manager, :rate_limit, false`).
-
-### 8.5 Les options du cookie
-
-| Option | Valeur | Raison |
-|---|---|---|
-| `http_only` | `true` | Illisible en JavaScript. |
-| `same_site` | `"Strict"` | Jamais envoyé avec une requête initiée par un autre site. |
-| `secure` | `COOKIE_SECURE` | Uniquement en HTTPS quand la variable vaut `true`. À activer dès que le site est servi en HTTPS : les navigateurs ignorent un cookie `Secure` reçu en HTTP. |
-| `max_age` | 8 h | Même durée que le JWT. |
-| `path` | `/` | Valable pour toute l'API. |
-
----
-
-## 9. Les autorisations : rôle et périmètre
-
-Toute permission combine deux questions :
-
-- **le rôle** — quel type d'action l'appelant peut-il faire ?
-- **le périmètre** — sur les données de qui ?
-
-| Rôle | Périmètre |
-|---|---|
-| `employee` | Lui-même |
-| `manager` | Lui-même + les membres des équipes qu'il dirige |
-| `administrator` | Son organisation |
-
-Les organisations sont étanches : aucun rôle n'atteint les données d'une autre. Les comptes sans organisation forment un espace à part : pour toutes les vérifications, « même organisation » inclut « tous deux sans organisation ».
-
-### Les fonctions de `Authorization`
-
-| Fonction | Vrai quand… | Utilisée par |
-|---|---|---|
-| `can_view?(user, target_id)` | c'est soi-même, ou l'appelant administre l'organisation de la cible, ou il manage la cible | Lire un profil, des pointages, des périodes |
-| `can_edit_hours?(user, target_id)` | administrateur de l'organisation de la cible ; ou manager de la cible **et** la cible n'est pas lui-même | Créer, corriger, supprimer une période |
-| `can_clock?(user, target_id)` | c'est soi-même, quel que soit le rôle | Pointer, compléter un départ |
-| `can_edit_profile?(user, target_id)` | soi-même, ou administrateur de l'organisation de la cible | Modifier un profil |
-| `can_change_role?(user, target_id)` | administrateur de l'organisation de la cible, jamais sur soi-même | Changer un rôle |
-| `administrator_of?(user, target_id)` | administrateur de l'organisation de la cible | Supprimer un compte |
-| `administrator_of_team?(user, team)` | administrateur de l'organisation de l'équipe | Gérer une équipe |
-| `organization_admin?(user, org_id)` | administrateur de l'organisation `org_id` (celle de l'URL) | Routes `/api/organizations/:org_id/…` |
-| `can_see_personal_details?(viewer, user)` | soi-même, ou administrateur de l'organisation de `user` | Afficher genre, date et lieu de naissance |
-| `user_scope(user)` | `{:organization, id}` (admin), liste d'ids (manager), `:forbidden` (employé) | Lister les utilisateurs |
-
-Deux règles méritent d'être expliquées :
-
-- **Un manager ne corrige pas ses propres heures.** Personne ne valide son propre travail : ce sont l'administrateur ou son propre manager qui le font.
-- **Personne ne pointe pour quelqu'un d'autre.** Un pointage atteste qu'une personne est présente : le faire à sa place serait une fraude, même pour un administrateur. Les oublis se rattrapent par une correction de période (tracée) ou, pour un départ oublié, par l'employé lui-même via `complete`.
-
-### Où est faite la vérification
-
-Le front-end masque les boutons interdits, pour le confort de l'utilisateur. **La seule vraie barrière est l'API** : chaque action de contrôleur appelle `Authorization` avant d'agir. Un utilisateur qui forge ses requêtes à la main (curl, console du navigateur) se heurte au même 403.
-
-La matrice complète route par route est dans [API.md, section 3](API.md#3-roles-et-permissions).
-
----
-
-## 10. Les pointages : la machine à états
-
-### 10.1 Les quatre événements
-
-| `kind` | `status` | Sens |
-|---|---|---|
-| `arrival` | `true` | Début du service |
-| `pause` | `false` | Début d'une pause : le segment de travail se ferme |
-| `resume` | `true` | Fin de la pause : un nouveau segment s'ouvre |
-| `departure` | `false` | Fin du service |
-
-`status` indique « est-on en train de travailler après cet événement ? ». La contrainte `clocks_kind_matches_status` impose en base que les deux concordent.
-
-### 10.2 Les transitions autorisées
-
-```
-                  ┌──────────────────────────────┐
-                  ▼                              │
-  (aucun) ──▶ arrival ──▶ pause ──▶ resume ──┐   │
-                │           │         │      │   │
-                │           │         └──────┘   │  (pause et resume peuvent alterner)
-                │           │                    │
-                ▼           ▼                    │
-             departure ◀────┴────────────────────┘
-                │
-                └──▶ arrival (service suivant)
-```
-
-Dans le code, c'est une simple table :
-
-```elixir
-@next_kinds %{
-  nil        => [:arrival],
-  :arrival   => [:pause, :departure],
-  :resume    => [:pause, :departure],
-  :pause     => [:resume, :departure],
-  :departure => [:arrival]
+| 200 | Lecture, modification ou création de workflow réussie. |
+| 201 | Demande d'adhésion, équipe, pointage ou période créée. |
+| 204 | Déconnexion/suppression classique réussie, sans corps. |
+| 400 | Corps attendu absent, paramètre/date/filtre malformé, action inconnue. |
+| 401 | Identifiants incorrects ou session/CSRF absent, invalide, expiré ou révoqué. |
+| 403 | Origine, rôle ou périmètre refusé, auto-validation ou création directe interdite. |
+| 404 | Ressource introuvable ; certains contrôleurs masquent aussi une ressource hors périmètre. |
+| 409 | Version/état périmé, semaine verrouillée, chevauchement, doublon d'admission ou dernier admin. |
+| 422 | Valeurs métier/changeset invalides : durée, type, motif, quota/délai de publication, etc. |
+| 429 | Limite de requêtes/tentatives ; le plug RateLimit ajoute Retry-After en secondes. |
+| 503 | Envoi d'email indisponible sur le parcours de vérification. |
+
+Les colonnes **Erreurs** indiquent les erreurs métier principales. Ajouter 401 aux routes protégées et 403 de contrôle d'origine aux écritures. Un 500 est une panne inattendue, pas un état métier à utiliser côté client.
+
+Dates : stockage/calcul **UTC**. week = lundi YYYY-MM-DD, month = YYYY-MM. Envoyer les instants en ISO 8601 avec Z. ClockJSON/WorkingTimeJSON retournent toutefois **YYYY-MM-DD HH:mm:ss sans suffixe**, toujours en UTC ; les workflows utilisent ISO 8601. Les Decimal sont des chaînes ; les durées calculées sont des nombres.
+
+### 4.2 Authentification et créations désactivées
+
+| Méthode | Route | Entrée / accès | Succès | Erreurs |
+|---|---|---|---|---|
+| POST | `/auth/login` | Public ; `{"email":"agent@example.test","password":"<mot de passe>"}`. | 200 data: Session + csrf_token et cookie JWT. | 401 identifiants/compte non vérifié ; 429. |
+| GET | `/auth/me` | Connecté ; aucun paramètre. | 200 data: User courant, détails personnels inclus. | Authentification commune. |
+| GET | `/auth/session` | Connecté ; aucun paramètre. | 200 data: Session, sans nouveau csrf_token. | Authentification commune. |
+| POST | `/auth/logout` | Connecté ; aucun corps requis. | 204, révocation et suppression du cookie. | Authentification commune. |
+| POST | `/auth/verify-email` | Public ; `{"email":"agent@example.test","code":"123456"}` ; compte non vérifié existant. | 200 data: Session + csrf_token et cookie. | 400, 422 code invalide/expiré, 429. |
+| POST | `/auth/resend-verification` | Public ; `{"email":"agent@example.test"}`. | 200 data: {verification_required:true}, réponse neutre si aucun compte concerné. | 400, 429, 503. |
+| POST | `/auth/register` | Public ; corps sans effet, création directe désactivée. | **Aucun succès : 403.** | Politique d'admission. |
+| POST | `/organizations` | Public ; création d'organisation désactivée. | **Aucun succès : 403.** | Provisionnement manuel requis. |
+| POST | `/users` | Protégé ; création directe désactivée. | **Aucun succès : 403.** | Utiliser l'admission. |
+
+Session = `{role,user:User,organization:{id,name,created_at}|null}`. Seule une ouverture de session ajoute csrf_token. Les rôles API sont employee/manager/administrator, pas admin.
+
+Exemple de connexion réussie :
+
+```json
+{
+  "data": {
+    "role": "employee",
+    "user": {
+      "id": 14,
+      "username": "sara.martin",
+      "email": "sara@example.test",
+      "first_name": "Sara",
+      "last_name": "Martin",
+      "organization_id": "d28a4c42-84f6-490a-9743-5fb5ac48ef89",
+      "role": "employee",
+      "gender": "female",
+      "birth_date": "1999-03-12",
+      "birth_place": "Paris",
+      "inserted_at": "2026-10-13T08:00:00Z",
+      "created_at": "2026-10-13T08:00:00Z"
+    },
+    "organization": {
+      "id": "d28a4c42-84f6-490a-9743-5fb5ac48ef89",
+      "name": "Gotham City",
+      "created_at": "2026-10-01T08:00:00Z"
+    },
+    "csrf_token": "<jeton généré>"
+  }
 }
 ```
 
-Tout autre enchaînement (deux arrivées de suite, une reprise sans pause…) est refusé avec **422** : `"action is not allowed after the latest clock event"`. Un pointage ne peut pas non plus être **antérieur** au précédent : `"must not precede the latest clock event"`.
+Limites par minute : login 10/email et 100/IP ; verify/resend 20/IP dans un compteur partagé ; lookup 60 ; dépôt d'adhésion 10 ; suivi 30. Les créations désactivées ne passent pas par les anciens limiteurs de création. L'OTP historique a six chiffres, expire après dix minutes et admet cinq essais ; les admissions approuvées ne nécessitent pas ce parcours OTP.
 
-### 10.3 La création automatique des périodes
+### 4.3 Organisation et admission
 
-Quand un événement ferme un segment de travail, `create_period/2` crée la période correspondante :
+| Méthode | Route | Entrée / accès | Succès | Erreurs |
+|---|---|---|---|---|
+| GET | `/organizations/lookup` | Public ; query name=Gotham City obligatoire, comparaison normalisée. | 200 data: {id,name}. | 404, 429. |
+| POST | `/join-requests` | Public ; organization_id UUID et profile ci-dessous. | 201 data: {id,reference,organization_name,status}. | 400, 404, 409 email/demande pending, 422, 429. |
+| POST | `/join-requests/status` | Public ; `{"reference":"<référence privée>"}` dans le corps. | 200 data: {id,reference,organization_name,status,rejection_reason}. | 400, 404, 429. |
+| GET | `/organizations/:org_id/join-requests` | Admin de cette organisation ; aucun filtre. | 200 data: [JoinRequest]. | 403. |
+| POST | `/organizations/:org_id/join-requests/:id/approve` | Même admin ; `{"password":"<mot de passe choisi>"}`. | 200 data: {request:JoinRequest,user:User}. | 400, 403, 404, 409, 422. |
+| POST | `/organizations/:org_id/join-requests/:id/reject` | Même admin ; `{"reason":"Motif du refus"}`. | 200 data: JoinRequest. | 400, 403, 404, 409, 422. |
+| GET | `/organizations/:org_id/members` | Admin de cette organisation. | 200 data: [User], détails personnels inclus. | 403. |
+| PATCH | `/organizations/:org_id/members/:id` | Même admin ; `{"role":"manager"}` ou employee. | 200 data: User. | 400, 403 compte admin, 404, 422. |
 
-| Précédent | Nouveau | Période créée ? |
-|---|---|---|
-| `arrival` ou `resume` | `pause` ou `departure` | Oui : de l'heure du précédent à celle du nouveau |
-| `pause` | `departure` | Non : on part pendant la pause, il n'y a pas de travail entre les deux |
-| n'importe lequel | `arrival` ou `resume` | Non : la fin n'est pas encore connue |
-
-Exemple : arrivée 9 h, pause 10 h, reprise 10 h 30, départ 12 h → **deux** périodes, 9 h–10 h et 10 h 30–12 h. La pause n'entre jamais dans le total.
-
-### 10.4 Transaction et verrou : pourquoi c'est nécessaire
-
-Voici `record_clock/3`, le cœur du module, résumé :
-
-```elixir
-Repo.transact(fn ->
-  # 1. Verrouille la ligne users de cet utilisateur (SELECT ... FOR UPDATE)
-  Repo.one(from u in User, where: u.id == ^user_id, lock: "FOR UPDATE")
-  # 2. Lit le dernier pointage
-  previous = latest_clock(user_id)
-  # 3. Vérifie la transition, 4. insère le pointage, 5. crée la période
-end)
+```json
+{
+  "organization_id": "d28a4c42-84f6-490a-9743-5fb5ac48ef89",
+  "profile": {
+    "first_name": "Sara",
+    "last_name": "Martin",
+    "email": "sara@example.test",
+    "gender": "female",
+    "birth_date": "1999-03-12",
+    "birth_place": "Paris"
+  }
+}
 ```
 
-**Le problème évité.** Un double clic envoie deux « départ » quasi simultanés. Sans verrou, les deux requêtes lisent le même dernier pointage (« arrivée »), jugent toutes les deux le départ valide, et insèrent deux départs et deux périodes : les heures sont comptées deux fois.
+Les six champs de profil sont requis. Genre : female/male/non_binary/unspecified. Prénom/nom/lieu ≤100 caractères, email ≤254 ; naissance entre 1900-01-01 et aujourd'hui. La référence n'est placée ni dans l'URL ni dans la réponse admin. L'approbation crée un employé et ne retourne **jamais le mot de passe** ; le frontend présente temporairement celui que l'admin vient de saisir.
 
-**La solution.** `FOR UPDATE` verrouille la ligne de l'utilisateur jusqu'à la fin de la transaction. La seconde requête attend que la première ait terminé, relit alors le dernier pointage (désormais « départ ») et refuse proprement avec 422. C'est la ligne `users` qui est verrouillée, et non le dernier pointage : cela fonctionne aussi pour le tout premier pointage, quand il n'existe encore aucune ligne `clocks` à verrouiller.
+JoinRequest = `{id,organization_id,organization_name,profile,status,created_at,reviewed_at,reviewed_by,rejection_reason}`. reviewed_by est un ID ; status = pending/approved/rejected.
 
-**L'atomicité.** Le pointage et la période sont écrits dans la même transaction. Si la création de la période échoue, le pointage est annulé aussi : on ne peut jamais avoir un départ enregistré sans sa période.
+### 4.4 Comptes et rôles
 
-Ces deux garanties sont vérifiées par `clocks_concurrency_test.exs`, qui lance réellement deux requêtes en parallèle sur des connexions séparées.
+| Méthode | Route | Entrée / accès | Succès | Erreurs |
+|---|---|---|---|---|
+| GET | `/users` | Admin/manager ; query email/username facultative, égalité exacte. | 200 data: [User] autorisés. | 403 employé. |
+| GET | `/users/:id` | Soi ou responsable autorisé. | 200 data: User. | 403, 404. |
+| PUT, PATCH | `/users/:id` | Soi/admin ; `{"user":{...}}`, champs ci-dessous. | 200 data: User. | 400, 403, 404, 422. |
+| DELETE | `/users/:id` | Soi : `{"current_password":"<mot de passe>"}` ; admin sur autre compte de son organisation : aucun corps requis. | 204 ; suppression du cookie si auto-suppression. | 403, 404, 409 dernier admin, 422 mot de passe personnel. |
+| PUT | `/users/:id/role` | Admin ; `{"role":"employee"}` ou manager, jamais sur soi. | 200 data: User. | 400, 403, 404, 409, 422. |
+| GET | `/roles` | Connecté. | 200 data: [{id,name}]. | Authentification commune. |
 
-### 10.5 Compléter un départ oublié
+Profil modifiable : username/email/first_name/last_name. Pour son mot de passe : password et current_password sous user. L'admin réinitialisant le mot de passe d'un autre compte fournit seulement password. Rôle/organisation ne sont pas modifiables via ce payload.
 
-`POST /api/clocks/:userID/:clockID/complete` avec `{ "clock": { "time": "..." } }`.
+User contient les champs de l'exemple de session ; gender/birth_date/birth_place ne sont présents que pour soi ou un admin de l'organisation. Les listes de comptes n'ont pas de pagination.
 
-Un employé qui a oublié de pointer son départ ne peut pas utiliser la route normale : son départ serait daté de maintenant, et la période compterait la nuit. `complete_clock/3` enregistre un départ **à l'heure réelle**, avec des garde-fous supplémentaires (`validate_completion/4`) :
+### 4.5 Équipes et membres
 
-| Vérification | Message si refus |
-|---|---|
-| `clockID` est toujours le **dernier** pointage, et ce n'est pas un départ | « Les pointages ont changé. Actualisez avant de réessayer. » |
-| L'heure n'est pas dans le futur | « Le départ ne peut pas être dans le futur. » |
-| L'heure date de 7 jours au plus | « Seuls les départs des 7 derniers jours peuvent être complétés. » |
-| L'heure suit le dernier pointage | « Le départ doit suivre le dernier pointage enregistré. » |
+| Méthode | Route | Entrée / accès | Succès | Erreurs |
+|---|---|---|---|---|
+| GET | `/teams` | Connecté ; admin : organisation ; autres : équipes gérées/appartenances. | 200 data: [Team]. | Authentification commune. |
+| GET | `/teams/:id` | Admin de l'équipe ou manager actuel. | 200 data: Team. | 403, 404. |
+| POST | `/teams` | Admin ; `{"team":{"name":"Voirie","manager_id":15}}`, manager facultatif. | 201 data: Team. | 400, 403, 422. |
+| PUT, PATCH | `/teams/:id` | Admin ; `{"team":{"name":"Voirie nuit","manager_id":15}}`, null retire le manager. | 200 data: Team. | 400, 403, 404, 422. |
+| DELETE | `/teams/:id` | Admin ; aucun corps. | 204. | 403, 404. |
+| POST | `/teams/:id/members` | Admin ; `{"user_id":14}`. | 200 data: Team mis à jour. | 400, 403, 404, 422. |
+| DELETE | `/teams/:id/members/:user_id` | Admin ; paramètres du chemin. | 200 data: Team mis à jour. | 403, 404. |
 
-Le `clockID` sert de **verrou optimiste** : si l'employé a pointé entre-temps depuis un autre onglet, le formulaire est périmé et la requête est refusée au lieu de fermer le mauvais service. Le corps ne peut imposer ni `status` ni `kind` : ils sont fixés à `false` et `departure` par le code.
+Team = `{id,name,manager:User|null,members:[User]}`. À l'index, un simple membre voit members=[] pour ses équipes non gérées. Manager et membres sont contrôlés dans l'espace de l'équipe ; le nom est validé avec contrainte d'unicité.
 
----
+### 4.6 Pointages
 
-## 11. La gestion des erreurs
+| Méthode | Route | Entrée / accès | Succès | Erreurs |
+|---|---|---|---|---|
+| GET | `/clocks/:userID` | Soi/responsable ; aucun filtre. | 200 data: [Clock], ordre chronologique. | 403, 404. |
+| POST | `/clocks/:userID` | Soi uniquement ; `{"clock":{"time":"2026-10-13T09:00:00Z","status":true,"kind":"arrival"}}`. | 201 data: Clock. | 400, 403, 404, 409, 422. |
+| POST | `/clocks/:userID/:clockID/complete` | Soi ; dernier pointage attendu ; `{"clock":{"time":"2026-10-13T17:00:00Z"}}`. | 201 data: Clock de départ. | 400, 403, 404, 409, 422 temps invalide/pointage périmé. |
 
-Les contextes renvoient `{:ok, valeur}` ou `{:error, raison}`. Ils ne lèvent pas d'exception pour un cas attendu. Le `FallbackController` traduit chaque raison en réponse HTTP :
+Clock = `{id,user_id,time,status,kind}`. status=true pour arrival/resume, false pour pause/departure. Sans kind, true implique arrival et false departure. time obligatoire, non futur et non antérieur au dernier pointage.
 
-| Valeur renvoyée | Code | Corps |
+Transitions : hors service → arrival ; arrival/resume → pause/departure ; pause → resume/departure ; departure → arrival. Pause/départ ferme le segment ; un départ pendant une pause ne crée pas de période supplémentaire. Le départ oublié exige une heure dans les sept derniers jours et le dernier pointage toujours identique.
+
+### 4.7 Périodes de travail
+
+| Méthode | Route | Entrée / accès | Succès | Erreurs |
+|---|---|---|---|---|
+| GET | `/workingtime/:userID` | Soi/responsable ; query start/end facultative, instants UTC. | 200 data: [WorkingTime], tri par début. | 400 filtre/plage, 403, 404. |
+| GET | `/workingtime/:userID/:id` | Même accès ; période appartenant à userID. | 200 data: WorkingTime. | 403, 404. |
+| POST | `/workingtime/:userID` | Autre salarié de son périmètre, permission correct ; `{"workingtime":{"start":"...","end":"...","kind":"work"}}`. | 201 data: WorkingTime + Location. | 403, 404, 409, 422. |
+| PUT | `/workingtime/:id` | Même permission ; mêmes champs, modification partielle possible. | 200 data: WorkingTime. | 403, 404, 409, 422. |
+| DELETE | `/workingtime/:id` | Même permission ; aucun corps. | 204. | 403, 404, 409. |
+
+WorkingTime = `{id,user_id,start,end,kind}` ; kind=work/oncall/recup, défaut work. Le contrôleur accepte aussi les champs sans enveloppe workingtime. Durée positive, fin non future, absence de chevauchement avec les autres périodes du salarié.
+
+Les filtres sélectionnent les **chevauchements** : période.end > start et période.start <= end. L'objet est retourné complet, sans découpage aux limites de la fenêtre.
+
+### 4.8 Contexte, règles, permissions et préférences
+
+| Méthode | Route | Entrée / accès | Succès | Erreurs |
+|---|---|---|---|---|
+| GET | `/workforce/context` | Connecté ; aucun paramètre. | 200 data: {rules,preferences,permissions:[...]}. | Authentification commune. |
+| GET | `/organizations/:org_id/rules` | Compte de cette organisation. | 200 data: Rules. | 403. |
+| PATCH | `/organizations/:org_id/rules` | Admin ; `{"rules":{...}}`, champs partiels. | 200 data: Rules fusionnées. | 400, 403, 422. |
+| GET | `/teams/:id/permissions` | Admin/manager/membre de l'équipe. | 200 data: {validate,correct,publish}. | 403, 404. |
+| PATCH | `/teams/:id/permissions` | Admin ; `{"permissions":{"publish":true}}`. | 200 data: {validate,correct,publish}. | 400, 403, 404, 422. |
+| GET | `/auth/preferences` | Compte courant. | 200 data: Preferences. | Authentification commune. |
+| PATCH | `/auth/preferences` | Compte courant ; champs à la racine. | 200 data: Preferences fusionnées. | 400, 422. |
+
+Les permissions du contexte couvrent les équipes gérées pour le manager, toutes celles de l'organisation pour l'admin, aucune pour l'employé. Entrée : `{team_id,manager_id,team,member_ids,validate,correct,publish}`. Défauts : validate/correct true, publish false.
+
+| Champ Rules | Type / bornes | Défaut |
 |---|---|---|
-| `{:error, %Ecto.Changeset{}}` | **422** | `{ "errors": { "champ": ["message", ...] } }` |
-| `{:error, :bad_request}` | **400** | `{ "errors": { "detail": "Bad Request" } }` |
-| `{:error, :unauthorized}` (et le plug) | **401** | `{ "errors": { "detail": "Unauthorized" } }` |
-| `{:error, :forbidden}` | **403** | `{ "errors": { "detail": "Forbidden" } }` |
-| `{:error, :not_found}` | **404** | `{ "errors": { "detail": "Not Found" } }` |
-| `{:error, :last_administrator}` | **409** | `{ "errors": { "detail": "The last administrator cannot be demoted or deleted" } }` |
+| maxConsecutiveNights | entier 1–31 | 3 |
+| maxNightsPerWeek / maxNightsPerMonth | entiers 0–7 / 0–31 ; zéro désactive le quota | 0 / 0 |
+| overtimeThreshold | entier 1–168, heures/semaine | 40 |
+| publishDaysAhead | entier 0–365, jours | 14 |
+| nightStart / nightEnd | entiers UTC 0–23, différents | 22 / 6 |
+| nightMultiplier / overtimeMultiplier | nombres 1–10 | 1.5 / 2 |
+| paidAbsenceKinds | liste leave/sick, au plus deux éléments | [] |
+| timezone | valeur unique Etc/UTC | Etc/UTC |
 
-Une exception inattendue donne **500**, rendu en JSON par `ErrorJSON` (configuré dans `config.exs` via `render_errors`). Le front-end reçoit donc toujours le même format `{ "errors": ... }`.
+Preferences : theme=light/night/contrast ; strong_text/tour_seen/speech_enabled booléens ; speech_rate nombre 0.5–2 ; speech_voice texte ≤200 caractères. Les champs inconnus sont refusés pour Rules/Permissions/Preferences. La synthèse vocale s'exécute dans le navigateur : le backend ne génère pas d'audio.
 
----
+### 4.9 Notes, feuilles hebdomadaires et corrections
 
-## 12. Configuration et variables d'environnement
+| Méthode | Route | Entrée / accès | Succès | Erreurs |
+|---|---|---|---|---|
+| GET | `/users/:user_id/week-notes/:week` | Soi/responsable ; week = lundi. | 200 data: Sheet. | 400, 403, 404, 422. |
+| PUT | `/users/:user_id/week-notes/:week` | Soi uniquement ; `{"note":"Commentaire"}`, ≤2000 caractères. | 200 data: Sheet. | 400, 403, 404, 409 verrouillage, 422. |
+| GET | `/weekly-sheets` | Query week obligatoire ; comptes accessibles. | 200 data: [Sheet]. | 400, 422 date non lundi. |
+| POST | `/weekly-sheets/validate` | Autre salarié, permission validate ; `{"week":"2026-10-05","user_ids":[14,15]}`. | 200 data: [Sheet], lot atomique. | 400, 403, 404, 409, 422. |
+| POST | `/weekly-sheets/:user_id/:week/:action` | Même permission ; action close/reopen ; `{"reason":"Motif"}`. | 200 data: Sheet. | 400, 403, 404, 409, 422. |
+| GET | `/correction-requests` | Périmètre accessible ; query user_id facultative. | 200 data: [Correction]. | 400, 403. |
+| POST | `/workingtime/:id/correction-requests` | id = **période** du compte courant ; payload ci-dessous. | 200 data: Correction pending. | 400, 403, 404, 409, 422. |
+| PATCH | `/correction-requests/:id` | Autre salarié, permission correct ; `{"status":"approved","reason":""}` ou rejected avec motif. | 200 data: Correction. | 400, 403, 404, 409, 422. |
 
-Elixir distingue la configuration **de compilation** (`config.exs`, `dev.exs`, `test.exs`, `prod.exs`, lus au moment de compiler) et la configuration **d'exécution** (`runtime.exs`, lu à chaque démarrage). Les secrets sont toujours dans `runtime.exs`, pour ne jamais être figés dans le code compilé.
+```json
+{
+  "correction": {
+    "start": "2026-10-05T09:00:00Z",
+    "end": "2026-10-05T17:00:00Z",
+    "reason": "Départ enregistré trop tôt"
+  }
+}
+```
 
-| Variable | Environnement | Rôle | Valeur par défaut |
-|---|---|---|---|
-| `JWT_SECRET` | tous | Clé de signature des JWT (32 caractères minimum). | Dev et test : une clé fixe. **Prod : obligatoire**, le démarrage échoue sans elle. |
-| `COOKIE_SECURE` | tous | `true` : cookie envoyé uniquement en HTTPS. | `false` |
-| `PORT` | tous | Port HTTP. | `4000` |
-| `PGUSER`, `PGPASSWORD`, `PGHOST`, `PGPORT`, `PGDATABASE` | dev | Connexion PostgreSQL (`dev.exs`). | `postgres` / `postgres` / `localhost` / `5432` / `time_manager_dev` |
-| `DATABASE_URL` | prod | Connexion PostgreSQL. | Obligatoire |
-| `SECRET_KEY_BASE` | prod | Clé Phoenix pour signer les cookies de session. | Obligatoire |
-| `PHX_HOST`, `PHX_SERVER`, `POOL_SIZE` | prod | Nom d'hôte public, démarrage du serveur en release, taille du pool. | — |
-| `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `ADMIN_USERNAME` | seeds | Création du premier administrateur. | Pas d'administrateur créé si absentes |
+Sheet = `{id,user_id,week,note,status,reviewer_id,reviewed_at,reason,inserted_at,updated_at}`. Sans ligne enregistrée, la lecture représente une feuille open avec ID/timestamps null. Validation : 1–100 IDs entiers positifs, doublons dédupliqués ; semaine terminée, sans départ bloquant ni correction pending. Si un membre échoue, aucun n'est validé. Close/reopen : motif de 1–500 caractères.
 
-Le script de génération d'une clé : `mix phx.gen.secret`.
+Correction = `{id,user_id,period_id,username,before:{start,end},proposal:{start,end},reason,status,created_at,reviewed_at,reviewed_by,review_reason}` ; reviewed_by est le username du responsable. Motif de proposition 1–500 caractères, départ après arrivée et non futur. Une seule demande pending par période ; acceptation seulement si les horaires d'origine sont toujours actuels.
 
-En test, `config/test.exs` règle bcrypt sur `log_rounds: 1`. Un hachage réaliste prend volontairement du temps ; sans ce réglage, la suite de tests serait des dizaines de fois plus lente. Ce réglage ne concerne **que** les tests.
+Il n'y a pas de délai général de sept jours pour proposer une correction dans ce workflow : le verrouillage de semaine s'applique ; les sept jours concernent le **départ oublié**.
 
----
+### 4.10 Plannings et affectations
 
-## 13. Migrations et données de référence
+| Méthode | Route | Entrée / accès | Succès | Erreurs |
+|---|---|---|---|---|
+| GET | `/plans` | Équipes accessibles ; query from/to facultative ; défaut aujourd'hui à +42 jours, écart 1–366 jours. | 200 data: [Plan]. | 400, 422. |
+| GET | `/plans/:id` | Équipe accessible ; gardes brouillon seulement pour responsable/admin. | 200 data: Plan. | 403, 404. |
+| POST | `/teams/:id/plans` | Manager actuel/admin ; `{"plan":{"start":"2026-11-02","days":14}}`, days 1–31, défaut 14. | 200 data: Plan, revision initiale 1. | 400, 403, 404, 422. |
+| PATCH | `/plans/:id` | Même accès ; `{"revision":1,"start":"2026-11-03","days":14}` ; brouillon vide jamais publié. | 200 data: Plan, revision incrémentée. | 403, 404, 409, 422. |
+| DELETE | `/plans/:id` | Même accès + publish si publié ; `{"revision":2,"reason":"Retrait motivé"}` ; plan non commencé. | 200 data: {id}. | 403, 404, 409, 422. |
+| POST | `/plans/:plan_id/shifts` | Manager actuel/admin ; `{"shift":{...}}` ci-dessous. | 200 data: Plan complet mis à jour. | 400, 403, 404, 409, 422. |
+| PUT | `/plans/:plan_id/shifts/:id` | Même accès/payload ; garde modifiable. | 200 data: Plan mis à jour. | 400, 403, 404, 409, 422. |
+| DELETE | `/plans/:plan_id/shifts/:id` | Même accès ; `{"revision":3}`. | 200 data: Plan mis à jour. | 403, 404, 409, 422. |
+| POST | `/plans/:id/publish` | Permission publish ; `{"revision":4}`. | 200 data: Plan publié. | 403, 404, 409, 422. |
 
-Les migrations (`priv/repo/migrations/`) décrivent l'évolution de la base. Elles s'exécutent dans l'ordre de leur horodatage, une seule fois chacune : Ecto note celles déjà jouées dans la table `schema_migrations`.
+```json
+{
+  "shift": {
+    "user_id": 14,
+    "start": "2026-11-03T22:00:00Z",
+    "end": "2026-11-04T06:00:00Z",
+    "kind": "night",
+    "place": "Centre municipal",
+    "revision": 1
+  }
+}
+```
 
-| Migration | Ce qu'elle change |
+Plan = `{id,team_id,team_name,start,days,revision,published_revision,published_at,published,can_manage,can_publish,shifts,members,inserted_at,updated_at}`. members contient `{id,username,name}` ; shifts contient `{id,plan_id,user_id,start,end,kind,place,inserted_at,updated_at}`. Le snapshot brut n'est pas retourné.
+
+Types : day/night/oncall/leave/rest. Durée positive ≤24 h, début dans la période du plan, salarié membre et garde non passée ; lieu ≤200 caractères. La **revision est obligatoire** pour chaque modification/publication après création. Une revision absente/ancienne produit 409 : relire avant de réessayer.
+
+La publication vérifie gardes présentes, délai, composition, quotas, chevauchements et absences approuvées, y compris les autres publications aux frontières de semaine/mois. La recherche from/to filtre le début des plans avec une marge de 31 jours ; elle ne découpe pas les plans.
+
+### 4.11 Échanges de gardes
+
+| Méthode | Route | Entrée / accès | Succès | Erreurs |
+|---|---|---|---|---|
+| GET | `/shift-swaps` | Demandes personnelles/périmètre responsable. | 200 data: [Swap]. | Authentification commune. |
+| POST | `/shift-swaps` | Propriétaire de la première garde ; `{"shift_id":1,"target_shift_id":2,"reason":"Motif"}`. | 200 data: Swap pending. | 400, 403, 404, 409, 422. |
+| PATCH | `/shift-swaps/:id/consent` | Collègue destinataire ; `{"accepted":true}` ou false. | 200 data: Swap consented/rejected. | 400, 403, 404, 409. |
+| PATCH | `/shift-swaps/:id` | Responsable des deux salariés ; `{"status":"approved","reason":""}` ou rejected avec motif. | 200 data: Swap. | 403, 404, 409, 422. |
+
+Swap = `{id,user_id,target_user_id,shift_id,target_shift_id,proposal:{source,target},reason,status,reviewer_id,review_reason,reviewed_at,inserted_at,updated_at}`. proposal conserve les gardes proposées. États : pending → consented → approved/rejected ; refus du collègue = rejected.
+
+Gardes futures, du même planning publié à jour, salariés différents, hors congé/repos ; motif obligatoire ≤500 caractères. La décision exige validate pour les deux salariés ; l'approbation exige aussi publish et revalide snapshots/membres/contraintes. Modifier/supprimer une garde rejette ses propositions actives. L'échange approuvé et la publication sont modifiés atomiquement.
+
+### 4.12 Congés et absences
+
+| Méthode | Route | Entrée / accès | Succès | Erreurs |
+|---|---|---|---|---|
+| GET | `/absence-requests` | Périmètre accessible ; aucun filtre. | 200 data: [Absence]. | Authentification commune. |
+| POST | `/absence-requests` | Compte courant ; `{"start":"2026-11-05T09:00:00Z","end":"2026-11-05T17:00:00Z","kind":"leave","reason":"Congé"}`. | 200 data: Absence pending. | 400, 409, 422. |
+| PATCH | `/absence-requests/:id` | Autre salarié, permission validate ; `{"status":"approved","reason":"","payable_hours":"8"}` ou rejected avec motif. | 200 data: Absence. | 403, 404, 409, 422. |
+| POST | `/absence-requests/:id/cancel` | Propriétaire si pending, ou responsable validate ; `{"reason":"Annulation motivée"}`. | 200 data: Absence cancelled. | 403, 404, 409, 422. |
+| PATCH | `/absence-requests/:id/payment` | Autre salarié, permission validate ; absence approuvée ; `{"payable_hours":"8"}`. | 200 data: Absence mise à jour. | 403, 404, 409, 422. |
+
+Absence = `{id,user_id,start,end,kind,reason,status,payable_hours,reviewer_id,review_reason,reviewed_at,inserted_at,updated_at}`. Types leave/sick/recup ; états pending/approved/rejected/cancelled. Durée 1 seconde à 366 jours, commentaire facultatif ≤500 caractères. Pas de chevauchement d'absences actives ; l'approbation refuse le travail déjà enregistré sur cette plage.
+
+payable_hours facultatif à l'acceptation, non négatif, fini, ≤durée de la plage, arrondi à quatre décimales ; interdit pour recup. Sans quantité confirmée pour une catégorie rémunérée, le montant reste indisponible. Refus/annulation exigent un motif ; les régularisations vérifient le verrouillage hebdomadaire.
+
+### 4.13 Paie et export
+
+| Méthode | Route | Entrée / accès | Succès | Erreurs |
+|---|---|---|---|---|
+| GET | `/payroll` | Admin ; query month=YYYY-MM obligatoire. | 200 data: PayrollReport. | 400, 403. |
+| GET | `/payroll/export` | Même accès/query/calcul. | 200 text/csv, UTF-8 avec BOM, séparateur ; et Content-Disposition attachment. | 400, 403. |
+| GET | `/users/:id/payroll-profile` | Soi/admin de l'organisation. | 200 data: PayProfile. | 403, 404. |
+| PUT | `/users/:id/payroll-profile` | Admin ; `{"hourly_rate":"15.50","currency":"EUR"}`. | 200 data: PayProfile. | 400, 403, 404, 422. |
+
+PayProfile = `{id,user_id,hourly_rate,currency,inserted_at,updated_at}`, valeurs par défaut si non enregistré. Taux 0–100000, fini, au plus deux décimales ; null retire le taux. Devises EUR/USD/GBP.
+
+PayrollReport = `{month,timezone,rules,rows,total,currency_totals}` ; total est une durée travaillée, currency_totals regroupe les montants par devise. Exemple complet d'une ligne :
+
+```json
+{
+  "id": 14,
+  "name": "Sara Martin",
+  "email": "sara@example.test",
+  "day": 8.0,
+  "night": 0.0,
+  "sup": 0.0,
+  "recup": 0.0,
+  "oncall": 0.0,
+  "leave": 0.0,
+  "sick": 0.0,
+  "recup_taken": 0.0,
+  "paid_absence_hours": 0.0,
+  "total": 8.0,
+  "hourly_rate": "15.50",
+  "currency": "EUR",
+  "amount": "124.00",
+  "absence_payment_incomplete": false,
+  "absence_conflict": false,
+  "absence_payment": [],
+  "confirmed": false
+}
+```
+
+Le calcul découpe aux frontières UTC et récupère aussi le début de la semaine contenant le premier jour du mois. Catégories exclusives : les heures sup. ne cumulent pas le coefficient nuit ; seules les périodes work consomment le seuil hebdomadaire. Oncall est au taux normal ; recup n'entre pas dans le montant.
+
+Leave/sick/recup_taken sont des durées d'absence séparées du total travaillé. Leur rémunération utilise les catégories activées et les **heures confirmées**, réparties au prorata si la plage traverse un mois. Le travail en chevauchement est déduit et signalé. amount=null sans taux/quantité requise ; confirmed exige toutes les semaines du mois validées/clôturées et aucune anomalie d'absence.
+
+Les montants utilisent Decimal, arrondi final à deux décimales, sans additionner des devises différentes. Le CSV protège les cellules susceptibles d'être interprétées comme formules. Ce relevé ne calcule ni salaire net, ni charges, ni déclaration externe. Il utilise les **règles/taux actuels**, sans figer une paie historique.
+
+### 4.14 Journal, notifications et documentation interactive
+
+| Méthode | Route | Entrée / accès | Succès | Erreurs |
+|---|---|---|---|---|
+| GET | `/audit-events` | Admin ; aucun filtre/pagination. | 200 data: [Event], 200 derniers de son organisation. | 403. |
+| GET | `/notifications` | Compte courant. | 200 data: [Notification], 100 dernières personnelles. | Authentification commune. |
+| PATCH | `/notifications/:id/read` | Destinataire ; aucun corps requis. | 200 data: Notification, read_at renseigné. | 403, 404. |
+| GET | `/openapi` | Public ; aucun paramètre. | 200 spécification JSON, **sans enveloppe data**. | Échec de génération = erreur serveur. |
+
+Event = `{id,organization_id,actor_id,action,details,inserted_at}` ; Notification = `{id,user_id,title,body,read_at,inserted_at}`. Les notifications de décisions sont persistées dans l'application ; pas d'email/SMS automatique ou de rappel programmé pour ces workflows.
+
+Hors préfixe /api, GET `/swaggerui` sert du HTML. `/dev/dashboard` et `/dev/mailbox` sont conditionnels au mode développement ; `/live` est le socket Phoenix de l'endpoint, pas une API métier du frontend.
+
+## 5. Configuration, migrations et vérification
+
+| Fichier / réglage | Fonction |
 |---|---|
-| `20260922074724_create_users` | Table `users` (username, email). |
-| `20260922114802_create_workingtime` | Table `workingtime`, contrainte `end > start`, suppression en cascade avec l'utilisateur. |
-| `20260922120536_create_clocks` | Table `clocks` (time, status). |
-| `20261004090000_add_roles_and_passwords` | Table `roles` et ses trois lignes ; `users.password_hash` et `users.role_id`. Les comptes existants deviennent `employee`. Les e-mails en double sont suffixés, puis tous mis en minuscules, avant de créer l'index unique sur `lower(email)`. |
-| `20261004090100_create_teams` | Tables `teams` et `team_members`. |
-| `20261004090200_delete_clocks_with_user` | Les pointages sont désormais supprimés avec leur utilisateur. Avant, supprimer un utilisateur qui avait pointé échouait sur la clé étrangère. |
-| `20261005071118_add_kind_to_clocks` | Colonne `kind` ; les anciens pointages deviennent `arrival` ou `departure` selon leur `status` ; contrainte de cohérence `kind` ↔ `status`. |
+| mix.exs | Elixir ~> 1.17, Phoenix ~> 1.8.14 et dépendances ; versions résolues dans mix.lock. |
+| config/dev.exs | PostgreSQL via PGUSER/PGPASSWORD/PGHOST/PGDATABASE/PGPORT ; port HTTP 4000 par défaut. |
+| config/test.exs | Base isolée time_manager_test, SQL Sandbox, hash moins coûteux, limiteurs désactivés pour la suite ordinaire. |
+| config/runtime.exs | PORT, JWT_SECRET, COOKIE_SECURE, EMAIL_DELIVERY ; en prod DATABASE_URL, POOL_SIZE, SECRET_KEY_BASE et endpoint. |
+| application.ex | Supervise Repo, PubSub, télémétrie, DNSCluster, RateLimiter et Endpoint avec stratégie one_for_one. |
+| entrypoint.sh | Attend PostgreSQL, lance ecto.create, ecto.migrate, seeds, puis phx.server. |
 
-Les migrations qui touchent des données existantes (rôles, e-mails, `kind`) les **reprennent** au lieu de les effacer : une base déjà en production se met à jour sans perte.
+Le Dockerfile actuel utilise **MIX_ENV=dev**, même dans le déploiement par images. La configuration de développement et ses routes dev sont donc actives ; ce n'est pas une release prod. Fournir un JWT_SECRET réel : le repli de développement ne convient pas au serveur déployé.
 
-**`seeds.exs`** est idempotent : on peut l'exécuter autant de fois qu'on veut. Il réinsère les rôles s'ils manquent (`on_conflict: :nothing`) et crée le premier administrateur à partir de `ADMIN_EMAIL` / `ADMIN_PASSWORD`, seulement s'il n'existe pas encore. Le mot de passe ne vit jamais dans le dépôt. Sans premier administrateur, personne ne pourrait créer d'équipe ni promouvoir un manager.
+seeds.exs insère les rôles et, si ADMIN_EMAIL/ADMIN_PASSWORD sont présents, un admin **sans organisation**. Il ne modifie pas un compte existant et ne crée pas Gotham City. Le provisionnement/rattachement Gotham est décrit dans le [contrat d'organisation](CONTRAT_BACKEND_ORGANISATIONS.md#10-provisionnement-manuel-et-verrouillage-de-gotham-city) et le script racine scripts/recreate_gotham_admin.sh.
 
----
+Les trois migrations workforce du 12 octobre ajoutent les tables métier, l'audit des comptes historiques et payable_hours. Ecto suit les versions appliquées et ne les rejoue pas. Voir le [guide de déploiement](DEPLOIEMENT_WORKFLOWS.md) pour la base cible.
 
-## 14. Les tests
-
-La suite compte **107 tests**. Elle se lance avec `mix test`.
-
-### 14.1 L'outillage (`test/support/`)
-
-| Fichier | Rôle |
-|---|---|
-| `data_case.ex` | Base des tests métier. Chaque test s'exécute dans une transaction **annulée à la fin** (sandbox Ecto) : les tests ne se polluent pas et peuvent tourner en parallèle. |
-| `conn_case.ex` | Base des tests HTTP. Fournit `log_in(conn, user)`, qui fabrique un vrai JWT, pose le cookie et l'en-tête CSRF. |
-| `fixtures/accounts_fixtures.ex` | `user_fixture(role: "manager")`, `team_fixture(manager_id: ..., members: [...])` : créer un jeu de données en une ligne. |
-
-### 14.2 Ce qui est couvert
-
-| Fichier | Tests | Ce qu'il vérifie |
-|---|---|---|
-| `time_manager/accounts_test.exs` | 19 | Création, hachage, unicité de l'e-mail, changement et réinitialisation du mot de passe, dernier administrateur. |
-| `time_manager/clocks_test.exs` | 14 | Machine à états, dates antérieures, création des périodes, pauses exclues, `kind` incohérent refusé. |
-| `time_manager/clocks_completion_test.exs` | 7 | Départ oublié : futur, plus de 7 jours, formulaire périmé, ordre des dates. |
-| `time_manager/clocks_concurrency_test.exs` | 4 | Deux requêtes simultanées n'insèrent qu'un pointage et qu'une période (vraies connexions parallèles). |
-| `time_manager_web/.../auth_controller_test.exs` | 13 | Login, register (le rôle envoyé est ignoré), cookie, CSRF manquant ou faux, utilisateur supprimé, logout. |
-| `time_manager_web/.../user_controller_test.exs` | 25 | Périmètres, assignation de masse, mots de passe, promotion, suppression. |
-| `time_manager_web/.../clock_controller_test.exs` | 9 | API de pointage, `complete`, personne ne pointe pour un autre. |
-| `time_manager_web/.../working_time_controller_test.exs` | 8 | Lecture et correction selon le rôle. |
-| `time_manager_web/.../team_controller_test.exs` | 5 | Composition des équipes réservée à l'administrateur. |
-| `error_json_test.exs`, `api_spec_test.exs` | 3 | Format des erreurs, spec OpenAPI valide. |
-
-### 14.3 Avant chaque commit
+Depuis time_manager/, avec PostgreSQL disponible :
 
 ```bash
+mix phx.routes
 mix precommit
 ```
 
-Cet alias enchaîne : compilation avec les warnings traités comme des erreurs, suppression des dépendances inutilisées du `mix.lock`, formatage du code, puis la suite de tests.
+precommit utilise l'environnement test : compilation avec warnings-as-errors, contrôle des dépendances inutilisées, formatage et tests. Les tests métier couvrent transitions/validations/concurrence ; les tests HTTP couvrent authentification, isolation, payloads, erreurs et OpenAPI. Les tests concurrents utilisent des connexions PostgreSQL distinctes pour vérifier les verrous réels.
 
----
-
-## 15. Lancer le backend
-
-### En local
-
-Prérequis : Elixir 1.17 et un PostgreSQL accessible (par défaut `postgres` / `postgres` sur `localhost:5432`).
-
-```bash
-cd time_manager
-mix setup                          # dépendances + création de la base + migrations + seeds
-ADMIN_EMAIL=admin@example.com ADMIN_PASSWORD='un-mot-de-passe-long' mix run priv/repo/seeds.exs
-mix phx.server                     # http://localhost:4000
-```
-
-- Swagger UI : <http://localhost:4000/swaggerui>. Connectez-vous avec `POST /api/auth/login`, puis collez le `csrf_token` reçu dans « Authorize ».
-- Spec OpenAPI brute : <http://localhost:4000/api/openapi>.
-- Repartir d'une base vide : `mix ecto.reset`.
-
-### Avec Docker
-
-`docker compose up` à la racine du dépôt démarre PostgreSQL, le backend et le tableau de bord. L'`entrypoint.sh` du backend :
-
-1. refuse de démarrer sans fichier `.env` ;
-2. attend que PostgreSQL réponde (`pg_isready`) ;
-3. exécute `ecto.create`, `ecto.migrate`, puis les seeds ;
-4. lance `mix phx.server`.
-
-Le déploiement automatique (Travis CI, Docker Hub, serveur) est décrit dans [DEVOPS.md](DEVOPS.md).
-
----
-
-## 16. Ajouter une fonctionnalité : la marche à suivre
-
-Exemple : ajouter des « demandes de congé ».
-
-1. **Migration** — `mix ecto.gen.migration create_leave_requests`. Mettez les règles qui doivent être vraies quoi qu'il arrive dans la base : `null: false`, clés étrangères, `CHECK`.
-2. **Schéma et changeset** — `lib/time_manager/leaves/leave_request.ex`. Ne castez que les champs que le client a le droit de fixer ; le propriétaire vient du code.
-3. **Contexte** — `lib/time_manager/leaves.ex`. Renvoyez `{:ok, _}` ou `{:error, _}` ; utilisez `Repo.transact` dès que plusieurs écritures doivent réussir ensemble.
-4. **Autorisation** — ajoutez une fonction `can_…?` dans `authorization.ex`. Ne dispersez jamais une règle d'accès dans un contrôleur.
-5. **Contrôleur et vue JSON** — dans `lib/time_manager_web/controllers/`, avec le même `with` que les autres, `action_fallback` et une macro `operation(...)`.
-6. **Schémas OpenAPI** — dans `lib/time_manager_web/schemas/`.
-7. **Route** — dans le scope protégé de `router.ex` : l'authentification est alors automatique.
-8. **Tests** — un test métier (`DataCase`), puis un test HTTP (`ConnCase`) qui vérifie au minimum le 401 sans session et le 403 hors périmètre.
-9. **`mix precommit`**.
-
----
-
-## 17. Limites connues et pistes
-
-| Limite | Conséquence | Piste |
-|---|---|---|
-| Les compteurs de tentatives sont en mémoire (ETS). | Ils repartent de zéro au redémarrage et ne sont pas partagés entre plusieurs instances. Derrière Nginx, tous les clients partagent l'adresse IP du proxy : seuls les seuils par e-mail restent fins. | Stockage partagé, et lecture de `X-Real-IP` une fois le port 4000 fermé au public. |
-| `/api/auth/register` crée un compte actif sans validation. | Le compte est isolé de toute organisation, mais il contourne le circuit des demandes d'adhésion. | Le supprimer quand le front utilise le circuit organisations. |
-| `COOKIE_SECURE` vaut `false` par défaut. | Sur un site en HTTP, le cookie circule en clair. | Servir en HTTPS et définir `COOKIE_SECURE=true`. |
-| L'image Docker tourne en `MIX_ENV=dev`. | Le rechargement de code et les messages d'erreur détaillés restent actifs sur le serveur. | Construire une release `MIX_ENV=prod` (`mix release`). |
-| Les corrections de périodes ne sont pas historisées. | Une période modifiée par un manager ne garde pas sa valeur d'origine. | Table d'audit (qui, quand, avant, après). |
-| `README.md` du backend partiellement obsolète. | Il décrit encore `clocks.user_id` en `ON DELETE NOTHING`, corrigé depuis par la migration `delete_clocks_with_user`. | Le mettre à jour ou renvoyer vers ce document. |
+Pour ajouter une route : déclarer le chemin dans router.ex, écrire contrôleur et description OpenAPI, placer les règles dans le contexte, définir schéma/changeset/migration si nécessaires, tester autorisations, erreurs et concurrence pertinente. Actualiser ce document et le [contrat backend/frontend](CONTRAT_BACKEND_ORGANISATIONS.md) si le contrat public change.
