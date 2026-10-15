@@ -36,6 +36,7 @@ defmodule TimeManagerWeb.TeamController do
       if Authorization.administrator?(me) do
         Teams.list_teams(me.organization_id)
       else
+        # Le rôle vient de la base : manager_id seul ne survit pas à une rétrogradation.
         managed = if Authorization.manager?(me), do: Teams.list_managed_teams(me), else: []
         managed_ids = MapSet.new(managed, & &1.id)
 
@@ -65,6 +66,7 @@ defmodule TimeManagerWeb.TeamController do
   def show(conn, %{"id" => id}) do
     me = current_user(conn)
 
+    # Authenticate recharge le rôle actif à chaque requête, même avec un ancien JWT.
     with {:ok, team} <- Teams.fetch_team(id),
          :ok <-
            authorize(

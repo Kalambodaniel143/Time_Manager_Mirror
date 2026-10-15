@@ -36,7 +36,8 @@ defmodule TimeManagerWeb.Plugs.Authenticate do
          xsrf when is_binary(xsrf) <- claims["xsrf"],
          true <- Plug.Crypto.secure_compare(csrf, xsrf),
          false <- Accounts.session_revoked?(claims["jti"]),
-         {:ok, user} <- Accounts.fetch_user(claims["user_id"]) do
+         {:ok, user} <- Accounts.fetch_user(claims["user_id"]),
+         true <- claims["session_version"] == user.session_version do
       conn
       |> assign(:current_user, user)
       |> assign(:session_claims, claims)

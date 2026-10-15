@@ -77,6 +77,12 @@ defmodule TimeManagerWeb.JoinRequestController do
 
   def create(_conn, _params), do: {:error, :bad_request}
 
+  operation(:verify_email,
+    summary: "Verify an applicant's email before admission",
+    security: [],
+    responses: [ok: {"Email verified", "application/json", %OpenApiSpex.Schema{type: :object}}]
+  )
+
   def verify_email(conn, %{"email" => email, "code" => code}) do
     case Accounts.verify_join_request_email(email, code) do
       {:ok, request} ->
@@ -96,6 +102,12 @@ defmodule TimeManagerWeb.JoinRequestController do
   end
 
   def verify_email(_conn, _params), do: {:error, :bad_request}
+
+  operation(:resend_verification,
+    summary: "Resend the applicant's verification code",
+    security: [],
+    responses: [ok: {"Request received", "application/json", %OpenApiSpex.Schema{type: :object}}]
+  )
 
   def resend_verification(conn, %{"email" => email}) when is_binary(email) do
     with {:ok, request} <- Accounts.find_pending_join_request(email),
@@ -164,7 +176,7 @@ defmodule TimeManagerWeb.JoinRequestController do
     with {:ok, me} <- organization_admin(conn, org_id),
          {:ok, result} <-
            Organizations.approve_join_request(me.organization_id, id, password, me),
-         :ok <- deliver_credentials(result.user, password, result.user.organization) do
+         :ok <- deliver_credentials(result.user, result.user.organization) do
       render(conn, :approved, result)
     end
   end
@@ -194,8 +206,8 @@ defmodule TimeManagerWeb.JoinRequestController do
 
   def reject(_conn, _params), do: {:error, :bad_request}
 
-  defp deliver_credentials(user, password, organization) do
-    case user.email |> Email.credentials(user, password, organization) |> EmailDelivery.send() do
+  defp deliver_credentials(user, organization) do
+    case user.email |> Email.credentials(user, organization) |> EmailDelivery.send() do
       :ok -> :ok
       {:error, _reason} -> {:error, :service_unavailable}
     end

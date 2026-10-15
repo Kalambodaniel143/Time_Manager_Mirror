@@ -17,7 +17,7 @@ defmodule TimeManager.Resend do
   defp send_request(email, api_key) do
     body = %{
       from: Application.fetch_env!(:time_manager, :resend_from),
-      to: [email.to],
+      to: Enum.map(email.to, fn {_name, address} -> address end),
       subject: email.subject,
       text: email.text_body
     }
@@ -29,12 +29,12 @@ defmodule TimeManager.Resend do
       {:ok, %Req.Response{status: status}} when status in 200..299 ->
         :ok
 
-      {:ok, %Req.Response{status: status, body: response}} ->
-        Logger.error("Resend rejected email (status #{status}): #{inspect(response)}")
+      {:ok, %Req.Response{status: status}} ->
+        Logger.error("Resend rejected email (status #{status})")
         {:error, :email_delivery_failed}
 
-      {:error, reason} ->
-        Logger.error("Resend request failed: #{inspect(reason)}")
+      {:error, _reason} ->
+        Logger.error("Resend request failed")
         {:error, :email_delivery_failed}
     end
   end

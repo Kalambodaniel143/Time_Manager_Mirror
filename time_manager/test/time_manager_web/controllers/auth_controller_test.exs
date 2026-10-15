@@ -207,7 +207,7 @@ defmodule TimeManagerWeb.AuthControllerTest do
 
     same_site =
       build_conn()
-      |> put_req_header("origin", "http://www.example.com:8080")
+      |> put_req_header("origin", "http://www.example.com")
       |> post(~p"/api/auth/login", email: user.email, password: valid_password())
 
     assert json_response(same_site, 200)

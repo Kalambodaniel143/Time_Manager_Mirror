@@ -25,8 +25,8 @@ defmodule TimeManagerWeb.AuthController do
   action_fallback TimeManagerWeb.FallbackController
 
   # Slows down password guessing: per account, and per address for spraying.
-  plug RateLimit, [bucket: :login_email, limit: 10, by: :email] when action == :login
   plug RateLimit, [bucket: :login_ip, limit: 100] when action == :login
+  plug RateLimit, [bucket: :login_email, limit: 10, by: :email] when action == :login
   plug RateLimit, [bucket: :register, limit: 20] when action == :register
 
   plug RateLimit,

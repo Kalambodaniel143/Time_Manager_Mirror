@@ -8,7 +8,7 @@ defmodule TimeManager.EmailDelivery do
       :mailpit ->
         case Mailer.deliver(email) do
           {:ok, _response} -> :ok
-          {:error, reason} -> {:error, {:email_delivery_failed, reason}}
+          {:error, _reason} -> {:error, :email_delivery_failed}
         end
 
       :resend ->

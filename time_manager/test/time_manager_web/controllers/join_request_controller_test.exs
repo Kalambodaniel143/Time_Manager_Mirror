@@ -198,4 +198,46 @@ defmodule TimeManagerWeb.JoinRequestControllerTest do
       assert json_response(conn, 404)
     end
   end
+
+  test "direct approval cannot bypass email verification; codes cannot be reused", %{
+    admin: admin,
+    org: org
+  } do
+    {request, _} = join_request_fixture(org)
+    session = log_in(build_conn(), admin)
+    path = ~p"/api/organizations/#{org}/join-requests/#{request.id}/approve"
+    assert json_response(post(session, path, password: valid_password()), 409)
+    assert Accounts.list_users(%{"email" => request.email}) == []
+    {:ok, code} = Accounts.issue_email_verification(request)
+    wrong = if code == "000000", do: "111111", else: "000000"
+
+    assert json_response(
+             post(build_conn(), "/api/join-requests/verify-email",
+               email: request.email,
+               code: wrong
+             ),
+             422
+           )
+
+    assert json_response(
+             post(build_conn(), "/api/join-requests/verify-email",
+               email: request.email,
+               code: code
+             ),
+             200
+           )
+
+    assert json_response(
+             post(build_conn(), "/api/join-requests/verify-email",
+               email: request.email,
+               code: code
+             ),
+             422
+           )
+
+    assert json_response(post(session, path, password: valid_password()), 200)
+    assert_receive {:email, email}
+    refute email.text_body =~ valid_password()
+    assert email.text_body =~ "canal sécurisé séparé"
+  end
 end
