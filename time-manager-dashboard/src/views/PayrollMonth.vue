@@ -1,7 +1,7 @@
 <template>
   <MonthlyHours v-if="!demo" :now="now" />
   <div v-else class="payroll">
-    <PageHeader :eyebrow="$t(`${monthName} · ${data.rows.length} services`)" :title="$t(`Paie de ${monthName}`)">
+    <PageHeader :eyebrow="$t('{month} · {count} services', { month: monthName, count: data.rows.length })" :title="$t('Paie de {month}', { month: monthName })">
       <button class="btn btn-primary" type="button" @click="exportCsv">
         <AppIcon name="check" /> {{ $t("Télécharger le relevé CSV") }} </button>
     </PageHeader>

@@ -18,13 +18,18 @@ export class ApiError extends Error {
 // do when the session is no longer valid. Kept as hooks to avoid import cycles.
 let csrfTokenProvider = () => null
 let unauthorizedHandler = () => {}
+let restoreHandler = null
+let sessionIdentity = () => null
 
-export function configureHttp({ csrfToken, onUnauthorized }) {
+export function configureHttp({ csrfToken, onUnauthorized, restoreSession, currentUser }) {
   if (csrfToken) csrfTokenProvider = csrfToken
   if (onUnauthorized) unauthorizedHandler = onUnauthorized
+  if (restoreSession) restoreHandler = restoreSession
+  if (currentUser) sessionIdentity = currentUser
 }
 
 export async function request(path, options = {}) {
+  const expectedUserId = sessionIdentity()
   const headers = { 'Content-Type': 'application/json', ...options.headers }
   const csrfToken = csrfTokenProvider()
   if (csrfToken) headers['X-CSRF-Token'] = csrfToken
@@ -44,7 +49,17 @@ export async function request(path, options = {}) {
 
   const payload = await response.json().catch(() => null)
 
-  if (response.status === 401 && !options.skipUnauthorizedHandler) unauthorizedHandler()
+  if (response.status === 401 && !options.skipUnauthorizedHandler) {
+    if (restoreHandler && expectedUserId && !options.skipSessionRecovery && !options.sessionRecoveryAttempted) {
+      const outcome = await restoreHandler(expectedUserId)
+      if (outcome === 'restored') return request(path, { ...options, sessionRecoveryAttempted: true })
+      if (outcome === 'changed') throw new ApiError(409, { errors: { detail: 'Le compte connecté a changé dans un autre onglet. Vérifiez le compte affiché avant de reprendre cette action.' } })
+    }
+    if (expectedUserId && sessionIdentity() && expectedUserId !== sessionIdentity()) {
+      throw new ApiError(409, { errors: { detail: 'Le compte connecté a changé dans un autre onglet. Vérifiez le compte affiché avant de reprendre cette action.' } })
+    }
+    unauthorizedHandler(expectedUserId)
+  }
   if (!response.ok) throw new ApiError(response.status, payload)
 
   return payload ? payload.data : null

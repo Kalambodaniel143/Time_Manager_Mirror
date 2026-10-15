@@ -93,3 +93,7 @@ RESEND_FROM_EMAIL=notifications@votre-domaine
 L’expéditeur doit être autorisé chez le fournisseur. Ne pas committer ces valeurs. Compose respecte EMAIL_DELIVERY. Attention : le pipeline Travis existant réécrit le fichier serveur avec EMAIL_DELIVERY=mailpit et ne transmet pas les variables Resend. Toute configuration durable de Resend doit être coordonnée avec la personne responsable du déploiement ; ce travail ne modifie pas Travis. En recette, garder `EMAIL_DELIVERY=mailpit` et vérifier les messages dans Mailpit. La réussite des tests avec l’adaptateur de test ne garantit pas la délivrance par le fournisseur distant.
 
 Après déploiement, vérifier dans OpenAPI `/auth/forgot-password`, `/auth/reset-password` et `/notifications/count`. Faire un essai sur un compte de recette : récupération, connexion avec le nouveau mot de passe, refus de l’ancienne session et réception de l’alerte. Aucune réinitialisation de base ni recréation des comptes existants n’est nécessaire.
+
+## Restauration des onglets — 15 octobre 2026
+
+Ce correctif ne nécessite aucune migration. Déployer ensemble le frontend et le backend : GET `/api/auth/session` doit accepter `X-Session-Restore: 1` avec le cookie valide et retourner `data.csrf_token`. Les autres routes conservent leurs contrôles CSRF. Vérifier un onglet neuf ouvert directement sur `/profil`, une reconnexion au même compte, puis une déconnexion depuis l’autre onglet. Voir la [recette](RECETTE_VALIDATIONS.md).

@@ -17,6 +17,10 @@ Utiliser une base de recette et des comptes de test : un administrateur, un mana
 | Notifications | Tester Toutes / Non lues / Lues ; marquer une notification lue puis actualiser. | Filtres persistants côté serveur, badge décrémenté, lecture conservée après reconnexion. Plusieurs pages si plus de 50 résultats. |
 | Confidentialité | Depuis un autre compte, tenter de marquer la notification du premier compte comme lue. | `403`, aucun changement du compteur du destinataire. |
 | Français/anglais | Changer la langue à la connexion, puis dans Mon compte ou le menu ; parcourir les écrans et le guide. | Libellés et dates traduits, données personnelles inchangées ; préférence restaurée après reconnexion. |
+| Même compte, plusieurs onglets | Se connecter dans A ; copier /profil dans un onglet B neuf. | B affiche Mon compte sans reconnexion ; les deux restent utilisables. Une nouvelle connexion au même compte ne provoque pas de faux message de session expirée. |
+| Déconnexion partagée | Déconnecter le compte dans B. | A rejoint la connexion à réception du signal ou au retour au premier plan. |
+| Changement de compte | Depuis une session différente dans le même profil, remplacer le cookie ; tenter une action encore affichée dans A. | Aucun rejeu automatique sous le nouveau compte ; message explicite et état de l’ancien compte effacé. |
+| Titres en anglais | Ouvrir l’accueil en anglais et changer l’heure/la semaine. | La salutation, Semaine dernière et les titres avec dates sont traduits ; le prénom est conservé. |
 | Mobile | Répéter connexion, adhésion, récupération et changement personnel à 390 px. | Formulaires lisibles, commandes accessibles et aucun défilement horizontal. |
 | Erreurs | Arrêter le backend de recette, puis provoquer un mauvais mot de passe et une validation de champ. | Message réseau actionnable, cause de connexion claire, champ invalide nommé ; aucune trace SQL affichée. |
 | Avant fusion | Exécuter les commandes de validation ci-dessous. | Tests backend, tests frontend, lint et build réussis. Travis reste inchangé ; l’intégration de ces checks à la CI relève de son responsable. |

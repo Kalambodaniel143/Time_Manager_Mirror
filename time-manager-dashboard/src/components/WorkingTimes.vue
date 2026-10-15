@@ -1,6 +1,6 @@
 <template>
   <div class="hours">
-    <PageHeader :eyebrow="$t(`Semaine ${weekNumber} · ${rangeLabel}`)" :title="$t(isSelf ? 'Mes heures' : `Heures de l’agent n° ${userID}`)">
+    <PageHeader :eyebrow="$t('Semaine {week} · {range}', { week: weekNumber, range: rangeLabel })" :title="isSelf ? $t('Mes heures') : $t('Heures de l’agent n° {id}', { id: userID })">
       <RouterLink class="btn btn-outline" :to="{ name: 'chartManager', params: { userid: userID } }">{{ $t("Graphiques") }}</RouterLink>
       <button class="btn btn-outline" type="button" @click="$emit('tour')">
         <AppIcon name="help" /> {{ $t("Revoir la prise en main") }} </button>

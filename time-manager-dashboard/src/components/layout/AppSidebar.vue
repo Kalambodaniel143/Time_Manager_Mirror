@@ -4,7 +4,7 @@
     <button v-if="open" class="menu-backdrop" type="button" :aria-label="$t(&quot;Fermer le menu&quot;)" @click="open = false"></button>
     <aside id="sidebar" class="sidebar" :class="{ 'is-open': open }" @keydown.esc="open = false">
       <RouterLink class="brand" :to="homeRoute" @click="open = false">{{ $t("Time Manager") }}</RouterLink>
-      <p class="space">{{ space }}</p>
+      <p class="space">{{ space === 'Mon espace' ? $t('Mon espace') : space }}</p>
       <nav class="nav" :aria-label="$t(&quot;Navigation principale&quot;)">
         <RouterLink v-for="item in links" :key="item.label" class="nav-link" :to="item.to" active-class="is-active" @click="open = false"><AppIcon :name="item.icon" />{{ $t(item.label) }}<span v-if="item.to.name === 'notifications' && unreadCount" class="notification-badge" :aria-label="$t(`${unreadCount} notifications non lues`)">{{ $t(unreadCount > 99 ? '99+' : unreadCount) }}</span></RouterLink>
       </nav>

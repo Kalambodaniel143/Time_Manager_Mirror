@@ -925,5 +925,18 @@
   "Un code de vérification a été envoyé à {email}. Validez votre adresse avant que la demande ne soit transmise à l’administrateur.": "A verification code has been sent to {email}. Verify your email before your request is sent to the administrator.",
   "Vérifier mon adresse": "Verify my email",
   "Le compte employé est créé. Les identifiants ont été envoyés par email à": "The employee account has been created. Credentials have been emailed to",
-  "Le mot de passe ne sera plus affiché après fermeture de cette fenêtre.": "The password will no longer be shown after this window is closed."
+  "Le mot de passe ne sera plus affiché après fermeture de cette fenêtre.": "The password will no longer be shown after this window is closed.",
+  "Semaine dernière": "Last week",
+  "Semaine dernière · {range}": "Last week · {range}",
+  "Semaine {week} · {range}": "Week {week} · {range}",
+  "Semaine {week}": "Week {week}",
+  "Heures de l’agent n° {id}": "Hours for employee no. {id}",
+  "{name} : départ à vérifier": "{name}: departure to check",
+  "Service commencé le {date}. Aucun départ enregistré depuis plus de 24 heures.": "Shift started on {date}. No departure recorded for over 24 hours.",
+  "Profil de {name}": "Profile of {name}",
+  "Rôle de {name}": "Role of {name}",
+  "Paie de {month}": "Payroll for {month}",
+  "{month} · {count} services": "{month} · {count} departments",
+  "Le compte connecté a changé dans un autre onglet. Vérifiez le compte affiché avant de reprendre cette action.": "The signed-in account changed in another tab. Check the displayed account before resuming this action.",
+  "Réponse de session invalide : jeton CSRF absent.": "Invalid session response: the CSRF token is missing."
 }
