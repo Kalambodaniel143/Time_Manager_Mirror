@@ -70,12 +70,6 @@ jwt_secret = required_secret!.("JWT_SECRET", 32)
 
 config :joken, default_signer: jwt_secret
 
-# The session cookie only travels over HTTPS when COOKIE_SECURE=true. Enable it
-# as soon as the site is served in HTTPS: browsers drop Secure cookies over HTTP.
-config :time_manager,
-       :auth_cookie_secure,
-       config_env() == :prod or System.get_env("COOKIE_SECURE") in ~w(true 1)
-
 if config_env() == :prod do
   database_url = System.get_env("DATABASE_URL", "")
 
@@ -125,9 +119,9 @@ if config_env() == :prod do
     raise "PHX_HOST requis : nom de domaine sans protocole, chemin ni port"
   end
 
-  public_port = String.to_integer(System.get_env("HTTPS_PORT", "443"))
-  unless public_port in 1..65_535, do: raise("HTTPS_PORT invalide")
-  public_origin = URI.to_string(%URI{scheme: "https", host: host, port: public_port})
+  public_port = String.to_integer(System.get_env("PUBLIC_PORT", "80"))
+  unless public_port in 1..65_535, do: raise("PUBLIC_PORT invalide")
+  public_origin = URI.to_string(%URI{scheme: "http", host: host, port: public_port})
   config :time_manager, :public_origin, public_origin
 
   proxy = System.get_env("TRUSTED_PROXY_IP", "")
@@ -147,7 +141,7 @@ if config_env() == :prod do
   config :time_manager, :dns_cluster_query, System.get_env("DNS_CLUSTER_QUERY")
 
   config :time_manager, TimeManagerWeb.Endpoint,
-    url: [host: host, port: public_port, scheme: "https"],
+    url: [host: host, port: public_port, scheme: "http"],
     http: [
       # Enable IPv6 and bind on all interfaces.
       # Set it to  {0, 0, 0, 0, 0, 0, 0, 1} for local network only access.
@@ -156,38 +150,6 @@ if config_env() == :prod do
       ip: {0, 0, 0, 0, 0, 0, 0, 0}
     ],
     secret_key_base: secret_key_base
-
-  # ## SSL Support
-  #
-  # To get SSL working, you will need to add the `https` key
-  # to your endpoint configuration:
-  #
-  #     config :time_manager, TimeManagerWeb.Endpoint,
-  #       https: [
-  #         ...,
-  #         port: 443,
-  #         cipher_suite: :strong,
-  #         keyfile: System.get_env("SOME_APP_SSL_KEY_PATH"),
-  #         certfile: System.get_env("SOME_APP_SSL_CERT_PATH")
-  #       ]
-  #
-  # The `cipher_suite` is set to `:strong` to support only the
-  # latest and more secure SSL ciphers. This means old browsers
-  # and clients may not be supported. You can set it to
-  # `:compatible` for wider support.
-  #
-  # `:keyfile` and `:certfile` expect an absolute path to the key
-  # and cert in disk or a relative path inside priv, for example
-  # "priv/ssl/server.key". For all supported SSL configuration
-  # options, see https://plug.hexdocs.pm/Plug.SSL.html#configure/1
-  #
-  # We also recommend setting `force_ssl` in your config/prod.exs,
-  # ensuring no data is ever sent via http, always redirecting to https:
-  #
-  #     config :time_manager, TimeManagerWeb.Endpoint,
-  #       force_ssl: [hsts: true]
-  #
-  # Check `Plug.SSL` for all available options in `force_ssl`.
 
   # ## Configuring the mailer
   #

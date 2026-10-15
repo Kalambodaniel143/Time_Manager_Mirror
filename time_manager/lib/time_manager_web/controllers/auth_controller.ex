@@ -292,7 +292,6 @@ defmodule TimeManagerWeb.AuthController do
     [
       http_only: true,
       same_site: "Strict",
-      secure: Application.get_env(:time_manager, :auth_cookie_secure, false),
       path: "/"
     ]
   end
