@@ -15,3 +15,8 @@ time-manager-dashboard/dist/
 time_manager/logs_backend
 # MkDocs build output
 site/
+
+# Secrets et certificats de déploiement
+.env.deploy
+.env.production
+*.pem
