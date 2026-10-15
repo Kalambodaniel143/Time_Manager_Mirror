@@ -113,6 +113,9 @@ Pour qu'une suite de commandes s'arrête à la première erreur, il faut les enc
 | `SERVER_USER` | Stage 2 | Utilisateur Linux du serveur, autorisé à `sudo` sans mot de passe |
 | `PGUSER`, `PGPASSWORD`, `PGDATABASE` | Stage 2, via `.env` | Utilisateur, mot de passe et nom de la base Postgres |
 | `PGPORT` | Stage 2, via `.env` | Port de Postgres publié sur le serveur (côté hôte) |
+| `DATABASE_URL` | Stage 2, via `.env` | URL PostgreSQL complète vers `db:5432`, identifiants encodés en URL. |
+| `SECRET_KEY_BASE` | Stage 2, via `.env` | Clé privée aléatoire, au moins 64 octets, distincte du JWT. |
+| `PHX_HOST` | Stage 2, via `.env` | Nom DNS utilisé par Phoenix pour ses URL publiques. |
 | `JWT_SECRET` | Stage 2, via `.env` | Clé de signature des JWT de session, au moins 32 caractères (`mix phx.gen.secret`). La changer déconnecte tout le monde. |
 | `RESEND_API_KEY` | Stage 2, via `.env` | Clé API Resend utilisée pour envoyer les codes OTP d'inscription. |
 | `RESEND_FROM` | Stage 2, via `.env` | Adresse d'expédition vérifiée dans Resend, par exemple `Time Manager <noreply@example.com>`. |
@@ -141,7 +144,7 @@ Trois pièges à connaître :
 
 **Couches et cache.** Chaque instruction du Dockerfile produit une couche. Docker réutilise une couche tant que ses entrées n'ont pas changé, d'où l'ordre du Dockerfile : dépendances d'abord, code ensuite. Sur Travis, la VM est neuve à chaque build : ce cache est vide et tout est reconstruit.
 
-**Registre, nom et tag.** Docker Hub est un *registre* : il stocke des images comme GitHub stocke du code. Un nom complet suit la forme `compte/dépôt:tag`, par exemple `$DOCKER_USERNAME/time-manager-backend:latest`. `docker push` envoie l'image, `docker pull` la récupère ; `latest` n'est qu'un tag comme un autre, écrasé à chaque push.
+**Registre, nom et tag.** Docker Hub est un *registre* : il stocke des images comme GitHub stocke du code. Un nom complet suit la forme `compte/dépôt:tag`, par exemple `$DOCKER_USERNAME/time-manager-backend:prod`. `docker push` envoie l'image, `docker pull` la récupère ; `latest` n'est qu'un tag comme un autre, écrasé à chaque push.
 
 Le serveur télécharge les images sans s'authentifier : les dépôts Docker Hub doivent donc être **publics**. Avec des dépôts privés, il faudrait ajouter un `docker login` dans `deploy.sh`.
 
@@ -162,7 +165,7 @@ Le serveur télécharge les images sans s'authentifier : les dépôts Docker Hub
 - `env_file:` injecte toutes les lignes d'un fichier comme variables d'environnement du conteneur.
 - `environment:` définit des variables du conteneur, prioritaires sur celles de `env_file`.
 
-La commande `docker compose config` affiche le fichier après remplacement des variables : le moyen le plus simple de vérifier le résultat.
+Utiliser `docker compose config --quiet` pour valider sans afficher les secrets interpolés.
 
 **Mettre à jour sans tout casser.** `docker compose pull` télécharge les nouvelles versions des images. `docker compose up -d` recrée seulement les conteneurs dont l'image ou la configuration a changé, en arrière-plan, et conserve les volumes.
 
@@ -195,9 +198,9 @@ jobs:
     - stage: "Build & Push Image"
       script:
         - echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin
-        - docker build -t "$DOCKER_USERNAME/time-manager-backend:latest" ./time_manager
+        - docker build --target production -t "$DOCKER_USERNAME/time-manager-backend:prod" ./time_manager
         - docker build -t "$DOCKER_USERNAME/time-manager-frontend:latest" ./time-manager-dashboard
-        - docker push "$DOCKER_USERNAME/time-manager-backend:latest"
+        - docker push "$DOCKER_USERNAME/time-manager-backend:prod"
         - docker push "$DOCKER_USERNAME/time-manager-frontend:latest"
 
     - stage: "Deploy"
@@ -207,10 +210,11 @@ jobs:
         - mkdir -p ~/.ssh
         - chmod 700 ~/.ssh
         - ssh-keyscan -H $SERVER_IP >> ~/.ssh/known_hosts
+
       script:
         - scp -v docker-compose.prod.yml $SERVER_USER@$SERVER_IP:~/docker-compose.yml
         # Build the server .env from the Travis environment variables
-        - printf 'PGUSER=%s\nPGPASSWORD=%s\nPGDATABASE=%s\nPGPORT=%s\nDOCKER_USERNAME=%s\nJWT_SECRET=%s\nADMIN_EMAIL=%s\nADMIN_PASSWORD=%s\n' "$PGUSER" "$PGPASSWORD" "$PGDATABASE" "$PGPORT" "$DOCKER_USERNAME" "$JWT_SECRET" "$ADMIN_EMAIL" "$ADMIN_PASSWORD" > .env.deploy
+        - printf 'PGUSER=%s\nPGPASSWORD=%s\nPGDATABASE=%s\nPGPORT=%s\nDOCKER_USERNAME=%s\nDATABASE_URL=%s\nSECRET_KEY_BASE=%s\nPHX_HOST=%s\nJWT_SECRET=%s\nEMAIL_DELIVERY=mailpit\nADMIN_EMAIL=%s\nADMIN_PASSWORD=%s\n' "$PGUSER" "$PGPASSWORD" "$PGDATABASE" "$PGPORT" "$DOCKER_USERNAME" "$DATABASE_URL" "$SECRET_KEY_BASE" "${PHX_HOST:-localhost}" "$JWT_SECRET" "$ADMIN_EMAIL" "$ADMIN_PASSWORD" > .env.deploy
         - scp .env.deploy $SERVER_USER@$SERVER_IP:~/.env
         - scp deploy.sh $SERVER_USER@$SERVER_IP:~/deploy.sh
         - ssh $SERVER_USER@$SERVER_IP "bash ~/deploy.sh"
@@ -223,7 +227,7 @@ jobs:
 | Commande | Ce qu'elle fait |
 |---|---|
 | `docker login ... --password-stdin` | Se connecte à Docker Hub, condition pour pousser. Le mot de passe arrive par l'entrée standard, pas en argument : il n'apparaît ni dans la liste des processus ni dans les logs. |
-| `docker build -t ".../time-manager-backend:latest" ./time_manager` | Construit l'image du backend. `./time_manager` est le *contexte de build* : le dossier envoyé à Docker, qui y trouve le Dockerfile. `-t` donne le nom complet de l'image. |
+| `docker build -t ".../time-manager-backend:prod" ./time_manager` | Construit l'image du backend. `./time_manager` est le *contexte de build* : le dossier envoyé à Docker, qui y trouve le Dockerfile. `-t` donne le nom complet de l'image. |
 | `docker build -t ".../time-manager-frontend:latest" ./time-manager-dashboard` | Même chose pour le frontend, avec le Dockerfile de `time-manager-dashboard/`. |
 | `docker push ...`, deux fois | Envoie chaque image sur Docker Hub. Seules les couches absentes du registre sont transférées. |
 
@@ -249,41 +253,20 @@ jobs:
 !!! note "À noter"
     Dans `script`, une commande qui échoue n'arrête pas les suivantes (voir [3.1](#31-travis-ci)). Si un `scp` échoue, `deploy.sh` est quand même lancé, avec les fichiers du déploiement précédent. De même au stage 1 : si le build du backend casse, l'image du frontend est tout de même poussée.
 
-### 4.2 Dockerfile du backend : la recette de l'image
+### 4.2 Dockerfile du backend : développement et production
 
-```dockerfile
-FROM elixir:1.17.3-otp-27-alpine
-# postgresql-client provides pg_isready, used by entrypoint.sh to wait for the db
-RUN apk add --no-cache build-base postgresql-client
-WORKDIR /app
-RUN mix local.hex --force && mix local.rebar --force
-ENV MIX_ENV=dev
-COPY mix.exs mix.lock ./
-RUN mix deps.get
-RUN mix deps.compile
-COPY . .
-RUN mix compile
-RUN chmod +x entrypoint.sh
-EXPOSE 4000
-ENTRYPOINT ["./entrypoint.sh"]
-```
+Le [Dockerfile](https://github.com/MscProgramm/Theme_5_authentification_security/blob/main/time_manager/Dockerfile) possède deux cibles indépendantes :
 
-| Instruction | Rôle |
-|---|---|
-| `FROM elixir:1.17.3-otp-27-alpine` | Image de départ : Elixir 1.17.3 et Erlang/OTP 27 sur Alpine Linux, une distribution très légère. Une version figée rend le build reproductible. |
-| `RUN apk add --no-cache build-base postgresql-client` | `build-base` fournit le compilateur C dont certaines dépendances ont besoin ; `postgresql-client` fournit `pg_isready`, utilisé par l'entrypoint. |
-| `WORKDIR /app` | Dossier de travail des instructions suivantes et du conteneur. |
-| `RUN mix local.hex --force && mix local.rebar --force` | Installe Hex, le gestionnaire de paquets, et rebar3, l'outil de build Erlang, sans question interactive. |
-| `ENV MIX_ENV=dev` | Toutes les commandes `mix` tournent en environnement `dev`, avec `config/dev.exs`. |
-| `COPY mix.exs mix.lock ./`, puis `deps.get` et `deps.compile` | Copie d'abord les seuls fichiers de dépendances, puis les télécharge et les compile. Cette couche reste en cache tant que les dépendances ne changent pas. |
-| `COPY . .`, puis `RUN mix compile` | Copie le reste du code et le compile pendant le build : le conteneur démarre plus vite, et une erreur de compilation fait échouer le stage 1. |
-| `RUN chmod +x entrypoint.sh` | Rend le script exécutable ; ce droit peut se perdre selon l'OS ou la configuration Git. |
-| `EXPOSE 4000` | Documente le port écouté, sans rien publier : la publication se fait avec `ports` dans le fichier compose. |
-| `ENTRYPOINT ["./entrypoint.sh"]` | Commande lancée à chaque démarrage du conteneur. |
+- `development` : dépendances et application compilées avec `MIX_ENV=dev`. Le Compose local choisit explicitement cette cible.
+- `production` (cible par défaut) : `mix deps.get --only prod`, compilation en `MIX_ENV=prod`, puis `mix phx.digest` pour le manifeste statique attendu par `prod.exs`. Travis construit explicitement cette cible et publie le tag `prod`.
 
-`MIX_ENV=dev` fait tourner le serveur avec la configuration de développement. Ça fonctionne, mais une vraie mise en production passe par `MIX_ENV=prod` et une release (voir [partie 5](#pour-aller-plus-loin)).
+Aucun artefact `_build/dev` n'est repris dans l'image de production. Les fichiers `.env` sont exclus du contexte Docker. Les secrets sont fournis au démarrage, jamais à la construction.
 
-Le Dockerfile du frontend, dans `time-manager-dashboard/`, n'est pas détaillé ici. D'après le fichier compose (`8080:80`), son image sert l'application compilée avec un serveur web qui écoute sur le port 80.
+Mix reste présent pour conserver les migrations et seeds existants. Une release OTP pourrait réduire l'image ultérieurement, mais n'est pas nécessaire à cette séparation.
+
+La production désactive les erreurs détaillées et le rechargement de code. LiveDashboard, son logger, sa socket et les routes `/dev/dashboard` et `/dev/mailbox` sont réservés au développement. Swagger et OpenAPI restent les routes documentaires existantes.
+
+Voir [la validation locale et les variables requises](DOCKER_ENVIRONNEMENTS.md).
 
 ### 4.3 `deploy.sh` : ce qui se passe sur le serveur
 
@@ -320,8 +303,10 @@ Le script est *idempotent* : le relancer plusieurs fois donne le même résultat
 ### 4.4 `docker-compose.prod.yml` : l'application sur le serveur
 
 ```yaml
+
 # Used on the deploy server: pulls pre-built images from the registry instead
 # of building from source (the server only needs this file + .env).
+
 services:
   db:
     image: postgres:16-alpine
@@ -336,18 +321,28 @@ services:
       - "${PGPORT}:5432"
 
   phoenix:
-    image: ${DOCKER_USERNAME}/time-manager-backend:latest
+    image: ${DOCKER_USERNAME}/time-manager-backend:prod
     restart: unless-stopped
     depends_on:
       - db
+      - mailpit
     env_file: ./.env
     environment:
-      PGHOST: db
-      PGPORT: "5432"
-    volumes:
-      - ./.env:/app/.env:ro
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL requise}
+      SECRET_KEY_BASE: ${SECRET_KEY_BASE:?SECRET_KEY_BASE requise}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET requis}
+      EMAIL_DELIVERY: mailpit
+      MAILPIT_HOST: mailpit
+      MAILPIT_PORT: "1025"
     ports:
       - "4000:4000"
+
+  mailpit:
+    image: axllent/mailpit:latest
+    restart: unless-stopped
+    ports:
+      - "8025:8025"
+      - "1025:1025"
 
   dashboard:
     image: ${DOCKER_USERNAME}/time-manager-frontend:latest
@@ -363,9 +358,9 @@ volumes:
 
 Ce fichier n'utilise que `image:`, jamais `build:` : le serveur n'a besoin ni du code source ni des outils de compilation.
 
-**Le chemin des variables.** Compose lit `~/.env` pour remplacer les `${...}` : noms des images, identifiants Postgres, port publié. Le service `db` transmet ces identifiants à Postgres, qui crée l'utilisateur et la base au premier démarrage. Le service `phoenix` reçoit tout le `.env` en variables d'environnement (`env_file`), et le fichier lui-même, monté en lecture seule dans `/app/.env`, que l'entrypoint vérifie.
+**Le chemin des variables.** Compose lit `~/.env` pour remplacer les `${...}` : noms des images, identifiants Postgres, port publié. Le service `db` transmet ces identifiants à Postgres, qui crée l'utilisateur et la base au premier démarrage. Le service `phoenix` reçoit les variables via `env_file`. Aucun montage `/app/.env` n'est nécessaire. `DATABASE_URL`, `SECRET_KEY_BASE` et `JWT_SECRET` sont obligatoires en production.
 
-**Pourquoi `PGPORT` est redéfini.** Dans `.env`, `PGPORT` est le port publié sur le serveur. Entre conteneurs, Postgres écoute toujours sur 5432. Le bloc `environment` de `phoenix` impose donc `PGHOST: db` et `PGPORT: "5432"`, prioritaires sur `env_file`.
+**Connexion de production.** `DATABASE_URL` doit viser `db:5432`, avec les mêmes identifiants et le même nom de base que `PGUSER`, `PGPASSWORD` et `PGDATABASE`. `PGPORT` désigne uniquement le port publié sur l'hôte. Le développement utilise toujours les variables `PG*`.
 
 **Persistance.** Sans le volume `db_data`, chaque recréation du conteneur `db` effacerait la base.
 
@@ -376,33 +371,49 @@ Ce fichier n'utilise que `image:`, jamais `build:` : le serveur n'a besoin ni du
 
 ```sh
 #!/bin/sh
-set -e
+set -eu
 
-if [ ! -f /app/.env ]; then
-  echo "entrypoint: .env not found, stopping container"
-  exit 1
-fi
+# Le mode est fixé par la cible Docker, pas par le fichier .env.
+case "${1:-}" in
+  dev|prod) export MIX_ENV="$1" ;;
+  *) echo "entrypoint: mode dev ou prod requis" >&2; exit 1 ;;
+esac
 
-echo "entrypoint: waiting for database at ${PGHOST}:${PGPORT}..."
-until pg_isready -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" > /dev/null 2>&1; do
+# Charge runtime.exs et refuse les secrets invalides avant d'attendre la base.
+mix run --no-compile --no-start -e ':ok'
+
+echo "entrypoint: attente de PostgreSQL (60 tentatives maximum)"
+attempts=0
+until {
+  if [ "$MIX_ENV" = prod ]; then
+    # Même URL que le Repo Phoenix, sans afficher les identifiants.
+    PGDATABASE="$DATABASE_URL" pg_isready -q
+  else
+    pg_isready -q -h "$PGHOST" -p "$PGPORT" -U "$PGUSER"
+  fi
+}; do
+  attempts=$((attempts + 1))
+  if [ "$attempts" -ge 60 ]; then
+    echo "entrypoint: PostgreSQL indisponible" >&2
+    exit 1
+  fi
   sleep 1
 done
-echo "entrypoint: database is up"
 
-mix ecto.create
-mix ecto.migrate
-# Roles and the first administrator (ADMIN_EMAIL / ADMIN_PASSWORD); idempotent.
-mix run priv/repo/seeds.exs
+mix ecto.create --no-compile
+mix ecto.migrate --no-compile
+# Rôles et administrateur facultatif ; initialisation idempotente.
+mix run --no-compile priv/repo/seeds.exs
 
-echo "entrypoint: starting Phoenix"
-exec mix phx.server
+echo "entrypoint: démarrage Phoenix en $MIX_ENV"
+exec mix phx.server --no-compile
 ```
 
 Ce script s'exécute à chaque démarrage du conteneur `phoenix` : après un déploiement, un crash ou un redémarrage du serveur. Il est écrit en `sh`, car les images Alpine n'embarquent pas `bash` par défaut.
 
-**Vérifier la configuration.** Si `/app/.env` est absent, le conteneur s'arrête avec un message clair, au lieu d'une erreur obscure plus loin. Avec `restart: unless-stopped`, il redémarre alors en boucle, et `docker compose logs phoenix` affiche ce message.
+**Vérifier la configuration.** Le mode est fixé par la cible Docker. `mix run --no-compile --no-start` charge `runtime.exs` avant toute attente de la base : une URL absente ou mal formée, un secret absent, trop court, contenant des espaces ou égal à une clé publique de développement/test provoque un arrêt. Les messages ne contiennent pas les valeurs.
 
-**Attendre la base.** `depends_on` démarre `db` avant `phoenix`, mais n'attend pas que Postgres accepte les connexions. La boucle interroge la base chaque seconde avec `pg_isready`, jusqu'à une réponse positive.
+**Attendre la base.** L'attente utilise `DATABASE_URL` en production, les variables `PG*` en développement. Elle est bornée à 60 tentatives ; une erreur d'authentification ou de migration arrête ensuite le script.
 
 **Préparer la base.** `mix ecto.create` crée la base si elle n'existe pas, et ne fait rien sinon. `mix ecto.migrate` applique les nouvelles migrations : chaque déploiement met le schéma à jour automatiquement. `seeds.exs` insère ensuite les trois rôles et, si `ADMIN_EMAIL` et `ADMIN_PASSWORD` sont définis, le premier administrateur. Il est idempotent : relancé à chaque démarrage, il ne crée aucun doublon et ne modifie pas un administrateur existant.
 
@@ -422,7 +433,7 @@ Le principe : construire et valider chaque brique à la main avant de l'automati
     - *Validation* : `docker run -p 8080:80 <image>` affiche l'application sur `localhost:8080`.
 4. **Tout faire tourner en local.** Écrire un `docker-compose.yml` de développement, avec `build:` au lieu de `image:`, et un `.env` local jamais commité. Cette étape valide le réseau interne, le volume et l'entrypoint.
     - *Validation* : `docker compose up --build` donne une application qui marche, et les données survivent à `docker compose down` puis `up`.
-5. **Publier les images à la main.** `docker login`, `docker build -t compte/time-manager-backend:latest ./time_manager`, `docker push`, puis vérifier que les dépôts sont publics sur Docker Hub. Depuis un Mac à puce Apple, ajouter `--platform linux/amd64` pour un serveur x86.
+5. **Publier les images à la main.** `docker login`, `docker build -t compte/time-manager-backend:prod ./time_manager`, `docker push`, puis vérifier que les dépôts sont publics sur Docker Hub. Depuis un Mac à puce Apple, ajouter `--platform linux/amd64` pour un serveur x86.
     - *Validation* : les deux dépôts apparaissent sur Docker Hub.
 6. **Déployer à la main.** Copier sur le serveur `docker-compose.prod.yml` (renommé `docker-compose.yml`), un `.env` et `deploy.sh`, puis lancer `bash ~/deploy.sh`. Toute la partie serveur est ainsi validée avant d'impliquer Travis.
     - *Validation* : `sudo docker compose ps` liste trois conteneurs démarrés, et `http://IP:8080` affiche l'application.
@@ -464,7 +475,7 @@ Le pipeline fonctionne, mais plusieurs points sont à durcir avant une vraie pro
 | Limiter build et déploiement à la branche principale | Tel quel, un push sur n'importe quelle branche écrase `latest` et déclenche un déploiement, sauf réglage contraire dans Travis. |
 | Taguer aussi chaque image avec `$TRAVIS_COMMIT` | Savoir quelle version tourne, et pouvoir revenir à la précédente. |
 | Ne plus publier le port de Postgres, ou le lier à `127.0.0.1` | La base est aujourd'hui joignable depuis Internet. Les ports publiés par Docker contournent même le pare-feu UFW. |
-| Passer le backend en `MIX_ENV=prod` avec une release (`mix release`) et un build multi-étapes | Image plus légère, sans outils de développement, avec la configuration de production ; il faudra fournir `SECRET_KEY_BASE`. |
+| Passer ultérieurement à une release OTP (`mix release`) | Réduire la taille de l’image et retirer Mix ; la compilation et le démarrage en production sont déjà séparés du développement. |
 | Ajouter un `healthcheck` à `db`, et `condition: service_healthy` dans le `depends_on` de `phoenix` | Compose attend lui-même que la base soit prête. |
 | Ajouter `sudo docker image prune -f` à la fin de `deploy.sh` | Les anciennes images s'accumulent à chaque déploiement et finissent par remplir le disque. |
 | Placer un reverse proxy avec HTTPS (Caddy, Nginx, Traefik) devant l'application | Chiffrer le trafic et servir l'application sur un nom de domaine. |
