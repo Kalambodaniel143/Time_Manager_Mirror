@@ -2,6 +2,13 @@
 # Isolated CI checks. Never targets the production Compose file or its volumes.
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
+
+# Clé éphémère : aucun secret de test fixe n'est stocké dans le dépôt.
+if [[ -z "${JWT_SECRET:-}" ]]; then
+  JWT_SECRET="$(openssl rand -base64 48 | tr -d '\n')"
+  export JWT_SECRET
+fi
+
 if docker compose version >/dev/null 2>&1; then
   compose=(docker compose)
 elif command -v docker-compose >/dev/null 2>&1; then
