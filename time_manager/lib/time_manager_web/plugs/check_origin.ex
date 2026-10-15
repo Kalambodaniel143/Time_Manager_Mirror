@@ -25,7 +25,7 @@ defmodule TimeManagerWeb.Plugs.CheckOrigin do
     origin = URI.parse(source)
     target = URI.parse(expected)
 
-    origin.scheme in ["http", "https"] and is_nil(origin.userinfo) and
+    origin.scheme == "http" and is_nil(origin.userinfo) and
       {origin.scheme, origin.host, origin.port} == {target.scheme, target.host, target.port}
   rescue
     _ -> false

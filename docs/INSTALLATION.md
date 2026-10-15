@@ -239,10 +239,13 @@ Le résultat statique est écrit dans `site/`, dossier ignoré par Git.
 | `DATABASE_URL` | non | non | obligatoire | Connexion PostgreSQL complète. |
 | `SECRET_KEY_BASE` | non | non | obligatoire | Secret Phoenix, 64 octets minimum. |
 | `PHX_HOST` | non | non | obligatoire | Domaine public sans protocole, port ni chemin. |
+| `PUBLIC_PORT` | non | non | 80 par défaut | Port HTTP publié par le dashboard. |
 | `TRUSTED_PROXY_IP` | non | non | obligatoire | IP interne du seul proxy autorisé. |
 | `RESEND_API_KEY` | non | non | obligatoire avec Resend | Authentification du fournisseur de courriel. |
 | `RESEND_FROM` | facultatif localement | non utilisé | obligatoire avec Resend | Expéditeur vérifié. |
 | `DOCKER_USERNAME` / `IMAGE_TAG` | non | non | Compose prod | Image du registre et SHA testé. |
-| `TLS_CERT_DIR` | non | non | Compose prod | Dossier contenant `fullchain.pem` et `privkey.pem`. |
+
+!!! danger "Serveur HTTP uniquement"
+    La configuration serveur ne chiffre pas le trafic. Utilisez-la uniquement sur une machine locale ou un réseau isolé. Une protection de transport externe devra être choisie et testée avant toute mise en ligne.
 
 Les modèles `.env.example` et `.env.production.example` contiennent des indications et des valeurs vides. Le fichier `.env` réel est ignoré par Git.

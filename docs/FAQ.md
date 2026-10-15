@@ -52,7 +52,7 @@ docker compose exec db pg_isready -U "${PGUSER:-postgres}" -d "${PGDATABASE:-tim
 
 ## Le port est déjà utilisé
 
-**Symptôme** : `bind: address already in use` sur 4000, 8080, 5433, 8025, 80 ou 443.
+**Symptôme** : `bind: address already in use` sur 4000, 8080, 5433, 8025 ou 80.
 
 **Diagnostic macOS/Linux**
 
@@ -83,42 +83,21 @@ docker ps --format 'table {{.Names}}\t{{.Ports}}'
 **Diagnostic**
 
 ```bash
-curl -i -X POST 'https://<DOMAINE_REEL>/api/auth/login' \
-  -H 'Origin: https://<DOMAINE_REEL>' \
+curl -i -X POST 'http://127.0.0.1:8080/api/auth/login' \
+  -H 'Origin: http://127.0.0.1:8080' \
   -H 'Content-Type: application/json' \
   --data '{"email":"audit@example.test","password":"<MOT_DE_PASSE_DE_TEST>"}'
 ```
 
-**Solution** : utiliser la même origine pour le frontend et `/api`, vérifier `PHX_HOST`, `HTTPS_PORT` et les en-têtes posés par Nginx. Ne désactivez pas `CheckOrigin` pour contourner le problème.
+**Solution** : utiliser exactement la même origine pour le frontend et `/api`, puis vérifier `PHX_HOST`, `PUBLIC_PORT` et les en-têtes posés par Nginx. Ne désactivez pas `CheckOrigin` pour contourner le problème.
 
-## Boucle de redirection HTTPS ou réponse 308 inattendue
+## Le serveur est accessible seulement en HTTP
 
-**Cause probable** : Phoenix ne reconnaît pas le proxy de confiance ou reçoit `X-Forwarded-Proto` depuis une autre adresse.
+**Symptôme** : le navigateur indique que la connexion n'est pas privée ou sécurisée.
 
-**Diagnostic**
+**Cause** : c'est l'état attendu de la configuration actuelle. Le dépôt ne contient plus de certificat, de port chiffré ni de redirection automatique.
 
-```bash
-docker compose logs --tail=200 dashboard
-docker compose logs --tail=200 phoenix
-docker network inspect <PROJET>_proxy
-```
-
-**Solution** : faire correspondre l'adresse fixe du service `dashboard` et `TRUSTED_PROXY_IP`. Phoenix ne doit pas être publié directement en production.
-
-## Le certificat HTTPS ne charge pas
-
-**Symptôme** : Nginx redémarre ou le navigateur affiche un certificat absent/invalide.
-
-**Diagnostic**
-
-```bash
-test -r "<TLS_CERT_DIR>/fullchain.pem" && echo fullchain-ok
-test -r "<TLS_CERT_DIR>/privkey.pem" && echo private-key-ok
-docker compose logs --tail=100 dashboard
-openssl s_client -connect '<DOMAINE_REEL>:443' -servername '<DOMAINE_REEL>' </dev/null
-```
-
-**Solution** : corriger le montage `TLS_CERT_DIR`, les permissions et le renouvellement ACME. Vérifier le domaine et la chaîne complète depuis un autre réseau.
+**Solution** : limiter l'usage au poste local ou à un réseau isolé. Ne publiez pas cette composition sur Internet. Le choix d'une protection de transport externe est un travail restant.
 
 ## Les emails n'arrivent pas en développement
 
@@ -227,7 +206,7 @@ Avec une application monopage, Nginx peut renvoyer `index.html` avec 200 pour un
 
 ```bash
 for path in '/.env' '/.git/config'; do
-  curl -sS -o /dev/null -w "$path -> %{http_code} %{content_type}\n" "https://<DOMAINE_REEL>$path"
+  curl -sS -o /dev/null -w "$path -> %{http_code} %{content_type}\n" "http://127.0.0.1:8080$path"
 done
 ```
 

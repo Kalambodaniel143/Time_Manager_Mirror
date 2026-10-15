@@ -1,195 +1,147 @@
 # DevOps — du poste local au serveur
 
-Cette page répond à trois questions concrètes : quelle version de l'application est construite, quels services sont exposés et que se passe-t-il lorsqu'un déploiement est autorisé.
+Cette page décrit les conteneurs, les environnements et le pipeline réellement présents dans le dépôt. La configuration actuelle sert l'application en **HTTP**. Elle convient aux essais locaux et aux réseaux isolés, mais elle ne protège pas le trafic sur Internet.
 
-Le dépôt décrit et automatise une partie du trajet. Il ne donne aucune preuve sur l'état actuel du serveur, du domaine ou du certificat. Ces éléments externes sont signalés comme **Point à confirmer**.
+!!! danger "Déploiement public bloqué"
+    Aucun transport chiffré n'est fourni par le dépôt. Les identifiants et le cookie de session pourraient être interceptés sur un réseau non fiable. Une solution externe devra être choisie, configurée et testée avant une exposition publique.
 
-## Matrice des environnements
+## Environnements
 
-Les trois environnements ont des objectifs différents. Le développement privilégie le rechargement rapide et les outils locaux. Le test utilise une base jetable. La production compile en mode `prod`, retire les outils de développement et publie uniquement l'entrée HTTPS.
-
-| Élément | Développement | Test | Production |
+| Élément | Développement | Test | Serveur actuel |
 |---|---|---|---|
-| Backend Docker | cible `development`, `MIX_ENV=dev` | image backend + commande `MIX_ENV=test` | cible `production`, `MIX_ENV=prod` |
-| Frontend | cible Nginx `development` ou Vite | `Dockerfile.test` | cible Nginx `production` |
-| Base | PostgreSQL, volume `db_data`, port local 5433 | `test-db` isolée, volume jetable | PostgreSQL, volume `db_data`, aucun port publié |
-| Courriel | Mailpit local | adaptateur Swoosh Test | Resend obligatoire |
-| Entrée web | HTTP local | aucune entrée publique | Nginx sur 80/443, redirection HTTPS |
-| Phoenix public | `127.0.0.1:4000` | réseau Compose | aucun port publié |
-| Mocks frontend | possibles avec `npm run dev:demo` | utilisés par certains tests | build refusé s'ils sont activés |
-| Secrets Phoenix | `JWT_SECRET` obligatoire | `JWT_SECRET` obligatoire | JWT, Phoenix et base obligatoires |
+| Backend | cible `development`, `MIX_ENV=dev` | `MIX_ENV=test` | cible `production`, `MIX_ENV=prod` |
+| Frontend | Vite ou Nginx HTTP | `Dockerfile.test` | build Vue servi par Nginx HTTP |
+| Base | PostgreSQL, port local 5433 | base isolée et jetable | PostgreSQL sans port publié |
+| Courriel | Mailpit | adaptateur Swoosh Test | Resend |
+| Entrée web | `127.0.0.1:8080` | aucune | port HTTP `PUBLIC_PORT`, 80 par défaut |
+| Phoenix | `127.0.0.1:4000` | réseau Compose | aucun port publié |
+| Mocks | possibles avec `npm run dev:demo` | utilisés par certains tests | refusés pendant le build |
 
 ## Images Docker
 
-Une image Docker est le paquet exécutable de l'application. Le projet construit un paquet différent pour le travail local et pour la production, afin d'éviter qu'un outil de diagnostic ou une compilation `dev` arrive sur le serveur.
+### Backend Phoenix
 
-### Backend
+`time_manager/Dockerfile` contient trois cibles :
 
-`time_manager/Dockerfile` possède trois étapes logiques :
+1. `base` installe Elixir et les outils nécessaires ;
+2. `development` compile avec `MIX_ENV=dev` et lance `entrypoint.sh dev` ;
+3. `production` compile avec `MIX_ENV=prod`, exécute `mix phx.digest`, utilise l'utilisateur non privilégié `app` et lance `entrypoint.sh prod`.
 
-1. `base` installe Elixir, les outils de compilation et le client PostgreSQL ;
-2. `development` fixe `MIX_ENV=dev`, récupère toutes les dépendances et utilise `entrypoint.sh dev` ;
-3. `production` fixe `MIX_ENV=prod`, récupère seulement les dépendances de production, compile, exécute `mix phx.digest`, crée l'utilisateur non privilégié `app` et utilise `entrypoint.sh prod`.
+La cible serveur ne réutilise pas une compilation de développement. Les dépendances et routes réservées au développement ne sont pas incluses : `dev_routes` vaut `false`, et ni LiveDashboard ni la boîte aux lettres locale ne sont routés.
 
-L'image de production ne réutilise pas une compilation de développement. `phoenix_live_dashboard` est une dépendance `only: :dev`, `dev_routes` vaut `false` en production et `TimeManagerWeb.dev_routes()` n'ajoute alors ni dashboard ni mailbox.
+Au démarrage, `entrypoint.sh` :
 
-Au démarrage du conteneur Phoenix, `entrypoint.sh` joue le rôle de contrôle avant ouverture. Il refuse un mode incohérent, vérifie la configuration, attend la base, applique les migrations et lance enfin le serveur.
+1. vérifie le mode attendu ;
+2. charge `runtime.exs` pour valider les variables ;
+3. attend PostgreSQL ;
+4. crée la base si nécessaire, applique les migrations et les seeds ;
+5. lance Phoenix sans recompilation.
 
-L'entrypoint :
-
-1. impose le mode reçu dans l'image ;
-2. charge `runtime.exs` sans démarrer l'application afin de valider les variables ;
-3. attend PostgreSQL, 60 tentatives maximum ;
-4. exécute `ecto.create`, `ecto.migrate` et les seeds ;
-5. lance `mix phx.server --no-compile`.
-
-!!! note
-    L'image utilise Mix en production, pas une release OTP. Cela fonctionne, mais conserve davantage d'outils et de fichiers qu'une release multi-stage minimale.
-
-### Frontend
+### Frontend Vue
 
 `time-manager-dashboard/Dockerfile` :
 
-1. exécute `npm ci` et `npm run build` dans Node 22 ;
-2. la cible `checks` ajoute `npm test` ;
-3. la cible `development` sert `dist/` avec Nginx sur HTTP ;
-4. la cible `production` ajoute le template Nginx TLS.
+1. installe les dépendances avec `npm ci` ;
+2. construit Vue avec `npm run build` ;
+3. exécute les tests dans la cible `checks` ;
+4. sert le dossier `dist/` avec Nginx dans les cibles `development` et `production`.
 
-Le build échoue si un mock est actif ou si l'URL API de production n'est pas `/api`.
+La cible `production` désigne ici un **build optimisé de Vue servi en HTTP**. Elle ne configure aucun certificat et n'ouvre aucun port chiffré.
 
-## Topologie Compose
+## Pourquoi Nginx reste présent
 
-En production, Nginx est le seul service directement joignable depuis l'extérieur. Il sert Vue et transmet les appels `/api` à Phoenix. Phoenix peut parler à PostgreSQL sur un réseau privé, tandis que la base ne publie aucun port sur Internet.
+Nginx est réellement utilisé par le projet. Dans le conteneur `dashboard`, il remplit deux fonctions :
+
+- servir les fichiers compilés de Vue ;
+- transmettre les chemins `/api/...` au conteneur Phoenix.
+
+Le supprimer demanderait de choisir un autre serveur de fichiers et un autre proxy pour `/api`. Le dépôt ne contient pas ce remplacement. Le fichier actif est `time-manager-dashboard/nginx.conf`.
+
+Cette configuration ajoute également :
+
+- une limite de 64 Kio pour le corps des requêtes ;
+- une limite de débit globale sur `/api` ;
+- les en-têtes CSP, `nosniff`, `DENY` et `no-referrer` ;
+- le refus des chemins cachés comme `/.env` ;
+- des en-têtes proxy remplacés avant l'envoi à Phoenix.
+
+## Topologie serveur actuelle
 
 ```mermaid
 flowchart LR
-    I[Internet] -->|80 / 443| N[dashboard Nginx]
-    N -->|proxy interne| P[phoenix]
-    P -->|réseau database interne| D[(db PostgreSQL)]
+    C[Client sur réseau isolé] -->|HTTP| N[Nginx dashboard]
+    N -->|réseau proxy interne| P[Phoenix]
+    P -->|réseau database interne| DB[(PostgreSQL)]
     P -->|réseau outbound| R[Resend]
-    C[Certificats hôte] -->|lecture seule| N
 ```
 
 Dans `docker-compose.prod.yml` :
 
-- `database` et `proxy` sont des réseaux `internal` ;
-- `db` rejoint seulement `database` ;
+- `db` rejoint uniquement le réseau interne `database` ;
 - `phoenix` rejoint `database`, `proxy` et `outbound` ;
 - `dashboard` rejoint `public` et `proxy` ;
-- seul `dashboard` publie 80/443 ;
+- seul `dashboard` publie le port HTTP ;
 - Mailpit est absent ;
-- le certificat hôte est monté en lecture seule ;
-- l'adresse fixe du proxy `172.30.7.10` correspond à `TRUSTED_PROXY_IP`.
+- l'adresse interne `172.30.7.10` identifie le proxy autorisé.
 
-## HTTPS et proxy de confiance
+`TrustedProxy` accepte les informations réseau uniquement depuis cette adresse. Cela empêche un client direct de choisir librement sa propre adresse IP dans les en-têtes.
 
-Nginx reçoit la connexion HTTPS et transmet la requête à Phoenix sur le réseau Docker interne. Il ajoute l'adresse et le protocole d'origine. Phoenix n'accorde sa confiance à ces informations que lorsqu'elles viennent de l'adresse interne Nginx prévue par la configuration.
+## Variables du serveur
 
-Le template Nginx de production :
+Le modèle `.env.production.example` contient seulement des champs vides et des indications.
 
-- redirige HTTP vers `https://<PHX_HOST>:<HTTPS_PORT>` avec 308 ;
-- accepte TLS 1.2 et 1.3 ;
-- désactive les tickets de session ;
-- ajoute HSTS, CSP, `nosniff`, `DENY` et `no-referrer` ;
-- limite le corps à 64 Kio et applique un débit global à `/api` ;
-- remplace `X-Real-IP`, `X-Forwarded-For` et `X-Forwarded-Proto`.
-
-Phoenix n'accepte ces informations que si l'adresse source correspond exactement à `TRUSTED_PROXY_IP`. En production, `SecurityHeaders` refuse toute requête dont le schéma corrigé n'est pas HTTPS.
-
-### Préparer un certificat
-
-Le dépôt sait utiliser un certificat déjà présent, mais il ne le demande pas et ne le renouvelle pas. La mise en service demande donc les étapes externes suivantes :
-
-1. faire pointer le DNS du domaine réel vers le serveur ;
-2. ouvrir temporairement ou durablement les ports 80 et 443 ;
-3. obtenir `fullchain.pem` et `privkey.pem` avec le client ACME choisi ;
-4. placer les fichiers dans un dossier lisible par Docker mais non versionné ;
-5. définir `TLS_CERT_DIR=<DOSSIER_CERTIFICAT>` et `PHX_HOST=<DOMAINE_REEL>` ;
-6. automatiser le renouvellement et le rechargement Nginx ;
-7. vérifier depuis un autre réseau la chaîne du certificat et la redirection.
-
-**Point à confirmer** : fournisseur DNS, méthode ACME, domaine, renouvellement et certificat réels.
-
-## Variables de production
-
-Le modèle `.env.production.example` est une liste de contrôle. Il doit être copié hors Git et renseigné sur le serveur ou par la CI. Les valeurs réelles restent secrètes et ne doivent jamais remplacer les placeholders dans la documentation.
-
-| Variable | Exigence vérifiée par le code |
+| Variable | Rôle |
 |---|---|
-| `DOCKER_USERNAME` | Nom de compte Docker conforme au script et préfixe des deux images. |
-| `IMAGE_TAG` | SHA Git de 40 caractères dans `write_deploy_env.py`. |
-| `PGUSER`, `PGPASSWORD`, `PGDATABASE` | Obligatoires pour le conteneur PostgreSQL. |
-| `DATABASE_URL` | URL PostgreSQL complète, valide et avec identifiants. |
-| `JWT_SECRET` | 32 octets minimum, sans espaces et différente des anciennes clés publiques. |
-| `SECRET_KEY_BASE` | 64 octets minimum, mêmes restrictions. |
-| `PHX_HOST` | Domaine sans protocole, port ni chemin. |
-| `HTTPS_PORT` | 443 par défaut, entre 1 et 65535. |
-| `TLS_CERT_DIR` | Dossier hôte avec `fullchain.pem` et `privkey.pem`. |
-| `RESEND_API_KEY`, `RESEND_FROM` | Obligatoires pour `EMAIL_DELIVERY=resend`. |
-| `ADMIN_EMAIL`, `ADMIN_PASSWORD` | Facultatifs ; seed du premier administrateur sans organisation. |
+| `DOCKER_USERNAME` | Préfixe des deux images du registre. |
+| `IMAGE_TAG` | SHA Git de 40 caractères commun aux images. |
+| `PGUSER`, `PGPASSWORD`, `PGDATABASE` | Initialisation du conteneur PostgreSQL. |
+| `DATABASE_URL` | Connexion PostgreSQL complète avec identifiants. |
+| `JWT_SECRET` | Signature des JWT, 32 octets minimum. |
+| `SECRET_KEY_BASE` | Secret Phoenix, 64 octets minimum. |
+| `PHX_HOST` | Nom d'hôte attendu, sans protocole, port ni chemin. |
+| `PUBLIC_PORT` | Port HTTP publié, 80 par défaut. |
+| `RESEND_API_KEY`, `RESEND_FROM` | Envoi des courriels sur le serveur. |
+| `ADMIN_EMAIL`, `ADMIN_PASSWORD` | Seed facultatif du premier administrateur. |
 
-Variables CI supplémentaires : `DOCKER_PASSWORD`, `SERVER_IP`, `SERVER_USER`, `SSH_KEY`, `SSH_KNOWN_HOSTS`, `PUBLISH_IMAGES` et `DEPLOY_APPROVED`.
+Variables réservées à la CI : `DOCKER_PASSWORD`, `SERVER_IP`, `SERVER_USER`, `SSH_KEY`, `SSH_KNOWN_HOSTS`, `PUBLISH_IMAGES` et `DEPLOY_APPROVED`.
 
-`SSH_KNOWN_HOSTS` doit contenir une empreinte vérifiée hors bande. Le pipeline n'utilise pas `ssh-keyscan` pour le serveur de production.
+Les secrets réels restent hors Git. `scripts/write_deploy_env.py` les écrit dans un fichier de mode 600 sans afficher leurs valeurs.
 
-## Pipeline Travis réel
-
-Le pipeline avance par portes successives. Un commit est d'abord construit et testé. Les images peuvent ensuite être publiées lorsque la variable prévue l'autorise. Le déploiement exige une seconde autorisation explicite et un lancement par API.
+## Pipeline Travis
 
 ```mermaid
 flowchart LR
-    C[Commit] --> T[Test]
-    T -->|main et PUBLISH_IMAGES=true| P[Publish]
-    P -->|lancement API et DEPLOY_APPROVED=true| D[Deploy]
-    D --> S[Serveur]
+    C[Commit] --> T[Build et tests frontend]
+    T -->|main et PUBLISH_IMAGES=true| P[Publication des images]
+    P -->|lancement API et DEPLOY_APPROVED=true| D[Déploiement SSH]
 ```
 
-### Stage Test
+### Test
 
-- construit la cible backend de développement ;
-- construit la cible backend de production ;
-- construit la cible frontend `checks`, qui lance `npm test` après le build ;
-- construit la cible frontend de production.
+Le stage construit :
 
-Le stage vérifie donc les constructions Docker et les tests Node. Il **n'exécute pas `mix test`** dans `.travis.yml`.
+- le backend de développement ;
+- le backend de production ;
+- la cible frontend `checks` ;
+- l'image frontend serveur.
 
-### Stage Publish
+Le stage lance les tests Node dans l'image frontend. Il ne lance toujours pas `mix test` directement. Le workflow backend isolé doit être ajouté avant la publication pour éviter qu'une simple compilation soit considérée comme une validation métier.
 
-Conditions : branche `main`, pas une pull request, `PUBLISH_IMAGES=true`.
+### Publication
 
-- connexion au registre ;
-- construction des deux cibles `production` ;
-- tag des images avec `$TRAVIS_COMMIT` ;
-- publication des images backend et frontend.
+Sur `main`, avec `PUBLISH_IMAGES=true`, Travis construit les deux images `production`, les marque avec le SHA du commit et les publie dans le registre.
 
-### Stage Deploy
+### Déploiement
 
-Conditions supplémentaires : build lancé avec `type = api` et `DEPLOY_APPROVED=true`.
+Le déploiement exige aussi un lancement Travis par API et `DEPLOY_APPROVED=true`. Le job copie Compose, le fichier d'environnement privé et `deploy.sh`, puis exécute `deploy.sh --approved` sur le serveur.
 
-- charge une clé SSH temporaire ;
-- écrit `.env.deploy` en mode 600 sans afficher les valeurs ;
-- copie Compose, `.env` et `deploy.sh` ;
-- exécute `deploy.sh --approved` ;
-- supprime le fichier temporaire de la VM Travis.
-
-Un push ordinaire **ne déclenche pas le déploiement**. Cette séparation réduit le risque d'envoyer par erreur une révision sur le serveur.
+Un push ordinaire ne déclenche donc pas de déploiement. Dans l'état actuel, l'équipe ne doit pas autoriser ce stage vers un serveur public tant qu'un transport chiffré n'a pas été ajouté en dehors du dépôt.
 
 ## GitHub Actions
 
-### Documentation
+Le workflow `.github/workflows/docs.yml` construit MkDocs en mode strict et publie GitHub Pages depuis `main`. Le workflow `.github/workflows/mirror.yml` synchronise la branche principale vers le dépôt miroir avec une clé dédiée.
 
-`.github/workflows/docs.yml` installe Material for MkDocs, construit avec `--strict` et publie GitHub Pages lorsque `docs/**`, `mkdocs.yml` ou le workflow changent sur `main`. Le job est limité au dépôt `MscProgramm/Theme_5_authentification_security`.
-
-### Miroir
-
-`.github/workflows/mirror.yml` force la branche `main` du dépôt miroir depuis `origin/main`. Il utilise `MIRROR_SSH_PRIVATE_KEY` et `MIRROR_REPO_URL`.
-
-!!! warning
-    Ce push forcé réécrit la branche du miroir. La clé de miroir doit être dédiée et limitée au dépôt cible.
-
-## Exploitation
-
-Lorsqu'un incident arrive, commencez par vérifier l'état des conteneurs, puis leurs derniers logs. Conservez les messages d'erreur utiles avant de redémarrer : ils expliquent souvent la cause que le redémarrage ferait disparaître.
+## Exploitation locale ou isolée
 
 ### État et logs
 
@@ -198,73 +150,62 @@ docker compose ps
 docker compose logs --tail=200 dashboard
 docker compose logs --tail=200 phoenix
 docker compose logs --tail=200 db
-docker compose logs -f phoenix
 ```
 
-Le backend ajoute un `request_id` aux logs. **Information non trouvée dans le dépôt** : agrégation centralisée, rétention des logs, métriques externes et alertes.
-
-### Vérification après démarrage
+### Vérification HTTP
 
 ```bash
-docker compose config --quiet
-curl -I http://<DOMAINE_REEL>
-curl -I https://<DOMAINE_REEL>
-curl -sS https://<DOMAINE_REEL>/api/openapi > /dev/null
+curl -I http://127.0.0.1:8080
+curl -sS http://127.0.0.1:8080/api/openapi > /dev/null
 docker compose ps
 ```
 
-Attendus : redirection 308 en HTTP, certificat valide en HTTPS, réponse OpenAPI et conteneurs en cours d'exécution. La présence d'une réponse ne valide pas les parcours authentifiés.
+Ces commandes prouvent uniquement que les services locaux répondent. Elles ne prouvent pas que le transport convient à Internet.
 
 ### Sauvegarde PostgreSQL
 
-Il n'existe aucun script de sauvegarde dans le dépôt. Exemple manuel à adapter et tester :
+Aucun script de sauvegarde n'est présent. Exemple manuel à adapter :
 
 ```bash
 docker compose exec -T db pg_dump -U "<PGUSER>" -d "<PGDATABASE>" -Fc > "backup-$(date +%Y%m%d-%H%M%S).dump"
 ```
 
-Le fichier doit être chiffré, copié hors du serveur et soumis à une politique de rétention.
+Une sauvegarde utile doit être copiée hors de la machine et testée par une restauration.
 
 ### Restauration
 
-À exécuter uniquement sur une base cible explicitement vérifiée :
+À utiliser uniquement sur une base cible explicitement vérifiée :
 
 ```bash
 docker compose exec -T db pg_restore --clean --if-exists -U "<PGUSER>" -d "<PGDATABASE>" < <FICHIER_BACKUP>
 ```
 
-**Point à confirmer** : procédure validée par l'équipe, fréquence, rétention, chiffrement et dernier test de restauration.
+### Retour à une image précédente
 
-### Rollback applicatif
-
-Les images immuables portent le SHA du commit. Un retour applicatif manuel consiste à :
-
-1. choisir un SHA précédemment testé et encore disponible dans le registre ;
+1. choisir un SHA déjà testé et encore disponible ;
 2. sauvegarder la base ;
-3. remplacer `IMAGE_TAG` dans le `.env` du serveur ;
+3. remplacer `IMAGE_TAG` dans le fichier privé du serveur ;
 4. exécuter `docker compose pull` puis `docker compose up -d --remove-orphans` ;
 5. vérifier les logs et les parcours essentiels.
 
-Il n'existe pas de rollback automatique. Une migration non rétrocompatible peut empêcher le retour à l'ancienne image ; dans ce cas, la restauration de la base doit suivre une procédure préparée avant le déploiement.
+Une migration incompatible peut empêcher ce retour. Le dépôt ne contient aucun rollback automatique.
 
-## Lacunes d'exploitation
+## Risques encore ouverts
 
-| Priorité | Lacune | Action |
+| Priorité | Risque | Action attendue |
 |---|---|---|
-| Critique | Hex signale `bandit 1.12.5` vulnérable à `CVE-2026-105659` / `GHSA-69m6-wcv4-rwcf`. | Mettre à jour vers une version corrigée confirmée, tester puis reconstruire les images. |
-| Critique | Aucune sauvegarde/restauration automatisée. | Ajouter tâche planifiée, chiffrement, copie distante et test de restauration. |
-| Critique | Aucun healthcheck dans Compose production. | Ajouter des contrôles pour PostgreSQL, Phoenix et Nginx. |
-| Haute | Tests backend absents du pipeline Travis. | Ajouter le workflow Docker isolé avant Publish. |
-| Haute | Aucun rollback transactionnel ou blue/green. | Ajouter contrôle de santé et stratégie de retour compatible migrations. |
-| Haute | Renouvellement TLS absent. | Automatiser ACME et recharger Nginx après renouvellement. |
-| Moyenne | Déploiement par copie de fichiers dans `~`. | Utiliser un répertoire de version, permissions explicites et journal de déploiement. |
-| Moyenne | `deploy.sh` n'attend aucun healthcheck après `up`. | Bloquer le job jusqu'à validation des services et endpoints essentiels. |
+| Critique | Transport HTTP non chiffré. | Ne pas exposer publiquement ; choisir et tester une protection externe avant déploiement. |
+| Critique | `bandit 1.12.5` signalé pour `CVE-2026-105659` et `CVE-2026-105660`. | Confirmer la version corrigée, mettre à jour `mix.lock` et rejouer les tests. |
+| Critique | Aucune sauvegarde ni restauration automatisée. | Définir une tâche, une rétention et un exercice de restauration. |
+| Critique | Aucun healthcheck dans Compose serveur. | Ajouter des contrôles PostgreSQL, Phoenix et dashboard. |
+| Haute | Tests backend absents de Travis. | Ajouter `scripts/check_workflows.sh backend` avant Publish. |
+| Haute | Limiteur ETS local à une instance. | Prévoir un stockage partagé ou une limite externe si plusieurs instances sont lancées. |
+| Haute | Aucun rollback automatique. | Ajouter contrôles de santé et procédure compatible avec les migrations. |
 
-## Ce que le dépôt ne permet pas d'affirmer
+## Informations non trouvées dans le dépôt
 
-- que les secrets Travis sont correctement renseignés ;
-- que les images ont effectivement été publiées ;
-- que le serveur distant utilise la dernière révision ;
-- que le domaine et le certificat sont valides ;
-- que les ports internes sont bloqués par le pare-feu hôte ;
-- que les sauvegardes existent et sont restaurables.
+- protection de transport utilisée par un éventuel serveur réel ;
+- pare-feu et ports réellement ouverts ;
+- état des secrets Travis ;
+- sauvegardes réellement exécutées ;
+- supervision, métriques et alertes externes.

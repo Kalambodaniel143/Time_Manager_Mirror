@@ -18,7 +18,5 @@ COPY nginx.conf /etc/nginx/conf.d/default.conf
 
 EXPOSE 80
 
-# Le même frontend compilé, avec une entrée TLS obligatoire pour le serveur.
+# La cible serveur utilise le même frontal HTTP que l'environnement local.
 FROM development AS production
-COPY nginx.production.conf.template /etc/nginx/templates/default.conf.template
-EXPOSE 443

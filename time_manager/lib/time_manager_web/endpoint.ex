@@ -8,8 +8,7 @@ defmodule TimeManagerWeb.Endpoint do
     store: :cookie,
     key: "_time_manager_key",
     signing_salt: "RQ5EIGaU",
-    same_site: "Strict",
-    secure: Application.compile_env(:time_manager, :secure_session_cookie, false)
+    same_site: "Strict"
   ]
 
   if Application.compile_env(:time_manager, :dev_routes, false) do

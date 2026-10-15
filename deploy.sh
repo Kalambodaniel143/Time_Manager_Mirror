@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Déclenchement explicite seulement ; Docker et le certificat doivent déjà être installés.
+# Déclenchement explicite seulement ; Docker doit déjà être installé.
 set -euo pipefail
 [[ "${1:-}" == "--approved" ]] || { echo "Déploiement non autorisé : option --approved requise." >&2; exit 1; }
 cd ~

@@ -92,7 +92,7 @@ Le navigateur conserve le minimum utile à la session. Les données métier rest
 
 | Donnée | Emplacement | Observation |
 |---|---|---|
-| JWT | Cookie `HttpOnly` | Inaccessible au JavaScript ; `Secure` en production. |
+| JWT | Cookie `HttpOnly` | Inaccessible au JavaScript ; transporté en HTTP dans la configuration actuelle. |
 | CSRF | `sessionStorage`, clé `tm-csrf` | Séparé par onglet et remplacé à la session suivante. |
 | Préférences de compte | API puis état réactif | Langue, thème, guide et voix viennent du backend en mode réel. |
 | Signal inter-onglets | `BroadcastChannel` et événement `storage` | Transmet un signal de changement, pas le JWT. |

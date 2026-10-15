@@ -1,6 +1,6 @@
 # Time Manager — comprendre le projet
 
-Si vous découvrez le projet, retenez d'abord ces quatre rôles : **Vue affiche l'application, Nginx reçoit les visiteurs, Phoenix décide ce qui est autorisé et PostgreSQL conserve les données**.
+Si vous découvrez le projet, retenez d'abord ces quatre rôles : **Vue affiche l'application, Nginx sert l'interface HTTP locale, Phoenix décide ce qui est autorisé et PostgreSQL conserve les données**.
 
 Time Manager accompagne une journée de travail complète. Un employé rejoint une organisation, se connecte, pointe son arrivée, consulte son planning ou demande une correction. Un manager suit son équipe et valide les semaines. Un administrateur gère l'organisation, les droits et les éléments de paie.
 
@@ -25,12 +25,12 @@ Chaque personne voit une partie différente de l'application. Les droits réels 
 
 ## Composants
 
-On peut voir l'application comme un bâtiment. Vue est l'accueil visible par l'utilisateur. Nginx est la porte d'entrée. Phoenix contrôle les demandes. PostgreSQL est la salle d'archives. Le tableau suivant donne le nom technique de chaque partie et le fichier où commencer sa lecture.
+On peut voir l'application comme un bâtiment. Vue est l'accueil visible par l'utilisateur. Nginx distribue les pages et transmet `/api`. Phoenix contrôle les demandes. PostgreSQL est la salle d'archives. Le tableau suivant donne le nom technique de chaque partie et le fichier où commencer sa lecture.
 
 | Composant | Technologie | Responsabilité | Entrée principale |
 |---|---|---|---|
 | Dashboard | Vue 3, Vue Router, Vite | Interface, navigation, états de chargement, formulaires et appels HTTP. | `time-manager-dashboard/src/main.js` |
-| Proxy web | Nginx | Sert le build Vue, termine TLS en production, redirige HTTP vers HTTPS et transmet `/api` à Phoenix. | `nginx.production.conf.template` |
+| Serveur web | Nginx | Sert le build Vue en HTTP et transmet `/api` à Phoenix. | `time-manager-dashboard/nginx.conf` |
 | API | Elixir 1.17, Phoenix 1.8, Bandit | Authentification, autorisations, règles métier et réponses JSON. | `time_manager/lib/time_manager_web/endpoint.ex` |
 | Domaine | Contextes Elixir | Comptes, équipes, pointages, heures et workflows. | `time_manager/lib/time_manager/` |
 | Persistance | Ecto, PostgreSQL 16 | Données, transactions, contraintes et migrations. | `time_manager/priv/repo/migrations/` |
@@ -43,7 +43,7 @@ Le schéma se lit de gauche à droite. Une action part du navigateur, traverse l
 
 ```mermaid
 flowchart LR
-    U[Utilisateur] -->|HTTPS| N[Nginx]
+    U[Utilisateur] -->|HTTP local| N[Nginx]
     N -->|Fichiers statiques| V[Application Vue]
     V -->|/api + cookie JWT + CSRF| N
     N -->|Réseau proxy interne| P[Phoenix / Bandit]
@@ -55,7 +55,10 @@ flowchart LR
     D -->|Réseau outbound| M[Resend]
 ```
 
-En développement, Vite ou le Nginx local transmet `/api` à Phoenix. En production, seul Nginx publie les ports 80/443 ; Phoenix et PostgreSQL restent sur des réseaux Docker internes.
+En développement, Vite ou Nginx transmet `/api` à Phoenix. Dans la composition serveur, seul Nginx publie le port HTTP ; Phoenix et PostgreSQL restent sur des réseaux Docker internes.
+
+!!! danger "Transport non chiffré"
+    Le dépôt ne configure plus de transport chiffré. La composition serveur actuelle convient à un environnement local ou isolé. Elle n'est pas prête pour une exposition publique, car les mots de passe et cookies circuleraient en clair sur le réseau.
 
 ## Le trajet d'une action
 
@@ -98,32 +101,32 @@ Ces résultats décrivent les commandes réellement exécutées sur une copie lo
 |---|---|
 | Backend Docker isolé | Compilation, migrations et **188 tests réussis**. |
 | Frontend local et Docker | ESLint, **120 tests réussis** et build Vite réussi. |
-| Image frontend de production | Cible Nginx `production` construite localement. |
+| Image frontend serveur | Build Vue servi par Nginx HTTP, construit localement. |
 | Compose production | `docker compose config --quiet` réussi avec des placeholders de test. |
 | Routes backend de production | `mix phx.routes` exécuté dans l'image ; aucune route `/dev/dashboard` ou `/dev/mailbox`. |
 | Documentation | `mkdocs build --strict` réussi avec Material for MkDocs. |
 
-Les tests frontend affichent des avertissements liés au port WebSocket des devtools dans les environnements isolés, sans échec de test. Ces résultats ne valident ni le domaine réel, ni le certificat réel, ni l'infrastructure distante.
+Les tests frontend affichent des avertissements liés au port WebSocket des devtools dans les environnements isolés, sans échec de test. Ces résultats ne valident pas une infrastructure distante.
 
-### Production
+### Version serveur
 
 - Le backend est compilé et démarré avec `MIX_ENV=prod`.
 - `DATABASE_URL`, `SECRET_KEY_BASE`, `JWT_SECRET`, `PHX_HOST` et `TRUSTED_PROXY_IP` sont validés au démarrage.
 - Le frontend de production interdit les mocks et impose `/api` sur la même origine.
-- Nginx termine TLS, redirige le port 80 vers HTTPS et transmet des en-têtes proxy remplacés.
+- Nginx sert Vue en HTTP, transmet `/api`, limite le débit et remplace les en-têtes réseau transmis à Phoenix.
 - Les images utilisent le SHA Git comme tag ; aucun `latest` n'est déployé par le pipeline actuel.
 - Un push sur `main` peut publier les images si `PUBLISH_IMAGES=true`. Le déploiement exige un build Travis lancé par API et `DEPLOY_APPROVED=true`.
 
 !!! warning "Validation externe indispensable"
-    **Point à confirmer** : domaine réel, certificat valide, ports du serveur, secrets CI, accès au registre, sauvegardes et restauration. Le dépôt prépare ces éléments mais ne peut pas prouver leur état réel.
+    **Point à confirmer** : transport chiffré externe, ports du serveur, secrets CI, accès au registre, sauvegardes et restauration. Le dépôt ne prépare plus de certificat et ne doit pas être présenté comme prêt pour Internet.
 
 ## Protections visibles dans le code
 
-La sécurité repose sur plusieurs verrous successifs. Si une requête franchit la porte Nginx, elle doit encore passer les contrôles Phoenix, les règles métier et les contraintes de la base de données.
+La sécurité applicative repose sur plusieurs verrous successifs. Après Nginx, une requête doit encore passer les contrôles Phoenix, les règles métier et les contraintes de la base de données.
 
 - mots de passe nouveaux hachés avec Argon2id, anciens bcrypt migrés après une connexion réussie ;
 - JWT signé par une clé obligatoire, sans valeur de secours ;
-- cookie JWT inaccessible au JavaScript et sécurisé automatiquement en production ;
+- cookie JWT inaccessible au JavaScript grâce à `HttpOnly`, sans chiffrement du transport HTTP actuel ;
 - CSRF lié au JWT et contrôle d'origine complet sur les écritures ;
 - rôle et utilisateur relus en base à chaque requête ;
 - isolation par organisation et équipe dans les contrôleurs/contextes ;
@@ -131,7 +134,7 @@ La sécurité repose sur plusieurs verrous successifs. Si une requête franchit 
 - corps JSON limité à 64 Kio et paramètres bornés ;
 - pagination par curseur pour les historiques concernés ;
 - transactions et verrous PostgreSQL pour les opérations concurrentes ;
-- en-têtes de sécurité, HTTPS obligatoire en production et paramètres sensibles filtrés des logs.
+- en-têtes de sécurité HTTP et paramètres sensibles filtrés des logs.
 
 Ces protections réduisent les risques connus. Elles ne remplacent pas une revue indépendante, un test d'intrusion et la validation de l'infrastructure réellement déployée.
 
@@ -143,6 +146,7 @@ Ces protections réduisent les risques connus. Elles ne remplacent pas une revue
 | Comprendre les flux | [Architecture et flux](ARCHITECTURE.md) |
 | Lire les contrats API et le modèle de données | [Backend et API](BACKEND.md) |
 | Comprendre les écrans, routes et services | [Frontend](FRONTEND.md) |
+| Vérifier les protections et risques | [Sécurité](SECURITE.md) |
 | Construire, publier, déployer et exploiter | [DevOps](DEVOPS.md) |
 | Résoudre une panne | [Dépannage](FAQ.md) |
 | Comprendre le vocabulaire | [Glossaire](GLOSSAIRE.md) |
@@ -153,7 +157,8 @@ Cette partie sert à décider quoi traiter en premier. Une priorité **Critique*
 
 | Priorité | Constat issu du dépôt | Conséquence | Action recommandée |
 |---|---|---|---|
-| Critique | La résolution Hex du 15 octobre 2026 signale `bandit 1.12.5` vulnérable à `CVE-2026-105659` / `GHSA-69m6-wcv4-rwcf` (épuisement possible de processus HTTP/2). | Un client HTTP/2 lent peut immobiliser des processus de flux. | Identifier la version corrigée publiée, mettre à jour `mix.lock`, puis rejouer compilation, tests et test de charge avant tout déploiement. |
+| Critique | Aucun transport chiffré n'est configuré dans le dépôt. | Les identifiants et cookies peuvent être lus sur un réseau non fiable. | Réserver cette composition au local ou placer un service de transport chiffré validé devant l'application avant toute exposition publique. |
+| Critique | La résolution Hex du 15 octobre 2026 signale deux alertes sur `bandit 1.12.5` : `CVE-2026-105659` et `CVE-2026-105660`. | Risque de blocage de processus HTTP/2 et autorité HTTP/1 non validée. | Identifier la version corrigée publiée, mettre à jour `mix.lock`, puis rejouer compilation, tests et test de charge avant tout déploiement. |
 | Critique | Aucun healthcheck dans `docker-compose.prod.yml`; `depends_on` ne garantit pas que PostgreSQL est prêt, même si l'entrypoint attend ensuite la base. | Le superviseur Docker ne peut pas signaler précisément un service applicatif malsain. | Ajouter des healthchecks PostgreSQL, Phoenix et Nginx, puis surveiller leur état. |
 | Critique | Sauvegarde PostgreSQL, chiffrement des sauvegardes et test de restauration absents. | Une perte du volume peut devenir définitive. | Définir une sauvegarde automatisée, sa rétention et un exercice régulier de restauration. |
 | Haute | Travis construit le backend mais n'exécute pas `mix test`; les tests complets existent seulement via `docker-compose.test.yml`. | Une régression métier peut être publiée si l'image compile. | Exécuter `bash scripts/check_workflows.sh backend` dans le stage Test avant publication. |
@@ -166,7 +171,7 @@ Cette partie sert à décider quoi traiter en premier. Une priorité **Critique*
 
 ## Informations non trouvées dans le dépôt
 
-- domaine et certificat réellement utilisés ;
+- solution de transport chiffré réellement utilisée ;
 - inventaire du serveur, pare-feu et supervision externe ;
 - politique de sauvegarde/restauration effectivement appliquée ;
 - objectif de disponibilité et procédure d'astreinte ;

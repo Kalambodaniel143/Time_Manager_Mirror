@@ -134,7 +134,7 @@ Le client HTTP du front (`src/services/http.js`) ajoute `X-CSRF-Token` à chaque
 !!! note "La garde de route n'est que du confort"
     N'importe qui peut appeler l'API avec curl ou Postman. Masquer une page ou un bouton ne protège rien : chaque route de l'API refait le contrôle.
 
-**Cookie `Secure`.** Le cookie ne porte l'option `Secure` que si `COOKIE_SECURE=true`. Le serveur étant aujourd'hui servi en HTTP, l'option est désactivée par défaut : un navigateur refuse un cookie `Secure` sur HTTP. Activez-la dès que le site passe en HTTPS.
+**Transport du cookie.** Le serveur actuel utilise HTTP et le cookie ne porte pas l'option `Secure`. `HttpOnly` empêche sa lecture par JavaScript, mais ne le protège pas contre une interception réseau. Cette configuration doit rester locale ou isolée.
 
 ---
 
@@ -453,7 +453,7 @@ curl -s -b $JAR -c $JAR -H "X-CSRF-Token: $CSRF" -X POST $API/auth/logout
 | Les compteurs de tentatives (`429`) sont en mémoire et propres au serveur. | Ils repartent de zéro au redémarrage et ne sont pas partagés entre plusieurs instances. | Stockage partagé (Redis, ou PostgreSQL) si l'API passe à plusieurs instances. |
 | Derrière Nginx, toutes les requêtes ont l'adresse IP du proxy. | Les seuils « par IP » s'appliquent à tous les clients ensemble ; ils sont donc larges. Le seuil par e-mail de la connexion, lui, reste efficace. | Lire `X-Real-IP` posé par Nginx, à condition que le port 4000 ne soit plus exposé directement. |
 | Un seul cookie JWT par profil de navigateur. | Les onglets partagent le même compte courant. | La restauration synchronise désormais les onglets pour ce compte ; utiliser des profils distincts pour des comptes indépendants. |
-| `COOKIE_SECURE` désactivé tant que le site est en HTTP. | Le cookie peut circuler en clair sur le réseau. | Passer en HTTPS (reverse proxy) puis `COOKIE_SECURE=true`. |
+| Le site utilise HTTP et le cookie n'est pas `Secure`. | Le cookie peut circuler en clair sur le réseau. | Ne pas exposer cette composition publiquement ; choisir une protection de transport séparée. |
 | `time` du pointage fourni par le client. | Un client peut pointer à une heure arbitraire. | Utiliser l'heure du serveur, ou borner l'écart accepté. |
 | Pas de clôture mensuelle dédiée. | La validation porte actuellement sur les feuilles hebdomadaires. | Les corrections et décisions sont déjà historisées via les workflows et le journal ; voir BACKEND.md. |
 | Formats de date différents en sortie. | Les temps de travail sont renvoyés sans `T` ni `Z`. | Renvoyer partout de l'ISO 8601. |

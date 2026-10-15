@@ -210,11 +210,11 @@ sequenceDiagram
     API-->>R: 200 data Absence
 ```
 
-## Conteneurs de production
+## Conteneurs du serveur HTTP
 
 ```mermaid
 flowchart LR
-    Internet -->|80 et 443| N[Nginx dashboard]
+    Client local ou réseau isolé -->|HTTP| N[Nginx dashboard]
     N -->|proxy interne| P[Phoenix]
     P -->|réseau database interne| DB[(PostgreSQL)]
     P -->|réseau outbound| R[Resend]
@@ -230,7 +230,7 @@ flowchart LR
 - `phoenix` n'a aucun port publié ;
 - `dashboard` est le seul point d'entrée ;
 - Mailpit n'existe pas dans la composition de production ;
-- le certificat est monté en lecture seule dans Nginx.
+- aucun certificat ni port chiffré n'est configuré.
 
 ## Invariants d'architecture
 
@@ -244,7 +244,7 @@ flowchart LR
 ## Points à confirmer hors dépôt
 
 - topologie réseau réelle du serveur et règles de pare-feu ;
-- terminaison TLS réellement active avec un certificat valide ;
+- solution de transport chiffré à ajouter avant toute exposition publique ;
 - nombre réel d'instances Phoenix ;
 - supervision, collecte des logs et alertes ;
 - application mobile consommant éventuellement cette API.

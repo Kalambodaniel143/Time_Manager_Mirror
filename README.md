@@ -23,7 +23,9 @@ python -m pip install mkdocs-material==9.7.7
 mkdocs serve
 ```
 
-Commencer par le [guide d'installation](docs/INSTALLATION.md), puis consulter l'[architecture](docs/ARCHITECTURE.md), le [backend et ses endpoints](docs/BACKEND.md), le [frontend](docs/FRONTEND.md) et l'[exploitation](docs/DEVOPS.md).
+Commencer par le [guide d'installation](docs/INSTALLATION.md), puis consulter l'[architecture](docs/ARCHITECTURE.md), le [backend et ses endpoints](docs/BACKEND.md), le [frontend](docs/FRONTEND.md), la [sécurité](docs/SECURITE.md) et l'[exploitation](docs/DEVOPS.md).
+
+> **Attention :** la composition serveur actuelle utilise HTTP. Elle convient au développement et à un réseau isolé, pas à une exposition publique.
 
 ## Vérifications
 

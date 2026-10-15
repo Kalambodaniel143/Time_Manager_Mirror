@@ -24,30 +24,28 @@ Ce glossaire traduit les mots techniques employés dans le projet. Il peut se li
 | ERD | Diagramme montrant les tables et leurs relations. |
 | ETS | Stockage en mémoire d'Erlang. Le limiteur de débit y conserve ses compteurs ; ils disparaissent au redémarrage. |
 | Guard frontend | Contrôle de navigation Vue qui masque ou redirige une page. Il ne remplace jamais l'autorisation backend. |
-| HSTS | En-tête demandant au navigateur d'utiliser HTTPS pour les prochaines visites. |
 | Healthcheck | Commande régulière qui indique à Docker ou à un orchestrateur si un service fonctionne réellement. Il manque dans la composition de production actuelle. |
 | HttpOnly | Attribut empêchant JavaScript de lire un cookie. Il limite le vol du JWT par un script injecté. |
 | IDOR | Accès à l'objet d'une autre personne en modifiant un identifiant dans une URL. Les contrôleurs comparent les identifiants au périmètre courant. |
 | JWT | Jeton signé contenant l'identifiant, la version de session, le CSRF et les dates de validité. Il est signé, pas chiffré. |
 | Migration | Fichier versionné qui fait évoluer le schéma PostgreSQL sans recréer toute la base. |
 | Mock | Simulation locale du backend ou des données. Le build de production refuse les variables qui l'activent. |
-| Nginx | Serveur web qui sert Vue, termine TLS et transmet `/api` vers Phoenix en production. |
+| Nginx | Serveur web qui sert le build Vue en HTTP et transmet `/api` vers Phoenix. |
 | OTP | Ensemble de principes et bibliothèques Erlang pour superviser des processus fiables. `TimeManager.Application` démarre les services sous un superviseur `one_for_one`. |
 | Pagination par curseur | Lecture par pages en utilisant le dernier identifiant reçu au lieu d'un décalage coûteux. |
 | Phoenix | Framework web Elixir du backend. |
 | Plug | Étape traversée par une requête Phoenix, par exemple l'authentification, la limite de taille ou le contrôle d'origine. |
 | PostgreSQL | Base relationnelle persistante de Time Manager. |
-| Proxy inverse | Serveur placé devant une application. Nginx reçoit la connexion publique puis transmet `/api` à Phoenix. |
+| Proxy inverse | Serveur placé devant une application. Nginx reçoit les appels du dashboard puis transmet `/api` à Phoenix. |
 | Rate limiting | Limitation du nombre de requêtes pendant une période afin de ralentir les abus et certaines attaques DoS. |
 | Repo | `TimeManager.Repo`, point d'accès Ecto à PostgreSQL. |
 | Révocation | Invalidation serveur d'une session avant l'expiration naturelle du JWT. |
 | Rollback | Retour à une version applicative ou à un état de base précédent. Le dépôt permet de choisir un ancien tag d'image, mais n'automatise pas le rollback. |
 | SameSite=Strict | Attribut empêchant normalement le navigateur d'envoyer le cookie lors d'une navigation provenant d'un autre site. |
 | Secret | Valeur privée utilisée pour signer ou authentifier. Les modèles utilisent des placeholders et les valeurs réelles doivent rester hors Git. |
-| Secure | Attribut de cookie qui autorise son envoi uniquement sur HTTPS. Il est actif automatiquement en production. |
 | Session version | Entier stocké sur l'utilisateur et dans le JWT. Son changement invalide toutes les sessions plus anciennes. |
 | Transaction | Groupe d'opérations PostgreSQL validées ensemble ou toutes annulées en cas d'erreur. |
-| TLS / HTTPS | Chiffrement du trafic entre le client et Nginx avec un certificat correspondant au domaine. |
+| Transport chiffré | Protection du trafic entre le client et le serveur. Elle n'est pas fournie par la configuration actuelle du dépôt. |
 | Vue Router | Bibliothèque qui associe les URL du navigateur aux composants Vue. |
 | Vite | Outil de développement et de construction du frontend. En développement, il transmet `/api` au backend configuré. |
 | XSS | Injection d'un script dans une page. Vue échappe les interpolations par défaut ; CSP et le cookie HttpOnly ajoutent des barrières. Toute utilisation future de `v-html` doit être revue. |
