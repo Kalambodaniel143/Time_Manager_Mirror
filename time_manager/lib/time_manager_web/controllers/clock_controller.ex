@@ -27,11 +27,13 @@ defmodule TimeManagerWeb.ClockController do
     ]
   )
 
-  def index(conn, _params) do
+  def index(conn, params) do
     with {:ok, user_id} <- cast_id(conn.path_params["userID"]),
          :ok <- authorize(Authorization.can_view?(current_user(conn), user_id)),
-         {:ok, user} <- Accounts.fetch_user(user_id) do
-      render(conn, :index, clocks: Clocks.list_clocks(user))
+         {:ok, user} <- Accounts.fetch_user(user_id),
+         {:ok, page} <- TimeManager.Pagination.parse(params) do
+      clocks = Clocks.page_clocks(user, page)
+      conn |> TimeManager.Pagination.header(clocks, page) |> render(:index, clocks: clocks)
     end
   end
 

@@ -4,11 +4,13 @@ defmodule TimeManager.Workforce.Absences do
   alias TimeManager.Workforce.{Absence, TimeSheets}
   alias TimeManager.Accounts.User
 
-  def list(me) do
+  def list(me, page \\ nil) do
     ids = Workforce.visible_ids(me)
 
     {:ok,
-     Repo.all(from a in Absence, where: a.user_id in ^ids, order_by: [desc: a.id])
+     from(a in Absence, where: a.user_id in ^ids, order_by: [desc: a.id])
+     |> TimeManager.Pagination.optional(page)
+     |> Repo.all()
      |> Enum.map(&Workforce.plain/1)}
   end
 
@@ -112,7 +114,9 @@ defmodule TimeManager.Workforce.Absences do
            where:
              a.user_id == ^id and a.id != ^except and a.status in ["pending", "approved"] and
                a.start < ^finish and a.end > ^start
-       ), do: Workforce.conflict("Une absence existe déjà sur cette période."), else: :ok
+       ),
+       do: Workforce.conflict("Une absence existe déjà sur cette période."),
+       else: :ok
   end
 
   def payment(me, id, attrs) do

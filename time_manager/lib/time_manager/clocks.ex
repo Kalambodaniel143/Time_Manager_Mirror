@@ -29,6 +29,13 @@ defmodule TimeManager.Clocks do
     |> Repo.all()
   end
 
+  def page_clocks(%User{id: user_id}, page) do
+    Clock
+    |> where([clock], clock.user_id == ^user_id)
+    |> TimeManager.Pagination.apply(page)
+    |> Repo.all()
+  end
+
   @doc """
   Records an arrival, pause, resume or departure.
 

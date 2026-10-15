@@ -486,15 +486,16 @@ defmodule TimeManager.Workforce.Planning do
     :ok
   end
 
-  def swaps(me) do
+  def swaps(me, page \\ nil) do
     ids = Workforce.visible_ids(me)
 
     rows =
-      Repo.all(
-        from s in Swap,
-          where: s.user_id in ^ids or s.target_user_id == ^me.id,
-          order_by: [desc: s.id]
+      from(s in Swap,
+        where: s.user_id in ^ids or s.target_user_id == ^me.id,
+        order_by: [desc: s.id]
       )
+      |> TimeManager.Pagination.optional(page)
+      |> Repo.all()
 
     {:ok, Enum.map(rows, &Workforce.plain/1)}
   end
@@ -545,7 +546,10 @@ defmodule TimeManager.Workforce.Planning do
                  Repo.exists?(
                    from s in Swap,
                      where: s.shift_id == ^source.id and s.status in ["pending", "consented"]
-                 ), do: Workforce.conflict("Un échange est déjà en attente."), else: :ok),
+                 ),
+                 do: Workforce.conflict("Un échange est déjà en attente."),
+                 else: :ok
+               ),
              {:ok, row} <-
                Repo.insert(%Swap{
                  user_id: me.id,
@@ -675,7 +679,10 @@ defmodule TimeManager.Workforce.Planning do
            if(
              Enum.all?([source.user_id, target.user_id], fn id ->
                Enum.any?(team.members, &(&1.id == id))
-             end), do: :ok, else: Workforce.conflict("La composition de l’équipe a changé.")),
+             end),
+             do: :ok,
+             else: Workforce.conflict("La composition de l’équipe a changé.")
+           ),
          {:ok, _} <- Repo.update(Ecto.Changeset.change(source, user_id: target.user_id)),
          {:ok, _} <- Repo.update(Ecto.Changeset.change(target, user_id: source.user_id)),
          candidates = shifts(plan.id),

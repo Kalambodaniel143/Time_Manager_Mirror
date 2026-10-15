@@ -44,8 +44,12 @@ defmodule TimeManagerWeb.WorkingTimeController do
   def index(conn, %{"userID" => user_id} = params) do
     with {:ok, user_id} <- cast_id(user_id),
          :ok <- authorize(Authorization.can_view?(current_user(conn), user_id)),
-         {:ok, working_times} <- WorkingTimes.list_working_times(user_id, params) do
-      render(conn, :index, working_times: working_times)
+         {:ok, page} <- TimeManager.Pagination.parse(params),
+         {:ok, working_times} <-
+           WorkingTimes.list_working_times(user_id, Map.put(params, "page", page)) do
+      conn
+      |> TimeManager.Pagination.header(working_times, page)
+      |> render(:index, working_times: working_times)
     end
   end
 

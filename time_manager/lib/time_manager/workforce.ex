@@ -209,7 +209,10 @@ defmodule TimeManager.Workforce do
            if(
              Enum.all?(attrs, fn {k, v} ->
                k in ["validate", "correct", "publish"] and is_boolean(v)
-             end), do: :ok, else: invalid("Permissions invalides.")) do
+             end),
+             do: :ok,
+             else: invalid("Permissions invalides.")
+           ) do
       Repo.transact(fn ->
         {:ok, _} = fetch(TimeManager.Teams.Team, team.id, true)
         row = Repo.get_by(Permission, team_id: team.id) || %Permission{team_id: team.id}
@@ -309,7 +312,7 @@ defmodule TimeManager.Workforce do
     |> Enum.each(&notify(&1.id, title, body))
   end
 
-  def journal(me) do
+  def journal(me, page \\ nil) do
     with :ok <- check(Authorization.administrator?(me)) do
       query = from e in Event, order_by: [desc: e.id], limit: 200
 
@@ -318,16 +321,16 @@ defmodule TimeManager.Workforce do
           do: where(query, [e], e.organization_id == ^me.organization_id),
           else: where(query, [e], is_nil(e.organization_id))
 
-      rows = Repo.all(query)
+      rows = query |> TimeManager.Pagination.optional(page) |> Repo.all()
       {:ok, Enum.map(rows, &plain/1)}
     end
   end
 
-  def notifications(me),
+  def notifications(me, page \\ nil),
     do:
-      Repo.all(
-        from n in Notification, where: n.user_id == ^me.id, order_by: [desc: n.id], limit: 100
-      )
+      from(n in Notification, where: n.user_id == ^me.id, order_by: [desc: n.id], limit: 100)
+      |> TimeManager.Pagination.optional(page)
+      |> Repo.all()
       |> Enum.map(&plain/1)
 
   def read_notification(me, id) do
