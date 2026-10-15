@@ -1,4 +1,4 @@
-defmodule TimeManagerWeb.Plugs.Authenticate do
+  defmodule TimeManagerWeb.Plugs.Authenticate do
   @moduledoc """
   Authenticates every protected request.
 
@@ -40,7 +40,7 @@ defmodule TimeManagerWeb.Plugs.Authenticate do
          true <- valid_csrf?(conn, xsrf) or session_restore?(conn, opts),
          false <- Accounts.session_revoked?(claims["jti"]),
          {:ok, user} <- Accounts.fetch_user(claims["user_id"]),
-         true <- user.session_version == Map.get(claims, "session_version", 0) do
+         true <- claims["session_version"] == user.session_version do
       conn
       |> assign(:current_user, user)
       |> assign(:session_claims, claims)

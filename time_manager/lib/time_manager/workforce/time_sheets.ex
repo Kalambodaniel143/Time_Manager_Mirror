@@ -237,7 +237,11 @@ defmodule TimeManager.Workforce.TimeSheets do
     ids = Workforce.visible_ids(me)
 
     with {:ok, ids} <- filter_ids(ids, params["user_id"]) do
-      rows = Repo.all(from c in Correction, where: c.user_id in ^ids, order_by: [desc: c.id])
+      rows =
+        from(c in Correction, where: c.user_id in ^ids, order_by: [desc: c.id])
+        |> TimeManager.Pagination.optional(params["page"])
+        |> Repo.all()
+
       {:ok, Enum.map(rows, &correction_data/1)}
     end
   end
@@ -252,7 +256,8 @@ defmodule TimeManager.Workforce.TimeSheets do
     Repo.transact(fn ->
       {:ok, _} = Workforce.fetch(User, me.id, true)
 
-      with {:ok, period} <- Workforce.fetch(TimeManager.WorkingTimes.WorkingTime, period_id, true),
+      with {:ok, period} <-
+             Workforce.fetch(TimeManager.WorkingTimes.WorkingTime, period_id, true),
            :ok <- Workforce.check(period.user_id == me.id),
            :ok <- Workforce.mutable(me.id, period.start, period.end),
            {:ok, start} <- Workforce.datetime(attrs["start"]),

@@ -3,3 +3,5 @@ deps/
 .git/
 .elixir_ls/
 *.log
+.env
+.env.*

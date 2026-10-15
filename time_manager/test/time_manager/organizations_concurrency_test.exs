@@ -16,6 +16,14 @@ defmodule TimeManager.OrganizationsConcurrencyTest do
       Sandbox.unboxed_run(Repo, fn ->
         admin = organization_admin_fixture()
         {request, _reference} = join_request_fixture(admin.organization_id)
+
+        request =
+          request
+          |> Ecto.Changeset.change(
+            email_verified_at: DateTime.utc_now() |> DateTime.truncate(:second)
+          )
+          |> Repo.update!()
+
         {admin, request}
       end)
 

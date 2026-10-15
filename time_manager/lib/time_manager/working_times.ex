@@ -17,12 +17,15 @@ defmodule TimeManager.WorkingTimes do
         |> where([w], w.user_id == ^user_id)
         |> filter_start(start)
         |> filter_end(finish)
-        |> order_by([w], asc: w.start)
+        |> history_order(filters)
         |> Repo.all()
 
       {:ok, working_times}
     end
   end
+
+  defp history_order(query, %{"page" => page}), do: TimeManager.Pagination.apply(query, page)
+  defp history_order(query, _), do: order_by(query, [w], asc: w.start)
 
   def get_working_time(user_id, id) do
     with {:ok, user_id} <- cast_id(user_id),

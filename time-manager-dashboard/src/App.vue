@@ -180,7 +180,8 @@ export default {
         this.refreshNotificationBadge()
         // The theme may have been picked on the login page.
         this.setTheme(readTheme(), false)
-        if (!id) { clearWorkforce(); stopReading() }
+        clearWorkforce(); stopReading()
+        if (!id) { applyStrongText(false) }
         else if (!this.organizationSession) this.loadPreferences(id)
         this.tourOpen = Boolean(id) && this.user.role === 'employee' && !readStorage(TOUR_KEY)
       },

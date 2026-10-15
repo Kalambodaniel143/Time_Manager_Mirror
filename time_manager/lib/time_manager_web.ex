@@ -29,6 +29,23 @@ defmodule TimeManagerWeb do
     end
   end
 
+  # N'expanse les macros LiveDashboard que dans la compilation de développement.
+  @dev_routes Application.compile_env(:time_manager, :dev_routes, false)
+  defmacro dev_routes do
+    if @dev_routes do
+      quote do
+        import Phoenix.LiveDashboard.Router
+
+        scope "/dev" do
+          pipe_through [:fetch_session, :protect_from_forgery]
+
+          live_dashboard "/dashboard", metrics: TimeManagerWeb.Telemetry
+          forward "/mailbox", Plug.Swoosh.MailboxPreview
+        end
+      end
+    end
+  end
+
   def channel do
     quote do
       use Phoenix.Channel

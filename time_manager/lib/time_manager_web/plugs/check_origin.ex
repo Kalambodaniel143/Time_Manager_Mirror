@@ -1,36 +1,34 @@
 defmodule TimeManagerWeb.Plugs.CheckOrigin do
-  @moduledoc """
-  Refuses (403) a state-changing request (POST, PUT, PATCH, DELETE) sent by a
-  browser from another site.
-
-  The API is served under the same origin as the front-end (Nginx or Vite
-  proxy), so a legitimate browser request has an `Origin` (or, failing that, a
-  `Referer`) whose host is the host of the request. This completes the CSRF
-  token and the SameSite cookie, and also covers the public routes that have no
-  session yet (login, organization creation). A request without either header
-  (curl, server-to-server) is let through: it carries no browser cookie to abuse.
-  """
+  @moduledoc "Compare l'origine complète : protocole, domaine et port."
   import Plug.Conn
 
-  @safe_methods ~w(GET HEAD OPTIONS)
-
   def init(opts), do: opts
+  def call(%Plug.Conn{method: method} = conn, _) when method in ~w(GET HEAD OPTIONS), do: conn
 
-  def call(%Plug.Conn{method: method} = conn, _opts) when method in @safe_methods, do: conn
+  def call(conn, _) do
+    expected =
+      Application.get_env(:time_manager, :public_origin) ||
+        URI.to_string(%URI{scheme: to_string(conn.scheme), host: conn.host, port: conn.port})
 
-  def call(conn, _opts) do
-    case source(conn) do
-      nil -> conn
-      source -> if URI.parse(source).host == conn.host, do: conn, else: forbidden(conn)
-    end
+    valid =
+      case {get_req_header(conn, "origin"), get_req_header(conn, "referer")} do
+        {[], []} -> get_req_header(conn, "sec-fetch-site") != ["cross-site"]
+        {[source], _} -> same_origin?(source, expected)
+        {[], [source]} -> same_origin?(source, expected)
+        _ -> false
+      end
+
+    if valid, do: conn, else: forbidden(conn)
   end
 
-  defp source(conn) do
-    case {get_req_header(conn, "origin"), get_req_header(conn, "referer")} do
-      {[origin | _], _} -> origin
-      {[], [referer | _]} -> referer
-      {[], []} -> nil
-    end
+  defp same_origin?(source, expected) do
+    origin = URI.parse(source)
+    target = URI.parse(expected)
+
+    origin.scheme in ["http", "https"] and is_nil(origin.userinfo) and
+      {origin.scheme, origin.host, origin.port} == {target.scheme, target.host, target.port}
+  rescue
+    _ -> false
   end
 
   defp forbidden(conn) do

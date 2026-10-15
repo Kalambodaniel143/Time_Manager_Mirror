@@ -47,6 +47,8 @@ function writeCsrf(token) {
 }
 
 function startSession(session) {
+  // Supprime l'ancien reçu privé partagé par tous les utilisateurs du navigateur.
+  try { localStorage.removeItem('tm-last-join-receipt') } catch { /* Stockage indisponible. */ }
   sessionRevision += 1
   if (session.csrf_token) writeCsrf(session.csrf_token)
   auth.organization = session.organization || null

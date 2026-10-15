@@ -79,6 +79,8 @@ defmodule TimeManagerWeb.FallbackController do
     json(conn |> put_status(status), %{errors: %{detail: detail}})
   end
 
+  def call(conn, {:error, :email_delivery_failed}), do: call(conn, {:error, :service_unavailable})
+
   def call(conn, {:error, :service_unavailable}) do
     json(conn |> put_status(:service_unavailable), %{
       errors: %{detail: "Email delivery is unavailable"}

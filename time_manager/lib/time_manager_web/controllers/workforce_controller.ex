@@ -206,7 +206,8 @@ defmodule TimeManagerWeb.WorkforceController do
     ]
   )
 
-  def corrections(conn, p), do: respond(conn, TimeSheets.corrections(me(conn), p))
+  def corrections(conn, p),
+    do: paged(conn, p, &TimeSheets.corrections(me(conn), Map.put(p, "page", &1)))
 
   operation(:request_correction,
     summary: "request correction",
@@ -370,7 +371,7 @@ defmodule TimeManagerWeb.WorkforceController do
     ]
   )
 
-  def swaps(conn, _p), do: respond(conn, Planning.swaps(me(conn)))
+  def swaps(conn, p), do: paged(conn, p, &Planning.swaps(me(conn), &1))
 
   operation(:create_swap,
     summary: "create swap",
@@ -423,7 +424,7 @@ defmodule TimeManagerWeb.WorkforceController do
     ]
   )
 
-  def absences(conn, _p), do: respond(conn, Absences.list(me(conn)))
+  def absences(conn, p), do: paged(conn, p, &Absences.list(me(conn), &1))
 
   operation(:create_absence,
     summary: "create absence",
@@ -546,7 +547,7 @@ defmodule TimeManagerWeb.WorkforceController do
     ]
   )
 
-  def journal(conn, _p), do: respond(conn, Workforce.journal(me(conn)))
+  def journal(conn, p), do: paged(conn, p, &Workforce.journal(me(conn), &1))
 
   operation(:notifications,
     summary: "notifications",
@@ -620,6 +621,14 @@ defmodule TimeManagerWeb.WorkforceController do
   end
 
   defp me(conn), do: conn.assigns.current_user
+
+  defp paged(conn, params, fetch) do
+    with {:ok, page} <- TimeManager.Pagination.parse(params),
+         {:ok, rows} <- fetch.(page) do
+      conn |> TimeManager.Pagination.header(rows, page) |> respond({:ok, rows})
+    end
+  end
+
   defp respond(conn, {:ok, result}), do: json(conn, %{data: result})
   defp respond(_conn, error), do: error
 end

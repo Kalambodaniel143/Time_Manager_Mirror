@@ -30,8 +30,8 @@ defmodule TimeManager.Email do
     |> text_body("Votre code de vérification est #{code}. Il expire dans 10 minutes.")
   end
 
-  @doc "Builds the account credentials message sent after an administrator approves a request."
-  def credentials(email, user, password, organization) do
+  @doc "Confirme l'admission sans envoyer de mot de passe par courriel."
+  def credentials(email, user, organization) do
     new()
     |> to(email)
     |> from(Application.fetch_env!(:time_manager, :resend_from_email))
@@ -43,9 +43,8 @@ defmodule TimeManager.Email do
 
     Nom d'utilisateur : #{user.username}
     Adresse e-mail : #{user.email}
-    Mot de passe : #{password}
-
-    Vous pouvez vous connecter depuis l'application Time Manager.
+    Votre administrateur vous communiquera le mot de passe initial par un canal sécurisé séparé.
+    Vous pourrez ensuite vous connecter depuis l'application Time Manager.
     Pour votre sécurité, changez ce mot de passe après votre première connexion.
     """)
   end

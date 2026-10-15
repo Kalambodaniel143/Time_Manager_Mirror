@@ -57,7 +57,7 @@ Le contrôleur vérifie l'appelant ; `Clocks` verrouille le salarié, vérifie l
 ### 1.3 Sécurité et cohérence
 
 - `Token` signe un JWT **HS256**, valable huit heures, contenant notamment `user_id`, `role`, `xsrf`, `jti`. Il est signé, pas chiffré.
-- `AuthController` place le JWT dans le cookie `jwt`, `HttpOnly`, `SameSite=Strict`, chemin `/`. `COOKIE_SECURE=true` active `Secure`.
+- `AuthController` place le JWT dans le cookie `jwt`, `HttpOnly`, `SameSite=Strict`, chemin `/`. Le cookie est automatiquement `Secure` en production ; `COOKIE_SECURE=true` permet aussi de l'imposer ailleurs.
 - `Authenticate` exige cookie et `X-CSRF-Token`, y compris sur les GET métier. La seule exception est la restauration en lecture seule de `/auth/session` avec `X-Session-Restore: 1`. Il vérifie signature, expiration, révocation et correspondance CSRF, puis recharge utilisateur et rôle en base.
 - `Authorization` définit rôle et périmètre. `Workforce` ajoute les permissions `correct`, `validate`, `publish` des équipes.
 - Le manager intervient sur les membres des équipes qu'il dirige actuellement ; l'administrateur dans son organisation. Aucun responsable ne corrige directement ses propres périodes ni ne valide sa propre feuille, correction ou absence.
@@ -541,11 +541,11 @@ Hors préfixe /api, GET `/swaggerui` sert du HTML. `/dev/dashboard` et `/dev/mai
 | mix.exs | Elixir ~> 1.17, Phoenix ~> 1.8.14 et dépendances ; versions résolues dans mix.lock. |
 | config/dev.exs | PostgreSQL via PGUSER/PGPASSWORD/PGHOST/PGDATABASE/PGPORT ; port HTTP 4000 par défaut. |
 | config/test.exs | Base isolée time_manager_test, SQL Sandbox, hash moins coûteux, limiteurs désactivés pour la suite ordinaire. |
-| config/runtime.exs | PORT, JWT_SECRET, COOKIE_SECURE, EMAIL_DELIVERY ; en prod DATABASE_URL, POOL_SIZE, SECRET_KEY_BASE et endpoint. |
+| config/runtime.exs | PORT, JWT_SECRET obligatoire sans clé de secours, COOKIE_SECURE, EMAIL_DELIVERY ; en prod DATABASE_URL, PHX_HOST, TRUSTED_PROXY_IP, POOL_SIZE, SECRET_KEY_BASE et endpoint HTTPS public. |
 | application.ex | Supervise Repo, PubSub, télémétrie, DNSCluster, RateLimiter et Endpoint avec stratégie one_for_one. |
 | entrypoint.sh | Attend PostgreSQL, lance ecto.create, ecto.migrate, seeds, puis phx.server. |
 
-Le Dockerfile actuel utilise **MIX_ENV=dev**, même dans le déploiement par images. La configuration de développement et ses routes dev sont donc actives ; ce n'est pas une release prod. Fournir un JWT_SECRET réel : le repli de développement ne convient pas au serveur déployé.
+Le Dockerfile sépare les cibles `development` et `production`. La cible publiée compile et démarre avec **MIX_ENV=prod**, sans routes ni dépendances réservées au développement. Le démarrage refuse notamment un `JWT_SECRET` absent, trop court ou connu publiquement. Ce déploiement utilise encore Mix plutôt qu'une release OTP ; voir [Docker et environnements](DOCKER_ENVIRONNEMENTS.md).
 
 seeds.exs insère les rôles et, si ADMIN_EMAIL/ADMIN_PASSWORD sont présents, un admin **sans organisation**. Il ne modifie pas un compte existant et ne crée pas Gotham City. Le provisionnement/rattachement Gotham est décrit dans le [contrat d'organisation](CONTRAT_BACKEND_ORGANISATIONS.md#10-provisionnement-manuel-et-verrouillage-de-gotham-city) et le script racine scripts/recreate_gotham_admin.sh.
 

@@ -133,7 +133,7 @@ router.beforeEach(async (to) => {
 
   const target = to.meta.userParam && to.params[to.meta.userParam]
   if (target && !isSelf(target)) {
-    if (to.meta.selfOnly) return { ...to, params: { ...to.params, [to.meta.userParam]: String(user.id) } }
+    if (to.meta.selfOnly) return denied(user.role)
     // Managers see their teams, administrators everyone; the API refines it.
     if (!hasRole('manager', 'administrator')) return denied(user.role)
   }

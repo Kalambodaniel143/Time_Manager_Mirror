@@ -169,7 +169,9 @@ defmodule TimeManager.Accounts do
   the answer does not reveal which accounts exist. A bcrypt hash from before the
   switch to Argon2id is replaced now that the password is known.
   """
-  def authenticate(email, password) when is_binary(email) and is_binary(password) do
+  def authenticate(email, password)
+      when is_binary(email) and byte_size(email) <= 254 and is_binary(password) and
+             byte_size(password) <= 512 do
     user = Repo.get_by(User, email: email |> String.trim() |> String.downcase())
 
     if User.valid_password?(user, password) and User.verified?(user) do
@@ -455,35 +457,36 @@ defmodule TimeManager.Accounts do
   stolen session alone is not enough to take over the account.
   """
   def change_password(%User{} = user, current_password, attrs) do
-    Repo.transact(fn ->
-      current = Repo.one!(from u in User, where: u.id == ^user.id, lock: "FOR UPDATE")
-
-      if User.valid_password?(current, current_password) do
-        reset_password(current, attrs)
-      else
-        {:error,
-         current
-         |> Ecto.Changeset.change()
-         |> Ecto.Changeset.add_error(:current_password, "is not valid")}
-      end
+    update_password(user.id, attrs, fn current ->
+      if User.valid_password?(current, current_password),
+        do: :ok,
+        else:
+          {:error,
+           current
+           |> Ecto.Changeset.change()
+           |> Ecto.Changeset.add_error(:current_password, "is not valid")}
     end)
   end
 
   @doc "Sets a new password without checking the old one (administrator reset)."
-  def reset_password(%User{} = user, attrs) do
-    Repo.transact(fn ->
-      current = Repo.one!(from u in User, where: u.id == ^user.id, lock: "FOR UPDATE")
+  def reset_password(%User{} = user, attrs),
+    do: update_password(user.id, attrs, fn _ -> :ok end)
 
-      with {:ok, updated} <-
+  defp update_password(id, attrs, authorize) do
+    Repo.transact(fn ->
+      # Sérialise les changements concurrents et invalide tous les anciens JWT.
+      current = Repo.one!(from u in User, where: u.id == ^id, lock: "FOR UPDATE")
+
+      with :ok <- authorize.(current),
+           {:ok, user} <-
              current
              |> User.password_changeset(attrs)
              |> Ecto.Changeset.put_change(:session_version, current.session_version + 1)
-             |> Repo.update()
-             |> preload_role() do
-        from(r in TimeManager.Accounts.PasswordRecovery, where: r.user_id == ^user.id)
+             |> Repo.update() do
+        from(r in TimeManager.Accounts.PasswordRecovery, where: r.user_id == ^id)
         |> Repo.delete_all()
 
-        {:ok, updated}
+        {:ok, Repo.preload(user, :role)}
       end
     end)
   end

@@ -10,8 +10,7 @@ defmodule TimeManagerWeb.Plugs.RateLimit do
     * `by: :email` counts per `email` parameter, so that guessing the password
       of one account is slowed down even from many addresses.
 
-  The client address is `conn.remote_ip`. Behind the Nginx proxy every client
-  shares the proxy's address, so the IP limits must stay generous there.
+  L'adresse `conn.remote_ip` est corrigée uniquement par le proxy de confiance.
 
   It can be switched off with `config :time_manager, :rate_limit, false`
   (the test configuration does so; the tests of this plug turn it back on with
@@ -27,12 +26,13 @@ defmodule TimeManagerWeb.Plugs.RateLimit do
       limit: Keyword.fetch!(opts, :limit),
       period: Keyword.get(opts, :period, :timer.minutes(1)),
       by: Keyword.get(opts, :by, :ip),
-      enabled: Keyword.get(opts, :enabled)
+      enabled: Keyword.get(opts, :enabled),
+      writes_only: Keyword.get(opts, :writes_only, false)
     }
   end
 
   def call(conn, opts) do
-    if enabled?(opts) do
+    if enabled?(opts) and (not opts.writes_only or conn.method not in ~w(GET HEAD OPTIONS)) do
       key = {opts.bucket, identity(conn, opts.by)}
 
       case RateLimiter.hit(key, opts.limit, opts.period) do
@@ -48,11 +48,15 @@ defmodule TimeManagerWeb.Plugs.RateLimit do
   defp enabled?(%{enabled: enabled}), do: enabled
 
   defp identity(conn, :ip), do: conn.remote_ip
+  defp identity(conn, :user), do: conn.assigns.current_user.id
 
   defp identity(conn, :email) do
     case conn.params["email"] do
-      email when is_binary(email) -> email |> String.trim() |> String.downcase()
-      _ -> nil
+      email when is_binary(email) and byte_size(email) <= 254 ->
+        :crypto.hash(:sha256, email |> String.trim() |> String.downcase())
+
+      _ ->
+        nil
     end
   end
 

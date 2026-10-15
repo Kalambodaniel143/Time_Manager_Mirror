@@ -198,7 +198,7 @@ defmodule TimeManagerWeb.JoinRequestController do
     with {:ok, me} <- organization_admin(conn, org_id),
          {:ok, result} <-
            Organizations.approve_join_request(me.organization_id, id, password, me),
-         :ok <- deliver_credentials(result.user, password, result.user.organization) do
+         :ok <- deliver_credentials(result.user, result.user.organization) do
       render(conn, :approved, result)
     end
   end
@@ -228,8 +228,8 @@ defmodule TimeManagerWeb.JoinRequestController do
 
   def reject(_conn, _params), do: {:error, :bad_request}
 
-  defp deliver_credentials(user, password, organization) do
-    case user.email |> Email.credentials(user, password, organization) |> EmailDelivery.send() do
+  defp deliver_credentials(user, organization) do
+    case user.email |> Email.credentials(user, organization) |> EmailDelivery.send() do
       :ok -> :ok
       {:error, _reason} -> {:error, :service_unavailable}
     end

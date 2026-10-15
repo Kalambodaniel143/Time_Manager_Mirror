@@ -21,9 +21,14 @@ defmodule TimeManagerWeb.RateLimiter do
     now = System.system_time(:millisecond)
     window = div(now, period_ms)
     expires_at = (window + 1) * period_ms
-    count = :ets.update_counter(@table, {key, window}, {2, 1}, {{key, window}, 0, expires_at})
 
-    if count <= limit, do: :ok, else: {:error, max(div(expires_at - now, 1000), 1)}
+    if :ets.info(@table, :size) >= 20_000 and not :ets.member(@table, {key, window}) do
+      {:error, 60}
+    else
+      count = :ets.update_counter(@table, {key, window}, {2, 1}, {{key, window}, 0, expires_at})
+
+      if count <= limit, do: :ok, else: {:error, max(div(expires_at - now, 1000), 1)}
+    end
   end
 
   @impl true

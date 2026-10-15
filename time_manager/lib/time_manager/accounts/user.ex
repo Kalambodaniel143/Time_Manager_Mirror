@@ -18,7 +18,7 @@ defmodule TimeManager.Accounts.User do
     field :password, :string, virtual: true, redact: true
     field :password_hash, :string, redact: true
     field :email_verified_at, :utc_datetime
-    field :session_version, :integer, default: 0
+    field :session_version, :integer, default: 1
 
     belongs_to :role, TimeManager.Accounts.Role
     belongs_to :organization, TimeManager.Organizations.Organization, type: :binary_id
@@ -38,6 +38,7 @@ defmodule TimeManager.Accounts.User do
     user
     |> cast(attrs, [:username, :email, :first_name, :last_name])
     |> validate_required([:username, :email])
+    |> validate_length(:username, max: 100)
     |> update_change(:first_name, &String.trim/1)
     |> update_change(:last_name, &String.trim/1)
     |> validate_length(:first_name, max: 100)

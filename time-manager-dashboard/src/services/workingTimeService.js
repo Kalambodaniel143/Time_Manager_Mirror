@@ -1,7 +1,7 @@
 import { auth } from '../stores/auth'
 import { workPeriods, workCreatePeriod, workUpdatePeriod, workDeletePeriod } from '../mocks/organizationWork'
 import { USE_MOCK } from '../config'
-import { buildQuery, mocked, request } from './http'
+import { buildQuery, mocked, request, requestHistory } from './http'
 import {
   mockCreateWorkingTime,
   mockDeleteWorkingTime,
@@ -14,7 +14,7 @@ export function getWorkingTimes(userId, filters = {}) {
   if (auth.organizationSession) return Promise.resolve().then(() => workPeriods(userId, filters))
   if (USE_MOCK && !auth.user) return mocked(() => mockListWorkingTimes(Number(userId), filters))
 
-  return request(`/workingtime/${userId}${buildQuery(filters)}`)
+  return requestHistory(`/workingtime/${userId}${buildQuery(filters)}`)
 }
 
 export function getWorkingTime(userId, id) {

@@ -1,5 +1,5 @@
 import { auth } from '../stores/auth'
-import { buildQuery, request } from './http'
+import { buildQuery, request, requestHistory } from './http'
 import { workCorrections, workRequestCorrection, workReviewCorrection } from '../mocks/organizationWork'
 import { clockDate } from '../utils/missingDeparture'
 
@@ -10,7 +10,7 @@ function checked(item, expectedStatus) {
   return item
 }
 export async function listCorrections(userId) {
-  const items = auth.organizationSession ? workCorrections(userId) : await request(`/correction-requests${buildQuery(userId ? { user_id: userId } : {})}`)
+  const items = auth.organizationSession ? workCorrections(userId) : await requestHistory(`/correction-requests${buildQuery(userId ? { user_id: userId } : {})}`)
   if (!Array.isArray(items)) throw new Error('Liste des demandes de correction invalide.')
   return items.map(item => checked(item))
 }

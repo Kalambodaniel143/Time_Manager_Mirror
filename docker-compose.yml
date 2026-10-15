@@ -1,5 +1,3 @@
-version: "3.8"
-
 services:
   db:
     image: postgres:16-alpine
@@ -11,37 +9,43 @@ services:
     volumes:
       - db_data:/var/lib/postgresql/data
     ports:
-      - "${PGPORT:-5433}:5432"
+      - "127.0.0.1:${PGPORT:-5433}:5432"
 
   phoenix:
-    build: ./time_manager
+    build:
+      context: ./time_manager
+      target: development
     depends_on:
       - db
       - mailpit
     env_file: ./.env
     environment:
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET requis}
+      PGUSER: ${PGUSER:-postgres}
+      PGPASSWORD: ${PGPASSWORD:-postgres}
+      PGDATABASE: ${PGDATABASE:-time_manager_dev}
       PGHOST: db
       PGPORT: "5432"
       MAILPIT_HOST: mailpit
       MAILPIT_PORT: "1025"
-    volumes:
-      - ./.env:/app/.env:ro
     ports:
-      - "4000:4000"
+      - "127.0.0.1:4000:4000"
 
   mailpit:
     image: axllent/mailpit:latest
     restart: unless-stopped
     ports:
-      - "8025:8025"
-      - "1025:1025"
+      - "127.0.0.1:8025:8025"
+      - "127.0.0.1:1025:1025"
 
   dashboard:
-    build: ./time-manager-dashboard
+    build:
+      context: ./time-manager-dashboard
+      target: development
     depends_on:
       - phoenix
     ports:
-      - "8080:80"
+      - "127.0.0.1:8080:80"
 
 volumes:
   db_data:
