@@ -2,6 +2,9 @@
 
 # API du Time Manager
 
+!!! warning "Référence historique"
+    Cette page conserve le guide API initial. Le catalogue exhaustif aligné sur le routeur actuel se trouve dans [Backend et API](BACKEND.md#4-contrats-des-endpoints-backend). En cas d'écart, `router.ex`, les contrôleurs et `BACKEND.md` prévalent.
+
 L'API REST du Time Manager gère les **utilisateurs** et leurs **rôles**, les **équipes**, les **pointages** (arrivées et départs) et les **temps de travail** (périodes avec un début et une fin). Elle est écrite en Elixir avec Phoenix, et stocke ses données dans PostgreSQL.
 
 Les routes métier protégées exigent une session : un JWT dans un cookie `HttpOnly` et un token CSRF dans l'en-tête `X-CSRF-Token`. Chaque route vérifie ensuite le rôle de l'appelant et le périmètre des données demandées.

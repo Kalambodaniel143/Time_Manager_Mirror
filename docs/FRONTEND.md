@@ -1,142 +1,203 @@
-# Frontend — Time Manager
+# Frontend Vue 3 — ce que voit l'utilisateur
 
-Le frontend Vue utilise désormais les API des comptes, équipes, pointages, corrections, feuilles hebdomadaires, plannings, échanges, absences, paie, permissions, journal et notifications. La lecture vocale utilise le navigateur ; ses préférences sont enregistrées dans le compte.
+Le frontend est la partie visible de Time Manager. Il affiche les écrans, recueille les actions et explique les erreurs. Phoenix garde la décision finale sur chaque action.
 
-Ces changements sont présents dans le dépôt local. Le 12 octobre 2026, la spécification du serveur `http://34.155.104.175:4000/api/openapi` ne contenait pas encore les nouvelles routes `/workforce/context`, `/plans`, `/payroll`, `/correction-requests` et `/auth/preferences`. Le [déploiement](DEPLOIEMENT_WORKFLOWS.md) du nouveau backend et de ses migrations est nécessaire pour les utiliser sur ce serveur.
+Son code se trouve dans `time-manager-dashboard/` et utilise Vue 3, Vue Router 5 et Vite 8. Le projet n'utilise ni Pinia ni Vuex. La session et le contexte de travail sont conservés dans de petits objets réactifs partagés entre les écrans.
 
-## Démarrage
+Pour suivre un clic, partez d'un composant dans `src/components/` ou d'une page dans `src/views/`. Cherchez ensuite le service appelé dans `src/services/`. Ce service construit la requête envoyée à Phoenix par `services/http.js`.
 
-Node `^22.18.0` ou `>=24.12.0` est requis. Dans `time-manager-dashboard` :
+## Organisation
 
-```bash
-npm install
-npm run dev
-```
+Le tableau sert de carte. Il indique où chercher selon le problème observé : navigation, session, appel réseau, écran ou style.
 
-Le fichier `.env.local` sélectionne la connexion :
-
-```env
-VITE_AUTH_USE_MOCK=false
-VITE_USE_MOCK=false
-VITE_API_URL=/api
-VITE_BACKEND_URL=http://34.155.104.175:4000
-```
-
-Pour tester le nouveau code avant son déploiement, remplacer seulement `VITE_BACKEND_URL` par `http://localhost:4000`, appliquer les migrations dans `time_manager` puis lancer ce backend local. Le compte doit exister dans cette base. Pour un backend déjà lancé, il n’est pas nécessaire d’en démarrer un second. Redémarrer Vite après changement de configuration.
-
-Le navigateur appelle `/api` sur son origine Vite. Le proxy transmet au backend sélectionné et conserve les cookies. En production, Nginx transmet `/api` au service Phoenix ; `VITE_BACKEND_URL` concerne seulement le développement. Les variables `VITE_*` sont publiques et ne doivent contenir aucun secret.
-
-## Architecture
-
-- `main.js` crée Vue, installe la traduction et le routeur et monte `App.vue`.
-- `App.vue` fournit la session, le thème, les préférences serveur et le contexte de l’utilisateur aux pages.
-- `router/index.js` applique les règles de navigation. Les autorisations réelles sont répétées dans les contrôleurs et contextes Phoenix.
-- `stores/auth.js` conserve l’utilisateur et le jeton CSRF. Le JWT reste dans un cookie HttpOnly.
-- `services/http.js` ajoute `X-CSRF-Token`, transmet le cookie et traduit les erreurs API. Il supporte les réponses JSON et le CSV texte.
-- `services/workforceService.js` fournit les nouvelles opérations et le contexte réactif des règles/permissions/préférences. Les listes ou rapports malformés sont refusés.
-- Les composants de `components/workforce` gèrent les formulaires du planning, des échanges, des absences et les commandes vocales.
-- `utils/speech.js` sélectionne une voix de l’appareil, gère la vitesse, l’arrêt et l’annulation des lectures précédentes.
-
-## Écrans et routes
-
-Toutes les routes du tableau sont préfixées par `/api`.
-
-| Écran | API | Fonction |
+| Zone | Fichiers | Responsabilité |
 |---|---|---|
-| Connexion/session | `/auth/login`, `/auth/session`, `/auth/logout` | Authentification réelle, restauration et déconnexion. |
-| Rejoindre Gotham | `/organizations/lookup`, `/join-requests`, `/join-requests/status` | Demande d’adhésion et suivi par référence privée. |
-| Administration Gotham | `/organizations/:id/join-requests`, `/:request/approve`, `/:request/reject`, `/members` | Décisions et gestion des membres ; le mot de passe est fourni par l’administrateur. |
-| Utilisateurs et rôles | `/users`, `/roles`, `/users/:id/role` | Lecture des comptes et promotion employé/manager ; création directe interdite. |
-| Mon compte | `/users/:id`, `/auth/preferences` | Identité, mot de passe, suppression personnelle, thème, textes renforcés, guide et voix. |
-| Équipes | `/teams`, `/teams/:id`, `/teams/:id/members` | Création, renommage, suppression, manager et composition. |
-| Équipes et droits | `/teams/:id/permissions`, `/organizations/:id/rules`, `/audit-events` | Permissions réelles, règles de l’organisation et historique. |
-| Pointage | `/clocks/:id`, `/clocks/:id/:clockId/complete` | Arrivée, pause, reprise, départ et départ oublié. |
-| Mes heures / fiches | `/workingtime/:id`, `/workingtime/:userId/:periodId`, `/users/:id/week-notes/:week` | Périodes réelles et note partagée. Les périodes traversant minuit sont réparties sur leurs journées sans changer l’objet original. |
-| Correction des heures | `/workingtime/:id/correction-requests`, `/correction-requests`, `/correction-requests/:id` | Proposition, examen, refus motivé, acceptation et historique. |
-| Mon équipe | `/teams`, `/workingtime/:id`, `/clocks/:id`, `/weekly-sheets` | Agents autorisés, heures, alertes de départ, notes, validation groupée et état des semaines. |
-| Validation/clôture | `/weekly-sheets/validate`, `/weekly-sheets/:userId/:week/:action` | Validation, clôture ou réouverture motivée. Les semaines verrouillées bloquent les mutations serveur. |
-| Planning d’équipe | `/plans`, `/teams/:id/plans`, `/plans/:id`, `/plans/:id/shifts`, `/plans/:id/publish` | Brouillons, gardes, modification du brouillon vide, retrait futur et publication versionnée. |
-| Mon planning / prochaines gardes | `/plans` | Affectations publiées, dates et lieux réels. |
-| Échanges | `/shift-swaps`, `/shift-swaps/:id/consent`, `/shift-swaps/:id` | Proposition, accord du collègue et décision du responsable. |
-| Congés et absences | `/absence-requests`, `/absence-requests/:id`, `/:id/cancel`, `/:id/payment` | Demande, examen, annulation et confirmation des heures rémunérables. |
-| Paie du mois | `/payroll`, `/payroll/export`, `/users/:id/payroll-profile` | Catégories calculées côté serveur, taux horaire, montant, état de validation et CSV. |
-| Notifications | `/notifications`, `/notifications/:id/read` | Publications et décisions reçues dans l’application. |
-| Graphiques | `/workingtime/:id` | Histogramme, évolution et répartition calculés depuis les périodes réelles. |
+| Initialisation | `src/main.js`, `src/App.vue` | Créer Vue, installer i18n et le routeur, charger le contexte connecté. |
+| Navigation | `src/router/index.js` | Routes, restauration de session et gardes d'interface. |
+| Session | `src/stores/auth.js` | Utilisateur, organisation, CSRF, changement de compte et déconnexion. |
+| Transport | `src/services/http.js` | `fetch`, cookie, CSRF, pagination, erreurs et reprise contrôlée après 401. |
+| Services métier | `src/services/*.js` | Adapter les composants aux endpoints Phoenix. |
+| Écrans | `src/views/` | Pages principales par rôle. |
+| Composants | `src/components/` | Pointage, profil, heures, formulaires et composants métier réutilisables. |
+| Simulation | `src/mocks/` | Démonstration locale explicitement activée. |
+| Utilitaires | `src/utils/` | Dates, heures, validation, traduction, voix, toast et événements de session. |
+| Style | `src/assets/main.css` | Variables de thème clair, nuit et contraste, mise en page responsive. |
 
-## Permissions et comportements importants
+## Routes de l'interface
 
-- L’employé pointe pour lui-même, consulte ses heures et envoie ses demandes. Il peut lire les gardes publiées des équipes auxquelles il appartient pour proposer un échange.
-- Le manager intervient uniquement sur les membres des équipes qu’il gère. Ses permissions `correct`, `validate` et `publish` sont vérifiées sur le serveur et reflétées dans les boutons.
-- L’administration reste limitée à son organisation. Les permissions fines s’appliquent aux managers, pas à l’administrateur.
-- Aucun responsable ne valide ou n’accepte sa propre correction/absence. L’édition directe de ses propres périodes est également interdite ; le pointage personnel reste disponible.
-- Une rétrogradation invalide l’accès aux brouillons et aux opérations de manager dès les requêtes suivantes, même si l’ancien identifiant reste affecté comme manager d’une équipe.
-- Une validation groupée est atomique. Un départ manquant ou une correction en attente bloque la validation.
-- Une semaine validée ou clôturée doit être rouverte avant modification de ses heures, notes ou données de paie liées aux absences. Les horaires initiaux et les décisions sont conservés dans le suivi et le journal.
-- Les modifications de planning transmettent sa `revision`. Un formulaire périmé produit une erreur explicite. Les employés voient la dernière publication pendant la préparation d’un nouveau brouillon.
-- Un échange nécessite le consentement du collègue puis un responsable autorisé à valider et publier. La permutation et la mise à jour publiée sont atomiques. Modifier/supprimer une garde invalide ses échanges en attente.
+Vue Router joue le rôle d'un panneau d'orientation. Il choisit l'écran à afficher et évite qu'un utilisateur arrive par erreur sur une page qui ne correspond pas à son rôle.
 
-Les comptes historiques sans organisation restent accessibles dans leur espace autorisé. Aucune organisation fictive n’est créée pour eux. Les réglages d’organisation et les adhésions Gotham nécessitent un rattachement réel.
+| URL | Nom | Composant | Accès affiché par le routeur |
+|---|---|---|---|
+| `/aide` | `help` | `HelpFaq` | Public, reste accessible connecté. |
+| `/connexion` | `login` | `LoginScreen` | Public ; un utilisateur connecté est redirigé vers son accueil. |
+| `/inscription` | `register` | `LoginScreen` | Public, mode adhésion. |
+| `/notifications` | `notifications` | `Notifications` | Tous les rôles connectés. |
+| `/profil` | `profile` | `Profile` | Tous les rôles connectés. |
+| `/` | `overview` | `EmployeeToday` | Employé ; les autres rôles vont vers leur accueil. |
+| `/planning` | `planning` | `EmployeePlanning` | Employé. |
+| `/workingTimes/:userID` | `workingTimes` | `WorkingTimes` | Tous les rôles ; soi, ou responsable selon l'API. |
+| `/workingTime/:userid` | `workingTimeCreate` | `WorkingTime` | Manager ou administrateur. |
+| `/workingTime/:userid/:workingtimeid` | `workingTimeEdit` | `WorkingTime` | Manager ou administrateur. |
+| `/clock/:userid` | `clock` | `ClockManager` | Tous les rôles, uniquement sur leur propre identifiant. |
+| `/chartManager/:userid` | `chartManager` | `ChartManager` | Tous les rôles ; périmètre final vérifié par l'API. |
+| `/equipe` | `team` | `TeamOverview` | Manager ou administrateur. |
+| `/equipe/planning` | `teamPlanning` | `TeamPlanning` | Manager ou administrateur. |
+| `/admin/organisation` | `organization` | `OrganizationAdmin` | Administrateur avec organisation. |
+| `/admin/paie` | `payroll` | `PayrollMonth` | Administrateur. |
+| `/admin/utilisateurs` | `adminUsers` | `AdminUsers` | Administrateur. |
+| `/equipes` | `adminTeams` | `AdminTeams` | Manager ou administrateur. |
+| `/admin/droits` | `rights` | `TeamsRights` | Administrateur. |
+| Toute autre URL | — | redirection | Vers `overview`, puis garde selon la session. |
 
-## Calcul des heures et de la paie
+### Gardes de navigation
 
-Le fuseau de calcul de cette version est `Etc/UTC`. Les formulaires de planning et d’absence le précisent. Les API rendent les instants en UTC.
+Avant chaque changement de page, `router.beforeEach` effectue les contrôles suivants :
 
-Le serveur découpe les périodes aux limites des heures, jours, semaines et mois. Il tient compte des heures de la semaine précédant le début du mois pour calculer correctement le seuil hebdomadaire. Les pauses sont exclues par les périodes distinctes créées lors des pointages.
+1. appelle `fetchMe()` si la session n'a pas encore été vérifiée ;
+2. renvoie un visiteur vers `/connexion` ;
+3. contrôle `meta.roles` ;
+4. refuse les écrans exigeant une organisation lorsqu'elle manque ;
+5. compare les paramètres utilisateur au compte courant ;
+6. refuse explicitement un autre identifiant sur la route de pointage `selfOnly`.
 
-Les catégories sont distinctes : travail de jour, nuit hors heures supplémentaires, heures supplémentaires, travail donnant droit à récupération, astreinte. Les heures supplémentaires utilisent leur propre coefficient ; elles ne cumulent pas le coefficient de nuit. Les valeurs initiales du scénario sont nuit ×1,5 et heures supplémentaires ×2 après 40 heures hebdomadaires, modifiables par l’administration.
+!!! warning "Limite volontaire"
+    Ces gardes rendent la navigation plus claire. Elles ne suffisent pas à sécuriser les données, car une personne peut appeler l'API sans passer par l'écran. Phoenix répète donc les contrôles sur chaque endpoint.
 
-Les absences de congé/maladie sont suivies séparément. Leur rémunération doit être activée dans les règles et leurs heures rémunérables confirmées par un responsable. Une absence de plusieurs jours ne devient pas automatiquement une durée travaillée continue. Pour une absence traversant un mois, la quantité confirmée est répartie proportionnellement à son intervalle ; les heures réellement travaillées en chevauchement sont déduites et signalées comme une régularisation nécessaire.
+## Session et transport HTTP
 
-La récupération prise est distincte du travail donnant droit à récupération et n’augmente pas le total travaillé. Un montant n’est fourni que si le taux horaire est renseigné et les heures d’absence rémunérables connues. Les calculs monétaires utilisent Decimal et un arrondi final à deux décimales. Ce calcul correspond au scénario du projet, sans charges, retenues, déclarations ou transfert vers un logiciel de paie externe.
+Après la connexion, le navigateur reçoit deux éléments complémentaires. Le cookie JWT prouve la session et reste inaccessible au code JavaScript. Le jeton CSRF accompagne les actions qui modifient des données et montre que la demande vient bien de l'application ouverte par l'utilisateur.
 
-Les catégories de couleur des cartes hebdomadaires restent une estimation de présentation ; les catégories et montants du relevé financier sont ceux calculés par le serveur.
+### Connexion
 
-## Stockage et simulation
+Quand l'utilisateur valide le formulaire, `organizationService.loginAccount()` appelle `POST /api/auth/login`. Phoenix vérifie les identifiants, puis renvoie les informations de session et le jeton CSRF. Il place le JWT dans un cookie `HttpOnly`, que JavaScript ne peut pas lire.
 
-`npm run dev:demo` active explicitement les deux indicateurs de simulation. Les mocks restent utilisables pour cette démonstration et ne sont jamais un stockage de secours lorsque l’API échoue.
+### Requêtes
 
-En réel, les données métier sont dans PostgreSQL. Les anciens stocks `tm-org` et les membres/plannings/paies fictifs sont ignorés. Le navigateur conserve un cache de thème/guide et le jeton CSRF dans `sessionStorage` ; les préférences du compte viennent de l’API après connexion. Les préférences vocales sont synchronisées, mais les voix disponibles dépendent de l’appareil. La lecture est déclenchée par l’utilisateur, et s’arrête à la fermeture du guide ou du lecteur.
+Toutes les demandes passent ensuite par `services/http.js`. Ce fichier centralise les règles suivantes :
 
-## Vérification
+- utilise `API_URL`, `/api` par défaut ;
+- ajoute `Content-Type: application/json` ;
+- ajoute `X-CSRF-Token` lorsqu'une session existe ;
+- utilise `credentials: 'same-origin'` pour transmettre le cookie ;
+- transforme les réponses non réussies en `ApiError` ;
+- déclenche le gestionnaire de session sur 401 ;
+- refuse d'appliquer une réponse ancienne lorsqu'un changement de compte est détecté.
+
+Si une session doit être restaurée, une requête peut être retentée une seule fois. `/auth/session` doit confirmer le **même identifiant utilisateur**. Cette vérification évite qu'une action commencée avec un compte soit rejouée après la connexion d'un autre compte.
+
+### Stockage navigateur
+
+Le navigateur conserve le minimum utile à la session. Les données métier restent dans PostgreSQL et sont relues par l'API.
+
+| Donnée | Emplacement | Observation |
+|---|---|---|
+| JWT | Cookie `HttpOnly` | Inaccessible au JavaScript ; `Secure` en production. |
+| CSRF | `sessionStorage`, clé `tm-csrf` | Séparé par onglet et remplacé à la session suivante. |
+| Préférences de compte | API puis état réactif | Langue, thème, guide et voix viennent du backend en mode réel. |
+| Signal inter-onglets | `BroadcastChannel` et événement `storage` | Transmet un signal de changement, pas le JWT. |
+| Données métier réelles | PostgreSQL via API | Aucun stockage local de secours si l'API échoue. |
+| Données de démonstration | Modules `src/mocks` | Uniquement si le mode de démonstration est explicitement actif. |
+
+Lorsqu'un autre utilisateur se connecte, les composants sont recréés afin d'effacer les données encore affichées pour l'ancien compte. Un profil navigateur ne peut maintenir qu'une session Time Manager à la fois, car il ne possède qu'un cookie de session pour ce site.
+
+## Services API
+
+Les composants appellent un service spécialisé au lieu de construire chacun leurs propres URLs. Les échanges avec Phoenix restent ainsi au même endroit et sont plus simples à tester.
+
+| Service | Domaine |
+|---|---|
+| `authService.js` | Connexion, vérification email, session, rôles et changement de rôle. |
+| `organizationService.js` | Gotham City, demande d'adhésion, suivi et administration des membres. |
+| `passwordRecoveryService.js` | Demande et validation d'un code de récupération. |
+| `accountService.js` | Suppression de son propre compte. |
+| `userService.js` | Lecture et mise à jour des utilisateurs. |
+| `teamService.js` | Équipes, manager et membres. |
+| `clockService.js` | Historique, pointage et départ oublié. |
+| `workingTimeService.js` | Périodes travaillées. |
+| `correctionService.js` | Demandes de correction et décisions. |
+| `workforceService.js` | Règles, permissions, feuilles, plans, gardes, échanges, absences, paie, préférences, audit et notifications. |
+| `reportService.js` | Agrégations de présentation et export local lorsque utilisé. |
+| `orgService.js` | État de démonstration de l'organisation ; ne remplace pas l'API réelle. |
+
+## Pointage dans l'interface
+
+Au chargement, `ClockManager.vue` demande l'historique avec `getClocks(userId)`. Il reconstruit ensuite la situation actuelle : hors service, en service ou en pause. Le bouton propose l'action cohérente avec cette situation.
+
+| État affiché | Action envoyée |
+|---|---|
+| Hors service | `arrival` |
+| En service | `departure` ou `pause` |
+| En pause | `resume` ou `departure` |
+
+Pendant l'enregistrement, le bouton est désactivé pour limiter les doubles clics. Après un succès, le composant relit les données du serveur et affiche ce qui a réellement été enregistré. Après une erreur, il abandonne sa copie locale et demande un rafraîchissement : la réponse a pu se perdre alors que l'écriture a réussi.
+
+!!! note "Qui décide ?"
+    `ClockManager.vue` aide l'utilisateur à choisir la bonne action. `ClockController` et le contexte `Clocks` contrôlent encore l'identité, l'ordre des pointages, l'heure et l'état de la semaine avant toute écriture.
+
+## Pagination et validation des réponses
+
+Un long historique n'est pas téléchargé en une seule fois. Le frontend demande plusieurs pages et vérifie que le serveur lui fournit une suite cohérente.
+
+`requestHistory()` suit `X-Next-Cursor` avec les limites suivantes :
+
+- 20 pages maximum côté navigateur ;
+- curseur numérique strictement croissant ;
+- tableau obligatoire dans chaque réponse ;
+- abandon si le compte change pendant la lecture.
+
+Le backend borne chaque page entre 1 et 200 éléments, 100 par défaut.
+
+## Mode réel et mode simulé
+
+Le mode simulé sert à travailler sur l'interface sans backend. Il doit être demandé explicitement et Vite bloque sa présence dans un build destiné à un serveur.
 
 ```bash
-npm run build
-npx eslint src dev test vite.config.js
-node --test test/*.test.js
+npm run dev       # backend réel selon VITE_BACKEND_URL
+npm run dev:demo  # mocks explicitement actifs
 ```
 
-Depuis `time_manager` avec un Elixir compatible et la base de tests :
+`src/config.js` exige aussi `import.meta.env.DEV` pour activer les mocks. `vite.config.js` refuse tout build si `VITE_USE_MOCK` ou `VITE_AUTH_USE_MOCK` vaut `true`. En build serveur, `VITE_API_URL` doit être absent ou égal à `/api`.
+
+Il n'existe pas de véritable mode hors ligne ni de file de synchronisation. **Information non trouvée dans le dépôt** : application mobile ou synchronisation native.
+
+## Internationalisation et accessibilité
+
+- le catalogue anglais se trouve dans `src/locales/en.json` ; le français sert de texte source ;
+- `utils/i18n.js` fournit `$t()` et la locale des dates/nombres ;
+- trois thèmes existent : clair, nuit et contraste ;
+- les composants utilisent des libellés visibles, des états de chargement, des alertes et des zones adaptées au clavier ;
+- la synthèse vocale dépend des voix disponibles dans le navigateur.
+
+La documentation MkDocs reprend la palette blanche et verte réellement utilisée dans `main.css` : vert principal `#24584f`, vert sombre `#19473f`, fond blanc et vert pâle `#edf4f1`.
+
+## Tests et build
 
 ```bash
-mix precommit
+cd time-manager-dashboard
+npm ci
+npm run check
 ```
 
-Les tests couvrent les accès entre organisations, la rétrogradation, les validations atomiques, les propositions périmées, les appels concurrents, les publications et échanges, les frontières semaine/mois, les absences rémunérables, le CSV, le transport CSRF, les préférences, les voix et les réponses serveur malformées.
+| Fichier de test | Périmètre principal |
+|---|---|
+| `auth.test.js`, `auth-api.test.js`, `auth-store.test.js` | Connexion, appels, session et changement de compte. |
+| `gotham.test.js` | Organisation et adhésion. |
+| `clocks.test.js` | Pointage, pauses, historique et erreurs. |
+| `fusion-workflow.test.js`, `workforce-api.test.js` | Workflows, permissions et appels API. |
+| `account-deletion.test.js` | Suppression de compte. |
+| `input-policy.test.js` | Validation des entrées. |
+| `real-backend.test.js` | Contrats attendus avec le backend réel. |
 
-## Limites qui restent hors du plan livré
+`npm run check` exécute ESLint, `node --test test/*.test.js` et `vite build`.
 
-- Publication et décisions produisent des notifications dans l’application ; les envois automatiques par email/SMS et rappels programmés ne sont pas ajoutés.
-- La lecture vocale dépend du support du navigateur et des voix de l’appareil.
-- Le fuseau configurable au-delà d’UTC, les charges/net fiscal, les déclarations et l’intégration d’un logiciel de paie nécessitent un contrat métier supplémentaire.
-- Journal et notifications sont limités aux 200/100 dernières entrées ; une pagination complète et l’archivage des anciens plans seraient utiles pour un usage à grande échelle.
+**Information non trouvée dans le dépôt** : rapport chiffré de couverture frontend. Les tests Node présents ne constituent pas des tests visuels complets dans un navigateur réel.
 
-## Identité, langue et récupération — 13 octobre 2026
+## Limites et améliorations
 
-- `utils/registration.js` valide l’âge (18 ans révolus), les noms sans chiffres et la qualité des nouveaux mots de passe. Les contrôles sont répétés par le backend ; les mots de passe de connexion existants ne sont pas filtrés par la nouvelle politique.
-- `utils/apiErrors.js` nomme le champ invalide et précise comment corriger la demande ; `http.js` distingue notamment réseau, session, droits, conflit et serveur. Les erreurs toast restent visibles jusqu’à fermeture.
-- `components/auth/PasswordRecovery.vue` et `services/passwordRecoveryService.js` appellent `/auth/forgot-password` puis `/auth/reset-password`. Aucun compte ni mot de passe n’est créé dans localStorage pour ce parcours. Le mode mock explique l’absence d’envoi email.
-- Mon compte conserve le changement personnel du mot de passe pour employés/managers, demande le mot de passe actuel et déconnecte après succès. Le serveur invalide les autres sessions et tente l’email d’alerte.
-- `utils/i18n.js`, `locales/en.json` et `LanguageSelect.vue` fournissent le français/anglais sans dépendance supplémentaire. `$t(texte, paramètres)` traduit les libellés connus ; `intlLocale()` adapte les dates/nombres. Ajouter tout nouveau libellé au catalogue anglais et utiliser `$t` dans les templates. Ne pas traduire les noms/notes saisis par les utilisateurs.
-- La langue est accessible à la connexion, dans le menu et Mon compte. `tm-language` conserve le choix local avant connexion ; `PATCH /auth/preferences` le sauvegarde pour le compte réel. La lecture du guide utilise le texte traduit et la langue sélectionnée, sous réserve des voix du navigateur.
-- Notifications : filtres Toutes/Lues/Non lues, pagination et compteur serveur. Le badge est actualisé à la connexion, après lecture, au retour au premier plan et toutes les 30 secondes si la page est visible.
-- Administration : le manager est exclu des membres de sa propre équipe ; les boutons Retirer sont alignés dans une colonne dédiée.
-
-Validation complète : `npm run check` lance ESLint, les tests Node et le build Vite. [Recette manuelle](RECETTE_VALIDATIONS.md).
-
-## Plusieurs onglets et traductions — 15 octobre 2026
-
-`fetchMe()` appelle maintenant `/auth/session` même sans CSRF local, avec `X-Session-Restore: 1`. Il conserve le CSRF retourné dans sessionStorage et restaure le compte courant. Les lectures concurrentes sont regroupées ; une réponse ancienne ne réouvre pas une session après déconnexion.
-
-`utils/sessionEvents.js` transmet uniquement un signal de changement via BroadcastChannel et l’événement storage (repli). Connexion, déconnexion et retour au premier plan provoquent une relecture de la session. `http.js` ne retente une requête refusée qu’une fois et seulement après confirmation du **même identifiant utilisateur**. Un changement de compte affiche une explication et ne rejoue pas l’action. Les pages sont recréées lors d’un changement d’utilisateur pour effacer leur ancien état ; une reconnexion au même compte conserve la page en cours. Plusieurs identités indépendantes restent impossibles dans un même profil avec notre cookie unique.
-
-Les salutations traduisent maintenant le libellé avant d’y ajouter le prénom. Les titres avec semaines, plages et mois utilisent des paramètres `$t('Semaine {week} · {range}', { week, range })`, afin de ne pas chercher une traduction contenant une valeur variable. Les noms et textes saisis par les utilisateurs restent inchangés.
+| Priorité | Limite confirmée | Amélioration |
+|---|---|---|
+| Haute | Pas de test end-to-end navigateur dans le pipeline. | Ajouter Playwright sur les parcours connexion, changement de compte, pointage et adhésion. |
+| Moyenne | `orgService.js` contient encore un domaine de démonstration important. | Maintenir une séparation stricte et supprimer les mocks si la démonstration n'est plus requise. |
+| Moyenne | Les données `ClockJSON` et `WorkingTimeJSON` utilisent un format UTC sans suffixe. | Uniformiser les réponses ISO 8601 côté backend. |
+| Faible | Pas de mesure de couverture. | Produire et archiver un rapport de couverture. |

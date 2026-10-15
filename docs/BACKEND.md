@@ -1,14 +1,18 @@
-# Backend — architecture, code métier et endpoints
+# Backend — comprendre Phoenix et l'API
 
-Documentation du code de `Theme_5_authentification_security/time_manager`, revue le **15 octobre 2026**. Elle décrit le dépôt ; la version d'un serveur dépend du code effectivement déployé. Les chemins de fichiers ci-dessous sont relatifs à `time_manager/`.
+Cette page explique le code présent dans `Theme_5_authentification_security/time_manager`, revu le **15 octobre 2026**. Elle sert à retrouver où une requête est contrôlée, où une règle métier est appliquée et où la donnée est enregistrée. La version d'un serveur dépend du code réellement déployé. Les chemins cités ci-dessous partent de `time_manager/`.
 
-API HTTP en **Elixir/Phoenix**, servie par **Bandit**, avec **Ecto/PostgreSQL** pour la persistance : admission Gotham City, comptes, équipes, pointages, heures, corrections, validations, plannings, échanges, absences, paie, préférences et notifications.
+Le trajet général tient en quatre étapes : **le routeur choisit le chemin, le contrôleur contrôle la demande, le contexte applique la règle métier et Ecto parle à PostgreSQL**. Gardez ce fil en tête lorsque vous parcourez les sections détaillées.
 
-## 1. Architecture du backend
+L'API couvre l'admission à Gotham City, les comptes, les équipes, les pointages, les heures, les corrections, les validations, les plannings, les échanges, les absences, la paie, les préférences et les notifications. Elle est écrite en **Elixir/Phoenix**, servie par **Bandit** et utilise **Ecto/PostgreSQL** pour les données.
 
-### 1.1 Pattern utilisé
+## 1. Comment le backend est organisé
 
-Le backend suit l'architecture Phoenix **par contextes métier**, dans un monolithe modulaire. La couche web ressemble à MVC : routeur, contrôleurs, schémas et modules de présentation `*JSON`. Les réponses JSON remplacent les vues HTML pour le métier.
+### 1.1 Un projet rangé par domaines métier
+
+Le backend est une seule application Phoenix, organisée par domaines métier. Les comptes, équipes, pointages et plannings possèdent chacun leur contexte. La couche web reçoit les requêtes avec le routeur et les contrôleurs, puis les modules `*JSON` préparent les réponses destinées au frontend.
+
+Un contexte ressemble à un responsable de service : il connaît les règles de son domaine et coordonne les écritures. Un contrôleur reste bref ; il identifie la demande, vérifie le périmètre, puis confie le travail au bon contexte.
 
 Ce n'est pas une Clean Architecture stricte : les contextes utilisent directement Ecto et `Repo`, sans interfaces de repository indépendantes.
 
@@ -20,9 +24,11 @@ Ce n'est pas une Clean Architecture stricte : les contextes utilisent directemen
 | Données | Schémas Ecto des sous-dossiers métier, `repo.ex` | Décrire les tables, valider les modifications et exécuter les requêtes. |
 | Infrastructure | `config/`, `application.ex`, `priv/repo/` | Configuration, supervision OTP, migrations et données de référence. |
 
-Un **changeset** décrit et valide des modifications ; il ne persiste rien à lui seul. `Repo.insert/update/delete` effectue l'écriture. Un contexte regroupe les opérations du domaine, par exemple `Clocks.create_clock/2` ou `Workforce.Planning.publish/3`.
+Un **changeset** est la fiche de contrôle d'une donnée : il convertit les paramètres et vérifie les champs, les formats et les contraintes. Il ne sauvegarde rien à lui seul. `Repo.insert/update/delete` effectue l'écriture. Le contexte orchestre les opérations plus larges, par exemple `Clocks.create_clock/2` ou `Workforce.Planning.publish/3`.
 
 ### 1.2 Flux du client à la base
+
+Voici le chemin suivi par une requête ordinaire. Chaque niveau a une responsabilité précise, ce qui permet de retrouver plus vite l'origine d'un refus ou d'une erreur.
 
 ```text
 Client Vue / client HTTP
@@ -54,6 +60,9 @@ end
 
 Le contrôleur vérifie l'appelant ; `Clocks` verrouille le salarié, vérifie la transition, insère le pointage et ferme éventuellement une période travaillée dans la même transaction. `ClockJSON` choisit les champs retournés. Une erreur du `with` est traduite par `FallbackController`.
 
+!!! note "À retenir"
+    Le routeur dirige, le contrôleur protège l'entrée, le contexte décide selon le métier et `Repo` écrit. Une règle importante placée uniquement dans Vue pourrait être contournée par un appel direct à l'API.
+
 ### 1.3 Sécurité et cohérence
 
 - `Token` signe un JWT **HS256**, valable huit heures, contenant notamment `user_id`, `role`, `xsrf`, `jti`. Il est signé, pas chiffré.
@@ -62,10 +71,29 @@ Le contrôleur vérifie l'appelant ; `Clocks` verrouille le salarié, vérifie l
 - `Authorization` définit rôle et périmètre. `Workforce` ajoute les permissions `correct`, `validate`, `publish` des équipes.
 - Le manager intervient sur les membres des équipes qu'il dirige actuellement ; l'administrateur dans son organisation. Aucun responsable ne corrige directement ses propres périodes ni ne valide sa propre feuille, correction ou absence.
 - `Repo.transact` et les verrous de lignes protègent les mutations concurrentes. Les validations groupées verrouillent les salariés par ID croissant. Le planning vérifie `revision` ; publication et modification des règles partagent un verrou d'organisation.
+- Les requêtes construites avec `Ecto.Query` paramètrent les valeurs utilisateur au lieu de concaténer du SQL. Aucun moteur NoSQL n'est présent. Toute future requête SQL brute devra faire l'objet d'une revue spécifique.
 
 La déconnexion inscrit le `jti` dans `revoked_tokens`. Un rôle modifié ou un compte supprimé est pris en compte dès la requête suivante. Les comptes historiques sans organisation restent dans un espace distinct ; ils ne sont pas automatiquement rattachés à Gotham City.
 
+### 1.4 Supervision OTP
+
+`TimeManager.Application` démarre les enfants avec une stratégie `:one_for_one` :
+
+| Processus supervisé | Rôle |
+|---|---|
+| `TimeManagerWeb.Telemetry` | Mesures VM, base et endpoint. |
+| `TimeManager.Repo` | Connexions Ecto vers PostgreSQL. |
+| `Task.Supervisor` nommé `TimeManager.EmailTasks` | Tâches d'envoi de courriel, limitées à 100 enfants. |
+| `DNSCluster` | Découverte optionnelle de nœuds par DNS. |
+| `Phoenix.PubSub` | Bus de messages Phoenix. |
+| `TimeManagerWeb.RateLimiter` | Propriétaire de la table ETS des limites. |
+| `TimeManagerWeb.Endpoint` | Serveur HTTP Bandit et chaîne de plugs. |
+
+Avec `:one_for_one`, la panne d'un enfant redémarre cet enfant sans redémarrer automatiquement les autres. Le stockage ETS du limiteur est donc perdu si son processus ou le nœud redémarre.
+
 ## 2. Organisation des fichiers
+
+Cette arborescence est une carte de lecture. Pour comprendre une fonctionnalité, commencez par sa route, suivez le contrôleur, puis ouvrez le contexte et enfin le schéma ou la migration concernés.
 
 ```text
 time_manager/
@@ -130,6 +158,46 @@ time_manager/
 
 Les migrations portent clés étrangères, index uniques et contraintes. La suppression d'un compte supprime ses données opérationnelles selon ces relations ; certaines références d'acteurs/relecteurs conservées deviennent `null`. Consulter les migrations pour les cascades exactes.
 
+### Modèle de données PostgreSQL
+
+Le diagramme montre les relations structurantes ; les migrations restent la source de vérité pour chaque colonne, index et cascade.
+
+```mermaid
+erDiagram
+    ORGANIZATIONS ||--o{ USERS : contient
+    ROLES ||--o{ USERS : attribue
+    ORGANIZATIONS ||--o{ JOIN_REQUESTS : recoit
+    USERS ||--o{ REVOKED_TOKENS : revoque
+    USERS ||--o{ EMAIL_VERIFICATIONS : verifie
+    JOIN_REQUESTS ||--o{ EMAIL_VERIFICATIONS : verifie
+    USERS ||--o{ PASSWORD_RECOVERIES : recupere
+
+    ORGANIZATIONS ||--o{ TEAMS : possede
+    USERS o|--o{ TEAMS : dirige
+    USERS ||--o{ TEAM_MEMBERS : appartient
+    TEAMS ||--o{ TEAM_MEMBERS : contient
+    TEAMS ||--o| TEAM_PERMISSIONS : configure
+
+    USERS ||--o{ CLOCKS : pointe
+    USERS ||--o{ WORKINGTIME : travaille
+    USERS ||--o{ WEEKLY_SHEETS : valide
+    WORKINGTIME o|--o{ CORRECTION_REQUESTS : corrige
+
+    TEAMS ||--o{ WORKFORCE_PLANS : planifie
+    WORKFORCE_PLANS ||--o{ PLANNED_SHIFTS : contient
+    USERS ||--o{ PLANNED_SHIFTS : affecte
+    PLANNED_SHIFTS o|--o{ SHIFT_SWAPS : echange
+    USERS ||--o{ ABSENCE_REQUESTS : demande
+    USERS ||--o| PAYROLL_PROFILES : remunere
+
+    ORGANIZATIONS ||--o| WORKFORCE_SETTINGS : configure
+    USERS ||--o| ACCOUNT_PREFERENCES : prefere
+    ORGANIZATIONS ||--o{ WORKFORCE_EVENTS : journalise
+    USERS ||--o{ WORKFORCE_NOTIFICATIONS : recoit
+```
+
+`email_verifications` possède exactement un propriétaire selon les migrations actuelles : un utilisateur **ou** une demande d'adhésion. Cette contrainte permet de vérifier une adresse avant la création du compte tout en préservant le parcours historique des comptes existants.
+
 ## 3. Fichiers clés et implémentation des fonctionnalités
 
 | Fichier critique | Logique à rechercher |
@@ -179,6 +247,8 @@ Les scopes publics utilisent `pipe_through :api`, les protégés `pipe_through [
 
 ## 4. Contrats des endpoints backend
 
+Cette partie est le catalogue de l'API. Les tableaux permettent de construire une requête, comprendre un refus et vérifier le statut HTTP attendu. Pour découvrir le fonctionnement général, lisez d'abord les conventions communes puis consultez le domaine qui vous intéresse.
+
 ### 4.1 Conventions communes
 
 **Tous les chemins des tableaux sont préfixés par `/api`.** Identifiants de comptes, équipes, périodes et workflows : entiers. org_id et ID de demande d'adhésion : UUID.
@@ -192,7 +262,7 @@ X-CSRF-Token: <csrf_token obtenu à la connexion>
 
 Content-Type concerne les requêtes avec corps. Cookie et CSRF sont obligatoires sur les routes protégées, sauf `/auth/session` qui accepte également le cookie valide avec `X-Session-Restore: 1` pour retrouver le CSRF ; `Authorization: Bearer` n'est pas utilisé. Pour l'export CSV, conserver les en-têtes d'authentification et l'acceptation JSON du pipeline ; la **réponse** sera text/csv.
 
-CheckOrigin contrôle POST/PUT/PATCH/DELETE, routes publiques incluses : il compare le **nom d'hôte** d'Origin ou, à défaut, Referer à conn.host, sans comparer port et schéma. Sans ces en-têtes, ce contrôle passe. Il ne remplace pas les autorisations.
+CheckOrigin contrôle POST/PUT/PATCH/DELETE, routes publiques incluses : il compare le **protocole, le domaine et le port** d'`Origin` ou, à défaut, de `Referer` avec l'origine publique attendue. Sans ces en-têtes, une requête marquée `Sec-Fetch-Site: cross-site` est refusée. Il ne remplace pas les autorisations.
 
 Succès JSON : `{"data": objet}` ou `{"data": [objets]}`. La notation **data: User** signifie `{"data": {...champs de User...}}`. Liste vide : `{"data": []}`. Un 204 a un corps vide. Les créations de workflows de WorkforceController répondent actuellement **200**, pas 201.
 
@@ -229,6 +299,8 @@ Dates : stockage/calcul **UTC**. week = lundi YYYY-MM-DD, month = YYYY-MM. Envoy
 | Méthode | Route | Entrée / accès | Succès | Erreurs |
 |---|---|---|---|---|
 | POST | `/auth/login` | Public ; `{"email":"agent@example.test","password":"<mot de passe>"}`. | 200 data: Session + csrf_token et cookie JWT. | 401 identifiants/compte non vérifié ; 429. |
+| POST | `/auth/forgot-password` | Public ; `{"email":"agent@example.test"}`. Réponse volontairement identique pour compte connu/inconnu. | 202 data: message. | 400, 422 email, 429, 503 envoi. |
+| POST | `/auth/reset-password` | Public ; email, code à huit chiffres et nouveau mot de passe. | 200 data: message ; anciennes sessions invalidées. | 400, 422 code/mot de passe, 429. |
 | GET | `/auth/me` | Connecté ; aucun paramètre. | 200 data: User courant, détails personnels inclus. | Authentification commune. |
 | GET | `/auth/session` | Cookie JWT + CSRF, ou cookie JWT + X-Session-Restore: 1 (lecture seule). | 200 data: Session + csrf_token ; no-store, aucun renouvellement de cookie. | 401 cookie/session invalide ou en-têtes manquants. |
 | POST | `/auth/logout` | Connecté ; aucun corps requis. | 204, révocation et suppression du cookie. | Authentification commune. |
@@ -336,9 +408,11 @@ Team = `{id,name,manager:User|null,members:[User]}`. À l'index, un simple membr
 
 ### 4.6 Pointages
 
+Un pointage est toujours créé pour l'utilisateur authentifié. Le client indique l'action souhaitée, puis le serveur vérifie l'ordre des événements. Par exemple, deux arrivées consécutives sont refusées et une pause ne peut pas précéder une arrivée.
+
 | Méthode | Route | Entrée / accès | Succès | Erreurs |
 |---|---|---|---|---|
-| GET | `/clocks/:userID` | Soi/responsable ; aucun filtre. | 200 data: [Clock], ordre chronologique. | 403, 404. |
+| GET | `/clocks/:userID` | Soi/responsable ; `limit` 1–200, `cursor` entier, valeurs par défaut 100/0. | 200 data: [Clock] et éventuel `X-Next-Cursor`. | 400 pagination, 403, 404. |
 | POST | `/clocks/:userID` | Soi uniquement ; `{"clock":{"time":"2026-10-13T09:00:00Z","status":true,"kind":"arrival"}}`. | 201 data: Clock. | 400, 403, 404, 409, 422. |
 | POST | `/clocks/:userID/:clockID/complete` | Soi ; dernier pointage attendu ; `{"clock":{"time":"2026-10-13T17:00:00Z"}}`. | 201 data: Clock de départ. | 400, 403, 404, 409, 422 temps invalide/pointage périmé. |
 
@@ -547,6 +621,9 @@ Hors préfixe /api, GET `/swaggerui` sert du HTML. `/dev/dashboard` et `/dev/mai
 
 Le Dockerfile sépare les cibles `development` et `production`. La cible publiée compile et démarre avec **MIX_ENV=prod**, sans routes ni dépendances réservées au développement. Le démarrage refuse notamment un `JWT_SECRET` absent, trop court ou connu publiquement. Ce déploiement utilise encore Mix plutôt qu'une release OTP ; voir [Docker et environnements](DOCKER_ENVIRONNEMENTS.md).
 
+!!! danger "Dépendance signalée vulnérable"
+    Pendant la construction isolée du 15 octobre 2026, Hex a signalé `bandit 1.12.5` vulnérable à `CVE-2026-105659` / `GHSA-69m6-wcv4-rwcf`, un risque de déni de service HTTP/2. Vérifier la version corrigée publiée, mettre à jour `mix.lock` et rejouer tous les tests avant un déploiement. Le dépôt actuel ne contient pas encore cette mise à jour.
+
 seeds.exs insère les rôles et, si ADMIN_EMAIL/ADMIN_PASSWORD sont présents, un admin **sans organisation**. Il ne modifie pas un compte existant et ne crée pas Gotham City. Le provisionnement/rattachement Gotham est décrit dans le [contrat d'organisation](CONTRAT_BACKEND_ORGANISATIONS.md#10-provisionnement-manuel-et-verrouillage-de-gotham-city) et le script racine scripts/recreate_gotham_admin.sh.
 
 Les trois migrations workforce du 12 octobre ajoutent les tables métier, l'audit des comptes historiques et payable_hours. Ecto suit les versions appliquées et ne les rejoue pas. Voir le [guide de déploiement](DEPLOIEMENT_WORKFLOWS.md) pour la base cible.
@@ -558,7 +635,20 @@ mix phx.routes
 mix precommit
 ```
 
-precommit utilise l'environnement test : compilation avec warnings-as-errors, contrôle des dépendances inutilisées, formatage et tests. Les tests métier couvrent transitions/validations/concurrence ; les tests HTTP couvrent authentification, isolation, payloads, erreurs et OpenAPI. Les tests concurrents utilisent des connexions PostgreSQL distinctes pour vérifier les verrous réels.
+`precommit` utilise l'environnement test : compilation avec avertissements transformés en erreurs, contrôle des dépendances inutilisées, formatage et tests.
+
+| Groupe de tests | Vérifications présentes |
+|---|---|
+| `test/time_manager/accounts_test.exs` | Comptes, rôles, mots de passe et sessions. |
+| `clocks_test.exs`, `clocks_completion_test.exs`, `clocks_concurrency_test.exs` | Transitions, départ oublié, atomicité et double clic concurrent. |
+| `organizations_concurrency_test.exs` | Admission et décisions concurrentes. |
+| `workforce_concurrency_test.exs` | Workflows concurrents et verrous. |
+| `test/time_manager_web/controllers/*` | Contrats HTTP, refus d'accès, isolation des organisations, récupération et OpenAPI. |
+| `test/time_manager_web/plugs/rate_limit_test.exs` | Limites, identités et en-tête `Retry-After`. |
+
+Les tests concurrents utilisent PostgreSQL et des connexions distinctes pour exercer les verrous réels. La configuration de test désactive le limiteur global, sauf dans son fichier dédié.
+
+**Information non trouvée dans le dépôt** : rapport chiffré de couverture backend. Le stage Travis actuel construit l'image backend mais n'exécute pas `mix test`; le workflow Docker isolé doit être ajouté au pipeline avant publication.
 
 Pour ajouter une route : déclarer le chemin dans router.ex, écrire contrôleur et description OpenAPI, placer les règles dans le contexte, définir schéma/changeset/migration si nécessaires, tester autorisations, erreurs et concurrence pertinente. Actualiser ce document et le [contrat backend/frontend](CONTRAT_BACKEND_ORGANISATIONS.md) si le contrat public change.
 
