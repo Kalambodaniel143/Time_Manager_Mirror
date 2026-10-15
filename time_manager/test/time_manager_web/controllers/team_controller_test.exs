@@ -56,6 +56,33 @@ defmodule TimeManagerWeb.TeamControllerTest do
     assert [%{"name" => "Voirie nuit", "members" => [_]}] = json_response(conn, 200)["data"]
   end
 
+  test "a demoted manager loses team access with the same session", %{conn: conn} = ctx do
+    conn = log_in(conn, ctx.manager)
+    assert json_response(get(conn, ~p"/api/teams/#{ctx.team.id}"), 200)
+
+    {:ok, _employee} = TimeManager.Accounts.change_role(ctx.manager, "employee")
+    assert TimeManager.Repo.get!(TimeManager.Teams.Team, ctx.team.id).manager_id == ctx.manager.id
+
+    assert json_response(get(conn, ~p"/api/teams/#{ctx.team.id}"), 403)
+    assert json_response(get(conn, ~p"/api/teams"), 200)["data"] == []
+  end
+
+  test "a demoted manager who is a member only sees the team name", %{conn: conn} = ctx do
+    other_manager = user_fixture(role: "manager")
+
+    other_team =
+      team_fixture(name: "Espaces verts", manager_id: other_manager.id, members: [ctx.manager])
+
+    conn = log_in(conn, ctx.manager)
+    {:ok, _employee} = TimeManager.Accounts.change_role(ctx.manager, "employee")
+
+    assert [%{"name" => "Espaces verts", "members" => []}] =
+             json_response(get(conn, ~p"/api/teams"), 200)["data"]
+
+    assert json_response(get(conn, ~p"/api/teams/#{ctx.team.id}"), 403)
+    assert json_response(get(conn, ~p"/api/teams/#{other_team.id}"), 403)
+  end
+
   test "an employee sees the names of their teams, not the other members", %{conn: conn} = ctx do
     conn = log_in(conn, ctx.member)
 

@@ -55,6 +55,8 @@ defmodule TimeManagerWeb.OrganizationIsolationTest do
   test "admission creates a member in the reviewing administrator's organization",
        %{conn: conn} = ctx do
     {request, _} = join_request_fixture(ctx.admin.organization_id)
+    {:ok, code} = TimeManager.Accounts.issue_email_verification(request)
+    {:ok, _} = TimeManager.Accounts.verify_join_request_email(request.email, code)
 
     conn =
       conn

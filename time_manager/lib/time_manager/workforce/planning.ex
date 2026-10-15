@@ -486,15 +486,16 @@ defmodule TimeManager.Workforce.Planning do
     :ok
   end
 
-  def swaps(me) do
+  def swaps(me, page \\ nil) do
     ids = Workforce.visible_ids(me)
 
     rows =
-      Repo.all(
-        from s in Swap,
-          where: s.user_id in ^ids or s.target_user_id == ^me.id,
-          order_by: [desc: s.id]
+      from(s in Swap,
+        where: s.user_id in ^ids or s.target_user_id == ^me.id,
+        order_by: [desc: s.id]
       )
+      |> TimeManager.Pagination.optional(page)
+      |> Repo.all()
 
     {:ok, Enum.map(rows, &Workforce.plain/1)}
   end

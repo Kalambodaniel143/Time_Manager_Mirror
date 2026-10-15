@@ -115,7 +115,8 @@ defmodule TimeManagerWeb.JoinRequestControllerTest do
 
       assert json_response(approved, 200)["data"]["user"]["email"] == profile["email"]
       assert_receive {:email, credentials}
-      assert credentials.text_body =~ "une phrase de recette"
+      refute credentials.text_body =~ "une phrase de recette"
+      assert credentials.text_body =~ "canal sécurisé séparé"
       refute response(approved, 200) =~ "une phrase de recette"
     end
 
@@ -249,5 +250,47 @@ defmodule TimeManagerWeb.JoinRequestControllerTest do
       conn = build_conn() |> log_in(other_admin) |> post(other_path, password: valid_password())
       assert json_response(conn, 404)
     end
+  end
+
+  test "direct approval cannot bypass email verification; codes cannot be reused", %{
+    admin: admin,
+    org: org
+  } do
+    {request, _} = join_request_fixture(org)
+    session = log_in(build_conn(), admin)
+    path = ~p"/api/organizations/#{org}/join-requests/#{request.id}/approve"
+    assert json_response(post(session, path, password: valid_password()), 409)
+    assert Accounts.list_users(%{"email" => request.email}) == []
+    {:ok, code} = Accounts.issue_email_verification(request)
+    wrong = if code == "000000", do: "111111", else: "000000"
+
+    assert json_response(
+             post(build_conn(), "/api/join-requests/verify-email",
+               email: request.email,
+               code: wrong
+             ),
+             422
+           )
+
+    assert json_response(
+             post(build_conn(), "/api/join-requests/verify-email",
+               email: request.email,
+               code: code
+             ),
+             200
+           )
+
+    assert json_response(
+             post(build_conn(), "/api/join-requests/verify-email",
+               email: request.email,
+               code: code
+             ),
+             422
+           )
+
+    assert json_response(post(session, path, password: valid_password()), 200)
+    assert_receive {:email, email}
+    refute email.text_body =~ valid_password()
+    assert email.text_body =~ "canal sécurisé séparé"
   end
 end

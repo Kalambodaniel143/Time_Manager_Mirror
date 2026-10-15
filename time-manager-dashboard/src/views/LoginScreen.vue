@@ -89,10 +89,8 @@ import ProfileFields from '../components/auth/ProfileFields.vue'
 import PasswordRecovery from '../components/auth/PasswordRecovery.vue'
 import { AUTH_USE_MOCK, getRequestStatus, joinOrganization, loginAccount, resendJoinRequestVerification, verifyJoinRequestEmail } from '../services/organizationService'
 import { emptyProfile, errorFields, profileErrors, profilePayload } from '../utils/registration'
-import { readJson, writeJson } from '../utils/session'
 
 
-const RECEIPT_KEY = 'tm-last-join-receipt'
 
 export default {
   name: 'LoginScreen',
@@ -103,7 +101,7 @@ export default {
     return {
       showLoginPassword: false, mode: this.initialMode === 'join' ? 'join' : 'login', email: '', password: '',
       profile: emptyProfile(), errors: {}, error: '', busy: false,
-      receipt: null, reference: readJson(RECEIPT_KEY, null)?.reference || '', mock: AUTH_USE_MOCK,
+      receipt: null, reference: '', mock: AUTH_USE_MOCK,
       verificationPending: false, verificationCode: '',
       modes: [{ value: 'login', label: 'Connexion', icon: 'login' }, { value: 'join', label: 'Rejoindre Gotham City', icon: 'users' }],
       points: [{ icon: 'users', text: 'Rejoignez les services municipaux de Gotham City.' }, { icon: 'shield', text: 'Le super administrateur examine votre demande et définit vos accès.' }, { icon: 'clock', text: 'Retrouvez vos heures, votre planning et votre équipe.' }],
@@ -149,7 +147,6 @@ export default {
       try {
         this.receipt = await joinOrganization({ profile: profilePayload(this.profile, true) })
         this.reference = this.receipt.reference
-        writeJson(RECEIPT_KEY, { reference: this.reference })
         this.email = this.profile.email
         this.verificationPending = !this.mock
         if (this.mock) { this.profile = emptyProfile(); this.changeMode('login') }
@@ -184,7 +181,7 @@ export default {
       if (!reference) { this.error = 'Saisissez votre référence de suivi.'; return }
       this.busy = true
       this.error = ''
-      try { this.receipt = await getRequestStatus(reference); this.reference = reference; writeJson(RECEIPT_KEY, { reference }) }
+      try { this.receipt = await getRequestStatus(reference); this.reference = reference }
       catch (error) { this.error = error.message }
       finally { this.busy = false }
     },

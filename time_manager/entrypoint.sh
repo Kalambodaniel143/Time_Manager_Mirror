@@ -1,21 +1,37 @@
 #!/bin/sh
-set -e
+set -eu
 
-if [ ! -f /app/.env ]; then
-  echo "entrypoint: .env not found, stopping container"
-  exit 1
-fi
+# Le mode est fixé par la cible Docker, pas par le fichier .env.
+case "${1:-}" in
+  dev|prod) export MIX_ENV="$1" ;;
+  *) echo "entrypoint: mode dev ou prod requis" >&2; exit 1 ;;
+esac
 
-echo "entrypoint: waiting for database at ${PGHOST}:${PGPORT}..."
-until pg_isready -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" > /dev/null 2>&1; do
+# Charge runtime.exs et refuse les secrets invalides avant d'attendre la base.
+mix run --no-compile --no-start -e ':ok'
+
+echo "entrypoint: attente de PostgreSQL (60 tentatives maximum)"
+attempts=0
+until {
+  if [ "$MIX_ENV" = prod ]; then
+    # Même URL que le Repo Phoenix, sans afficher les identifiants.
+    pg_isready -q -d "$DATABASE_URL"
+  else
+    pg_isready -q -h "$PGHOST" -p "$PGPORT" -U "$PGUSER"
+  fi
+}; do
+  attempts=$((attempts + 1))
+  if [ "$attempts" -ge 60 ]; then
+    echo "entrypoint: PostgreSQL indisponible" >&2
+    exit 1
+  fi
   sleep 1
 done
-echo "entrypoint: database is up"
 
-mix ecto.create
-mix ecto.migrate
-# Roles and the first administrator (ADMIN_EMAIL / ADMIN_PASSWORD); idempotent.
-mix run priv/repo/seeds.exs
+mix ecto.create --no-compile
+mix ecto.migrate --no-compile
+# Rôles et administrateur facultatif ; initialisation idempotente.
+mix run --no-compile priv/repo/seeds.exs
 
-echo "entrypoint: starting Phoenix"
-exec mix phx.server
+echo "entrypoint: démarrage Phoenix en $MIX_ENV"
+exec mix phx.server --no-compile

@@ -1,11 +1,11 @@
 import { auth } from '../stores/auth'
 import { workClocks, workClock } from '../mocks/organizationWork'
-import { request } from './http'
+import { request, requestHistory } from './http'
 import { departureError, localDateInput, clockDate } from '../utils/missingDeparture'
 
 export function getClocks(userId) {
   if (auth.organizationSession) return Promise.resolve().then(() => workClocks(userId))
-  return request(`/clocks/${userId}`)
+  return requestHistory(`/clocks/${userId}`)
 }
 
 export function createClock(userId, attrs) {

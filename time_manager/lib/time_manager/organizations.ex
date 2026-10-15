@@ -208,9 +208,16 @@ defmodule TimeManager.Organizations do
                lock: "FOR UPDATE"
              )
            ) do
-      if request.status == "pending",
-        do: {:ok, Repo.preload(request, :organization)},
-        else: {:error, @already_reviewed}
+      cond do
+        request.status != "pending" ->
+          {:error, @already_reviewed}
+
+        is_nil(request.email_verified_at) ->
+          {:error, {:conflict, "Le courriel doit être vérifié avant la décision.", %{}}}
+
+        true ->
+          {:ok, Repo.preload(request, :organization)}
+      end
     else
       _ -> {:error, {:not_found, "Demande introuvable."}}
     end

@@ -314,7 +314,7 @@ defmodule TimeManager.Workforce do
     |> Enum.each(&notify(&1.id, title, body))
   end
 
-  def journal(me) do
+  def journal(me, page \\ nil) do
     with :ok <- check(Authorization.administrator?(me)) do
       query = from e in Event, order_by: [desc: e.id], limit: 200
 
@@ -323,7 +323,7 @@ defmodule TimeManager.Workforce do
           do: where(query, [e], e.organization_id == ^me.organization_id),
           else: where(query, [e], is_nil(e.organization_id))
 
-      rows = Repo.all(query)
+      rows = query |> TimeManager.Pagination.optional(page) |> Repo.all()
       {:ok, Enum.map(rows, &plain/1)}
     end
   end

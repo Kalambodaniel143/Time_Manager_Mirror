@@ -8,12 +8,20 @@ defmodule TimeManagerWeb.Endpoint do
     store: :cookie,
     key: "_time_manager_key",
     signing_salt: "RQ5EIGaU",
-    same_site: "Lax"
+    same_site: "Strict",
+    secure: Application.compile_env(:time_manager, :secure_session_cookie, false)
   ]
 
-  socket "/live", Phoenix.LiveView.Socket,
-    websocket: [connect_info: [session: @session_options]],
-    longpoll: [connect_info: [session: @session_options]]
+  if Application.compile_env(:time_manager, :dev_routes, false) do
+    socket "/live", Phoenix.LiveView.Socket,
+      websocket: [connect_info: [session: @session_options]],
+      longpoll: [connect_info: [session: @session_options]]
+  end
+
+  plug TimeManagerWeb.Plugs.TrustedProxy
+  plug TimeManagerWeb.Plugs.SecurityHeaders
+  plug TimeManagerWeb.Plugs.RateLimit, bucket: :all_requests, limit: 600
+  plug TimeManagerWeb.Plugs.RequestLimits
 
   # Serve at "/" the static files from "priv/static" directory.
   #
@@ -34,17 +42,22 @@ defmodule TimeManagerWeb.Endpoint do
     plug Phoenix.Ecto.CheckRepoStatus, otp_app: :time_manager
   end
 
-  plug Phoenix.LiveDashboard.RequestLogger,
-    param_key: "request_logger",
-    cookie_key: "request_logger"
+  if Application.compile_env(:time_manager, :dev_routes, false) do
+    plug Phoenix.LiveDashboard.RequestLogger,
+      param_key: "request_logger",
+      cookie_key: "request_logger"
+  end
 
   plug Plug.RequestId
   plug Plug.Telemetry, event_prefix: [:phoenix, :endpoint]
 
   plug Plug.Parsers,
-    parsers: [:urlencoded, :multipart, :json],
+    parsers: [:urlencoded, :json],
+    length: 65_536,
     pass: ["*/*"],
     json_decoder: Phoenix.json_library()
+
+  plug TimeManagerWeb.Plugs.RequestLimits
 
   plug Plug.MethodOverride
   plug Plug.Head

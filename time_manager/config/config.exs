@@ -7,7 +7,15 @@
 # General application configuration
 import Config
 
-config :phoenix, :filter_parameters, ["password", "code", "token", "secret"]
+config :phoenix, :filter_parameters, [
+  "password",
+  "current_password",
+  "code",
+  "reference",
+  "token",
+  "csrf_token",
+  "secret"
+]
 
 config :time_manager,
   ecto_repos: [TimeManager.Repo],

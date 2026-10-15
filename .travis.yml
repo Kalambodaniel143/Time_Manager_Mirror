@@ -1,30 +1,39 @@
 language: minimal
-
 services:
   - docker
 
 jobs:
   include:
-    - stage: "Build & Push Image"
+    - stage: Test
+      script:
+        - docker build --target development -t time-manager-backend:step1-dev ./time_manager
+        - docker build --target production -t time-manager-backend:step1-prod ./time_manager
+        - docker build --target checks -t time-manager-frontend:checks ./time-manager-dashboard
+        - docker build --target production -t time-manager-frontend:step1-prod ./time-manager-dashboard
+
+    - stage: Publish
+      if: branch = main AND type != pull_request AND env(PUBLISH_IMAGES) = true
       script:
         - echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin
-        - docker build -t "$DOCKER_USERNAME/time-manager-backend:latest" ./time_manager
-        - docker build -t "$DOCKER_USERNAME/time-manager-frontend:latest" ./time-manager-dashboard
-        - docker push "$DOCKER_USERNAME/time-manager-backend:latest"
-        - docker push "$DOCKER_USERNAME/time-manager-frontend:latest"
+        - docker build --target production -t "$DOCKER_USERNAME/time-manager-backend:$TRAVIS_COMMIT" ./time_manager
+        - docker build --target production -t "$DOCKER_USERNAME/time-manager-frontend:$TRAVIS_COMMIT" ./time-manager-dashboard
+        - docker push "$DOCKER_USERNAME/time-manager-backend:$TRAVIS_COMMIT"
+        - docker push "$DOCKER_USERNAME/time-manager-frontend:$TRAVIS_COMMIT"
 
-    - stage: "Deploy"
+    # Un push ne déploie jamais : lancement API manuel et accord explicite requis.
+    - stage: Deploy
+      if: branch = main AND type = api AND env(PUBLISH_IMAGES) = true AND env(DEPLOY_APPROVED) = true
       before_script:
+        - test -n "$SSH_KNOWN_HOSTS" && test -n "$SERVER_USER" && test -n "$SERVER_IP"
         - eval "$(ssh-agent -s)"
         - echo "$SSH_KEY" | base64 --decode | tr -d '\r' | ssh-add -
-        - mkdir -p ~/.ssh
-        - chmod 700 ~/.ssh
-        - ssh-keyscan -H $SERVER_IP >> ~/.ssh/known_hosts
-
+        - mkdir -p ~/.ssh && chmod 700 ~/.ssh
+        - printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
       script:
-        - scp -v docker-compose.prod.yml $SERVER_USER@$SERVER_IP:~/docker-compose.yml
-        # Build the server .env from the Travis environment variables
-        - printf 'PGUSER=%s\nPGPASSWORD=%s\nPGDATABASE=%s\nPGPORT=%s\nDOCKER_USERNAME=%s\nJWT_SECRET=%s\nEMAIL_DELIVERY=mailpit\nADMIN_EMAIL=%s\nADMIN_PASSWORD=%s\n' "$PGUSER" "$PGPASSWORD" "$PGDATABASE" "$PGPORT" "$DOCKER_USERNAME" "$JWT_SECRET" "$ADMIN_EMAIL" "$ADMIN_PASSWORD" > .env.deploy
-        - scp .env.deploy $SERVER_USER@$SERVER_IP:~/.env
-        - scp deploy.sh $SERVER_USER@$SERVER_IP:~/deploy.sh
-        - ssh $SERVER_USER@$SERVER_IP "bash ~/deploy.sh"
+        - IMAGE_TAG="$TRAVIS_COMMIT" python3 scripts/write_deploy_env.py .env.deploy
+        - scp docker-compose.prod.yml "$SERVER_USER@$SERVER_IP:~/docker-compose.yml"
+        - scp .env.deploy "$SERVER_USER@$SERVER_IP:~/.env"
+        - scp deploy.sh "$SERVER_USER@$SERVER_IP:~/deploy.sh"
+        - ssh "$SERVER_USER@$SERVER_IP" 'chmod 600 ~/.env && bash ~/deploy.sh --approved'
+      after_script:
+        - rm -f .env.deploy

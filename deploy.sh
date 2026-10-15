@@ -1,18 +1,10 @@
 #!/usr/bin/env bash
-# Executed on the deploy server by Travis (see .travis.yml, "Deploy" stage).
-# Expects ~/docker-compose.yml and ~/.env to have been copied beforehand.
-set -e
-
+# Déclenchement explicite seulement ; Docker et le certificat doivent déjà être installés.
+set -euo pipefail
+[[ "${1:-}" == "--approved" ]] || { echo "Déploiement non autorisé : option --approved requise." >&2; exit 1; }
 cd ~
-
-# Install Docker (with the compose plugin) if it is missing
-if ! command -v docker >/dev/null 2>&1; then
-  if ! command -v curl >/dev/null 2>&1; then
-    sudo apt-get update && sudo apt-get install -y curl
-  fi
-  curl -fsSL https://get.docker.com | sudo sh
-  sudo usermod -aG docker "$USER"
-fi
-
-sudo docker compose pull
-sudo docker compose up -d
+command -v docker >/dev/null
+chmod 600 .env
+docker compose config --quiet
+docker compose pull
+docker compose up -d --remove-orphans

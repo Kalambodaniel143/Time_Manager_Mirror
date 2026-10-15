@@ -45,7 +45,7 @@
           <header class="dialog-header"><div><p class="eyebrow">{{ session.organization.name }}</p><h2 id="review-title" class="card-title">{{ $t(dialogTitle) }}</h2></div><button class="btn btn-quiet btn-icon" type="button" :aria-label="$t(&quot;Fermer&quot;)" :disabled="busy" @click="closeDialog"><AppIcon name="close" /></button></header>
           <div class="dialog-body">
             <template v-if="credentials">
-              <p>{{ $t(demo ? "Le compte employé est créé. Transmettez ces identifiants à" : "Le compte employé est créé. Les identifiants ont été envoyés par email à") }} {{ credentials.name }}.</p>
+              <p>{{ $t(demo ? "Le compte employé est créé. Transmettez ces identifiants à" : "Le compte employé est créé. Un courriel de confirmation est envoyé à") }} {{ credentials.name }}. <span v-if="!demo">{{ $t("Transmettez le mot de passe initial par un canal sécurisé séparé.") }}</span></p>
               <label class="field"><span class="field-label">{{ $t("Email de connexion") }}</span><input class="input" :value="credentials.email" readonly /></label>
               <label class="field"><span class="field-label">{{ $t("Mot de passe défini par vous") }}</span><input class="input" :type="showPassword ? 'text' : 'password'" :value="credentials.password" readonly /></label>
               <button class="link" type="button" @click="showPassword = !showPassword">{{ $t(showPassword ? 'Masquer' : 'Afficher') }} {{ $t("le mot de passe") }}</button>

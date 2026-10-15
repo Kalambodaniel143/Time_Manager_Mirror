@@ -82,7 +82,7 @@ import PageHeader from './ui/PageHeader.vue'
 import TransparencyPanel from './employee/TransparencyPanel.vue'
 import { readStrongText, writeStrongText } from '../utils/session'
 import * as userService from '../services/userService'
-import { auth, ROLE_LABELS, setUser } from '../stores/auth'
+import { auth, ROLE_LABELS, setUser, clearSession } from '../stores/auth'
 import { EMAIL_PATTERN, PASSWORD_MIN_LENGTH, displayName } from '../utils/people'
 import { workforce, savePreferences, loadContext } from '../services/workforceService'
 import { speechSupported, readAloud, stopReading } from '../utils/speech'
@@ -211,8 +211,9 @@ export default {
       try {
         await userService.updateUser(auth.user.id, { password: this.password.next, current_password: this.password.current })
         this.password = { current: '', next: '', confirmation: '' }
-        notify('Mot de passe changé.')
-        this.$emit('logout')
+        clearSession()
+        notify(this.$t('Mot de passe changé. Reconnectez-vous.'))
+        this.$router.replace({ name: 'login' })
       } catch (error) {
         this.passwordError = error.payload && error.payload.errors && error.payload.errors.current_password
           ? 'Le mot de passe actuel est incorrect.'

@@ -1,52 +1,60 @@
-
-# Used on the deploy server: pulls pre-built images from the registry instead
-# of building from source (the server only needs this file + .env).
-
+# Configuration serveur : domaine, certificat et secrets réels requis.
 services:
   db:
     image: postgres:16-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_USER: ${PGUSER}
-      POSTGRES_PASSWORD: ${PGPASSWORD}
-      POSTGRES_DB: ${PGDATABASE}
+      POSTGRES_USER: ${PGUSER:?PGUSER requis}
+      POSTGRES_PASSWORD: ${PGPASSWORD:?PGPASSWORD requis}
+      POSTGRES_DB: ${PGDATABASE:?PGDATABASE requise}
     volumes:
       - db_data:/var/lib/postgresql/data
-    ports:
-      - "${PGPORT}:5432"
+    networks: [database]
 
   phoenix:
-    image: ${DOCKER_USERNAME}/time-manager-backend:latest
+    image: ${DOCKER_USERNAME:?DOCKER_USERNAME requis}/time-manager-backend:${IMAGE_TAG:?IMAGE_TAG requis}
     restart: unless-stopped
-    depends_on:
-      - db
-      - mailpit
-    env_file: ./.env
+    depends_on: [db]
     environment:
-      PGHOST: db
-      PGPORT: "5432"
-      EMAIL_DELIVERY: ${EMAIL_DELIVERY:-mailpit}
-      MAILPIT_HOST: mailpit
-      MAILPIT_PORT: "1025"
-    volumes:
-      - ./.env:/app/.env:ro
-    ports:
-      - "4000:4000"
-
-  mailpit:
-    image: axllent/mailpit:latest
-    restart: unless-stopped
-    ports:
-      - "8025:8025"
-      - "1025:1025"
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL requise}
+      SECRET_KEY_BASE: ${SECRET_KEY_BASE:?SECRET_KEY_BASE requise}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET requis}
+      PHX_HOST: ${PHX_HOST:?PHX_HOST requis}
+      HTTPS_PORT: ${HTTPS_PORT:-443}
+      TRUSTED_PROXY_IP: 172.30.7.10
+      EMAIL_DELIVERY: resend
+      RESEND_API_KEY: ${RESEND_API_KEY:?RESEND_API_KEY requise}
+      RESEND_FROM: ${RESEND_FROM:?RESEND_FROM requis}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+    networks: [database, proxy, outbound]
 
   dashboard:
-    image: ${DOCKER_USERNAME}/time-manager-frontend:latest
+    image: ${DOCKER_USERNAME:?DOCKER_USERNAME requis}/time-manager-frontend:${IMAGE_TAG:?IMAGE_TAG requis}
     restart: unless-stopped
-    depends_on:
-      - phoenix
+    depends_on: [phoenix]
+    environment:
+      PHX_HOST: ${PHX_HOST:?PHX_HOST requis}
+      HTTPS_PORT: ${HTTPS_PORT:-443}
+    volumes:
+      - ${TLS_CERT_DIR:?TLS_CERT_DIR requis}:/etc/nginx/tls:ro
     ports:
-      - "8080:80"
+      - "80:80"
+      - "${HTTPS_PORT:-443}:443"
+    networks:
+      public:
+      proxy:
+        ipv4_address: 172.30.7.10
 
 volumes:
   db_data:
+networks:
+  database:
+    internal: true
+  proxy:
+    internal: true
+    ipam:
+      config:
+        - subnet: 172.30.7.0/24
+  outbound:
+  public:

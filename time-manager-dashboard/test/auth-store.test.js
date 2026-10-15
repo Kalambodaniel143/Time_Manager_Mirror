@@ -49,7 +49,7 @@ test('backend login, restoration and logout retain the existing CSRF transport a
     const calls = []
     globalThis.fetch = async (url, options) => {
       calls.push({ url, ...options })
-      const data = url.endsWith('/auth/login') ? { user, role: 'employee', organization, csrf_token: 'test-csrf' } : url.endsWith('/auth/session') ? { user, role: 'employee', organization, csrf_token: 'test-csrf' } : null
+      const data = url.endsWith('/auth/login') ? { user, role: 'employee', organization, csrf_token: 'test-csrf' } : url.endsWith('/auth/session') ? { user, role: 'employee', organization, csrf_token: 'test-csrf' } : url.includes('/clocks/') ? [] : null
       return { status: 200, ok: true, json: async () => ({ data }) }
     }
     await store.login(user.email, 'Lantern8')
@@ -72,6 +72,22 @@ test('backend login, restoration and logout retain the existing CSRF transport a
     assert.equal(calls[3].credentials, 'same-origin')
     assert.equal(store.auth.user, null)
     assert.equal(globalThis.sessionStorage.getItem('tm-csrf'), null)
+  })
+})
+
+test('restoring an obsolete session cannot clear a newer account', async () => {
+  await withStore(false, async (store, server) => {
+    const { configureHttp } = await server.ssrLoadModule('/src/services/http.js')
+    configureHttp({ csrfToken: () => store.auth.csrfToken })
+    store.startOrganizationSession({ user: { id: 1, role: 'employee' }, csrf_token: 'account-a' })
+    let release
+    globalThis.fetch = () => new Promise(resolve => { release = resolve })
+    const pending = store.fetchMe()
+    store.startOrganizationSession({ user: { id: 2, role: 'employee' }, csrf_token: 'account-b' })
+    release({ status: 401, ok: false, json: async () => ({ errors: { detail: 'Expired' } }) })
+    await pending
+    assert.equal(store.auth.user.id, 2)
+    assert.equal(store.auth.csrfToken, 'account-b')
   })
 })
 
