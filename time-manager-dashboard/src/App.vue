@@ -24,7 +24,7 @@
         @tour="openTour"
       />
       <RouterView v-slot="{ Component }">
-        <component :is="Component" v-if="Component" :ref="routeRef" :key="$route.path" v-bind="routeBindings" />
+        <component :is="Component" v-if="Component" :ref="routeRef" :key="`${userId}:${$route.path}`" v-bind="routeBindings" />
       </RouterView>
     </main>
 
@@ -173,7 +173,8 @@ export default {
         this.loadStats()
         // The theme may have been picked on the login page.
         this.setTheme(readTheme(), false)
-        if (!id) { clearWorkforce(); stopReading() }
+        clearWorkforce(); stopReading()
+        if (!id) { applyStrongText(false) }
         else if (!this.organizationSession) this.loadPreferences(id)
         this.tourOpen = Boolean(id) && this.user.role === 'employee' && !readStorage(TOUR_KEY)
       },

@@ -2,7 +2,7 @@ import { request } from './http'
 import * as demo from '../mocks/organizationAuth.js'
 import { GOTHAM_NAME, isGotham } from '../utils/gotham'
 
-export const AUTH_USE_MOCK = import.meta.env.VITE_AUTH_USE_MOCK === 'true'
+export const AUTH_USE_MOCK = import.meta.env.DEV && import.meta.env.VITE_AUTH_USE_MOCK === 'true'
 
 async function call(mock, path, method = 'GET', body, skipUnauthorizedHandler = false) {
   if (AUTH_USE_MOCK) return mock()

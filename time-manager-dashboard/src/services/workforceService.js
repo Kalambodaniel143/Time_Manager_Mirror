@@ -1,5 +1,5 @@
-import { reactive } from 'vue'
-import { request, buildQuery } from './http'
+import { reactive, watch } from 'vue'
+import { request, requestHistory, buildQuery } from './http'
 import { org } from './orgService'
 import { auth } from '../stores/auth'
 
@@ -9,7 +9,12 @@ const call = async (path, method = 'GET', body) => {
   if (!result || typeof result !== 'object') throw new Error('Réponse du serveur invalide.')
   return result
 }
-const rows = async path => { const result = await call(path); if (!Array.isArray(result)) throw new Error('Liste du serveur invalide.'); return result }
+const rows = async path => {
+  const history = /^\/(shift-swaps|absence-requests|audit-events|notifications|correction-requests)(\?|$)/.test(path)
+  const result = history ? await requestHistory(path) : await call(path)
+  if (!Array.isArray(result)) throw new Error('Liste du serveur invalide.')
+  return result
+}
 
 export function clearWorkforce() {
   workforce.version += 1
@@ -76,3 +81,6 @@ export function canReviewTarget(id, key = 'validate') {
   if (auth.user.role === 'administrator') return true
   return auth.user.role === 'manager' && workforce.ready && workforce.permissions.some(row => row.manager_id === auth.user.id && row[key] && row.member_ids?.includes(id))
 }
+
+// Effacement immédiat, même si le nouveau compte arrive sans passer par une déconnexion.
+watch(() => auth.user?.id, clearWorkforce, { flush: 'sync' })

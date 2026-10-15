@@ -43,6 +43,8 @@ function writeCsrf(token) {
 }
 
 function startSession(session) {
+  // Supprime l'ancien reçu privé partagé par tous les utilisateurs du navigateur.
+  try { localStorage.removeItem('tm-last-join-receipt') } catch { /* Stockage indisponible. */ }
   if (session.csrf_token) writeCsrf(session.csrf_token)
   auth.organization = session.organization || null
   auth.user = { ...session.user, role: session.user.role === 'admin' ? 'administrator' : session.user.role }
@@ -83,6 +85,7 @@ export async function resendVerification(email) {
 // Asks the API who is logged in. Without a CSRF token there is no usable
 // session, so the call is skipped.
 export async function fetchMe() {
+  const requestedToken = auth.csrfToken
   if (AUTH_USE_MOCK) {
     try { return startOrganizationSession(await getSession()) }
     catch { clearSession(); return null }
@@ -96,7 +99,7 @@ export async function fetchMe() {
   try {
     startSession(await getSession())
   } catch {
-    clearSession()
+    if (auth.csrfToken === requestedToken) clearSession()
   }
 
   auth.checked = true
@@ -104,10 +107,11 @@ export async function fetchMe() {
 }
 
 export async function logout() {
+  const requestedToken = auth.csrfToken
   try {
     await logoutAccount()
   } finally {
-    clearSession()
+    if (auth.csrfToken === requestedToken) clearSession()
   }
 }
 

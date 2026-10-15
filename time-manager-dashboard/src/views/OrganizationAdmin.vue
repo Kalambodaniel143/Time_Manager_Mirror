@@ -47,7 +47,7 @@
           <header class="dialog-header"><div><p class="eyebrow">{{ session.organization.name }}</p><h2 id="review-title" class="card-title">{{ dialogTitle }}</h2></div><button class="btn btn-quiet btn-icon" type="button" aria-label="Fermer" :disabled="busy" @click="closeDialog"><AppIcon name="close" /></button></header>
           <div class="dialog-body">
             <template v-if="credentials">
-              <p>Le compte employé est créé. Les identifiants ont été envoyés par e-mail à {{ credentials.name }}.</p>
+              <p>Le compte employé est créé. Un courriel de confirmation est envoyé à {{ credentials.name }}. Transmettez le mot de passe initial par un canal sécurisé séparé.</p>
               <label class="field"><span class="field-label">Email de connexion</span><input class="input" :value="credentials.email" readonly /></label>
               <label class="field"><span class="field-label">Mot de passe défini par vous</span><input class="input" :type="showPassword ? 'text' : 'password'" :value="credentials.password" readonly /></label>
               <button class="link" type="button" @click="showPassword = !showPassword">{{ showPassword ? 'Masquer' : 'Afficher' }} le mot de passe</button>
