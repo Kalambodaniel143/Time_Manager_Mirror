@@ -6,6 +6,7 @@ nav:
   - DevOps: DEVOPS.md
   - API: API.md
   - Backend: BACKEND.md
+  - Contrat backend organisations: CONTRAT_BACKEND_ORGANISATIONS.md
   - Frontend: FRONTEND.md
   - Recette des validations: RECETTE_VALIDATIONS.md
   - Déploiement des workflows: DEPLOIEMENT_WORKFLOWS.md

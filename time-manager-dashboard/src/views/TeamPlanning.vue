@@ -1,7 +1,7 @@
 <template>
   <TeamPlan v-if="!demo" />
   <div v-else class="team-planning">
-    <PageHeader :eyebrow="$t(`${published ? 'Publié' : 'À publier'} · ${rangeLabel}`)" :title="$t(&quot;Planning d’équipe&quot;)">
+    <PageHeader :eyebrow="`${$t(published ? 'Publié' : 'À publier')} · ${rangeLabel}`" :title="$t(&quot;Planning d’équipe&quot;)">
       <button class="btn btn-primary" type="button" :disabled="!publishable" :title="$t(blockReason)" @click="publish">
         <AppIcon name="calendar" />
         {{ $t(published ? `Publié jusqu’au ${endLabel}` : `Publier jusqu’au ${endLabel}`) }}

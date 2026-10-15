@@ -4,9 +4,9 @@ import { GOTHAM_NAME, isGotham } from '../utils/gotham'
 
 export const AUTH_USE_MOCK = import.meta.env.VITE_AUTH_USE_MOCK === 'true'
 
-async function call(mock, path, method = 'GET', body, skipUnauthorizedHandler = false) {
+async function call(mock, path, method = 'GET', body, skipUnauthorizedHandler = false, extraOptions = {}) {
   if (AUTH_USE_MOCK) return mock()
-  const result = await request(path, { method, skipUnauthorizedHandler, ...(body === undefined ? {} : { body: JSON.stringify(body) }) })
+  const result = await request(path, { ...extraOptions, method, skipUnauthorizedHandler, ...(body === undefined ? {} : { body: JSON.stringify(body) }) })
   if (result === undefined) throw new Error('Réponse du serveur invalide.')
   return result
 }
@@ -32,7 +32,13 @@ export async function loginAccount(body) {
   if (!AUTH_USE_MOCK && (typeof session.csrf_token !== 'string' || !session.csrf_token.trim())) throw new Error('Réponse de connexion invalide : jeton CSRF absent.')
   return session
 }
-export const getSession = () => sessionResult(call(() => demo.mockSession(), '/auth/session'))
+export async function getSession() {
+  const session = await sessionResult(call(() => demo.mockSession(), '/auth/session', 'GET', undefined, true, {
+    headers: { 'X-Session-Restore': '1' }, skipSessionRecovery: true,
+  }))
+  if (!AUTH_USE_MOCK && (typeof session.csrf_token !== 'string' || !session.csrf_token.trim())) throw new Error('Réponse de session invalide : jeton CSRF absent.')
+  return session
+}
 export const logoutAccount = () => call(() => demo.mockLogout(), '/auth/logout', 'POST', undefined, true)
 
 // Resolve the one organization internally; the applicant cannot choose its name or ID.

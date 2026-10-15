@@ -1,10 +1,10 @@
 <template>
   <div class="today">
-    <PageHeader :eyebrow="$t(dateLabel)" :title="$t(`${greetingText} ${firstName}`)"><button class="btn btn-outline btn-sm" type="button" @click="$emit('tour')"><AppIcon name="help" />{{ $t("Revoir la prise en main") }}</button></PageHeader>
+    <PageHeader :eyebrow="$t(dateLabel)" :title="`${$t(greetingText)} ${firstName}`"><button class="btn btn-outline btn-sm" type="button" @click="$emit('tour')"><AppIcon name="help" />{{ $t("Revoir la prise en main") }}</button></PageHeader>
     <MissingDeparture v-if="userId" ref="missingDeparture" :user-id="userId" :now="now" @completed="onDepartureCompleted" @refreshed="onDepartureCompleted" />
     <div class="layout">
       <div class="column"><ClockManager v-if="userId" ref="clockManager" :user-id="userId" @changed="onClockChanged" /><p v-else class="card clock-waiting" role="status">{{ $t("Le pointage sera disponible une fois votre profil chargé.") }}</p><InfoNote :title="$t(&quot;Vos heures vous appartiennent&quot;)" flat>{{ $t("Un oubli ? Complétez votre départ. Une erreur dans vos heures ? Proposez une correction depuis « Mes heures » pour que votre responsable l’examine.") }}</InfoNote></div>
-      <div class="column"><LastWeekCard :title="$t(`Semaine dernière · ${lastWeekRange}`)" :buckets="buckets" :target="target" :loading="loading" :error="error" /><NextShifts :today="now" /></div>
+      <div class="column"><LastWeekCard :title="$t('Semaine dernière · {range}', { range: lastWeekRange })" :buckets="buckets" :target="target" :loading="loading" :error="error" /><NextShifts :today="now" /></div>
       <TransparencyPanel />
     </div>
   </div>

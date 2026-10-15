@@ -1,10 +1,10 @@
-> Pour les routes et comportements actuels, consulter la [documentation backend](BACKEND.md#4-contrats-des-endpoints-backend) et la [section 13 du contrat](CONTRAT_BACKEND_ORGANISATIONS.md#13-implementation-complete-des-workflows-12-octobre-2026). Cette page décrit aussi des parcours historiques : `POST /auth/register`, `POST /organizations` et `POST /users` sont désormais désactivés (403). Les payloads, formats de dates et autorisations actuels sont détaillés dans BACKEND.md. OpenAPI `/api/openapi` décrit le routeur du serveur actuellement exécuté.
+> Documentation revue le 15 octobre 2026. Pour les contrats complets, consulter [BACKEND.md](BACKEND.md#4-contrats-des-endpoints-backend) et le contrat : [workflows, section 13](CONTRAT_BACKEND_ORGANISATIONS.md#13-implementation-complete-des-workflows-12-octobre-2026), [récupération et validations, section 14](CONTRAT_BACKEND_ORGANISATIONS.md#14-validations-recuperation-et-accessibilite-13-octobre-2026), [fusion et vérification email, section 15](CONTRAT_BACKEND_ORGANISATIONS.md#15-fusion-avec-main-14-octobre-2026). `POST /auth/register`, `POST /organizations` et `POST /users` sont désactivés (403). OpenAPI `/api/openapi` décrit la version du serveur effectivement exécuté.
 
 # API du Time Manager
 
 L'API REST du Time Manager gère les **utilisateurs** et leurs **rôles**, les **équipes**, les **pointages** (arrivées et départs) et les **temps de travail** (périodes avec un début et une fin). Elle est écrite en Elixir avec Phoenix, et stocke ses données dans PostgreSQL.
 
-Toutes les routes, sauf la connexion et l'inscription, exigent une session : un JWT dans un cookie `HttpOnly` et un token CSRF dans l'en-tête `X-CSRF-Token`. Chaque route vérifie ensuite le rôle de l'appelant et le périmètre des données demandées.
+Les routes métier protégées exigent une session : un JWT dans un cookie `HttpOnly` et un token CSRF dans l'en-tête `X-CSRF-Token`. Chaque route vérifie ensuite le rôle de l'appelant et le périmètre des données demandées.
 
 ## Sommaire
 
@@ -78,28 +78,30 @@ Le mécanisme suit le sujet : un **JWT signé avec Joken**, envoyé dans un **co
 |---|---|
 | Cookie `HttpOnly` | Le vol du JWT par un script injecté dans la page (XSS) : le JavaScript ne peut pas lire ce cookie. |
 | Token CSRF dans un en-tête | Les requêtes forgées depuis un autre site (CSRF) : le navigateur y joint le cookie, mais le site tiers ne connaît pas le token. |
-| Token CSRF *dans* le JWT | Le serveur n'a pas à stocker le token CSRF : il compare l'en-tête au `xsrf` du JWT, qu'il est seul à pouvoir signer. Seules les sessions fermées par une déconnexion sont notées en base (`revoked_tokens`). |
+| Token CSRF *dans* le JWT | Le serveur n'a pas à stocker le token CSRF : il compare l'en-tête au `xsrf` du JWT, qu'il est seul à pouvoir signer. Les JWT déconnectés sont révoqués dans `revoked_tokens` ; `users.session_version` invalide aussi toutes les anciennes sessions après changement de mot de passe. |
 
 **Le rôle est relu en base à chaque requête.** Le JWT contient le rôle du moment de la connexion, mais le plug d'authentification ne s'y fie pas : il recharge l'utilisateur. Une rétrogradation ou une suppression de compte prend effet dès la requête suivante, sans attendre l'expiration du jeton.
 
-**Mots de passe.** Ils sont hachés avec Argon2id (`argon2_elixir`) et ne sont jamais renvoyés. De 8 à 128 caractères, conservés tels que saisis (ni coupés ni tronqués), jamais composés uniquement d'espaces. Les hashs bcrypt créés avant le passage à Argon2id restent acceptés et sont remplacés à la connexion suivante. Un e-mail inconnu et un mauvais mot de passe donnent la même réponse, en un temps comparable, pour ne pas révéler quels comptes existent.
+**Mots de passe.** Ils sont hachés avec Argon2id (`argon2_elixir`) et ne sont jamais renvoyés. De 8 à 128 caractères, conservés tels que saisis (ni coupés ni tronqués), avec refus des valeurs uniquement numériques, courantes ou répétitives ; voir la politique détaillée du [contrat](CONTRAT_BACKEND_ORGANISATIONS.md#14-validations-recuperation-et-accessibilite-13-octobre-2026). Les hashs bcrypt créés avant le passage à Argon2id restent acceptés et sont remplacés à la connexion suivante. Un e-mail inconnu et un mauvais mot de passe donnent la même réponse, en un temps comparable, pour ne pas révéler quels comptes existent.
 
 **Déconnexion réelle.** `POST /api/auth/logout` inscrit l'identifiant du JWT (`jti`) dans `revoked_tokens` jusqu'à son expiration : rejoué après la déconnexion, le même cookie donne `401`.
 
 **Origine des requêtes.** Toute requête `POST`, `PUT`, `PATCH` ou `DELETE` dont l'en-tête `Origin` (ou, à défaut, `Referer`) désigne un autre hôte que celui de l'API est refusée en `403`, y compris sur les routes publiques. Une requête sans ces en-têtes (curl) passe.
 
-**Limitation des tentatives.** Les routes publiques répondent `429` avec `Retry-After` au-delà d'un seuil par minute : connexion (10 par e-mail, 100 par adresse IP), inscription (20), création d'organisation (10), recherche d'organisation (60), demande d'adhésion (10), suivi (30).
+**Limitation des tentatives.** Les routes publiques répondent `429` avec `Retry-After` au-delà d’un seuil par minute : connexion (10/email, 100/IP), recherche d’organisation (60/IP), demande d’adhésion (10/IP), suivi (30/IP), vérification/renvoi d’OTP (20/IP). Récupération du mot de passe : demande 5/email et 50/IP ; rétablissement 10/email et 100/IP, en plus des cinq essais par code. Les routes de création désactivées répondent `403`.
 
 ### Routes d'authentification
 
 | Méthode | Route | Accès | Rôle |
 |---|---|---|---|
+| `POST` | `/api/auth/forgot-password` | Public | `{email}` ; réponse générique `202`, code de 8 chiffres par email, valide 15 minutes. |
+| `POST` | `/api/auth/reset-password` | Public | `{email, code, password}` ; succès `200`, code consommé et anciennes sessions invalidées ; pas de connexion automatique. |
 | `POST` | `/api/auth/login` | Public | Vérifie e-mail et mot de passe, pose le cookie, renvoie `csrf_token` et la session (`role`, `user`, `organization`). |
-| `POST` | `/api/auth/register` | Public | Crée un compte **employé** hors organisation et envoie un code OTP par e-mail. La session n'est ouverte qu'après vérification. |
+| `POST` | `/api/auth/register` | Désactivé | `403` : rejoindre Gotham via une demande d’adhésion. |
 | `POST` | `/api/auth/verify-email` | Public | Vérifie `{email, code}`. Le code expire après 10 minutes et est limité à 5 tentatives ; ouvre ensuite la session. |
 | `POST` | `/api/auth/resend-verification` | Public | Renvoie un code OTP à `{email}` pour un compte non vérifié. |
 | `GET` | `/api/auth/me` | Connecté | L'utilisateur courant. Le front l'appelle au chargement. |
-| `GET` | `/api/auth/session` | Connecté | La session relue en base : `role`, `user`, `organization` (`null` pour un compte sans organisation). |
+| `GET` | `/api/auth/session` | Cookie JWT + CSRF ou X-Session-Restore: 1 | Session relue en base + csrf_token ; réponse no-store, lecture seule et sans renouvellement de cookie. |
 | `POST` | `/api/auth/logout` | Connecté | Révoque le JWT côté serveur et supprime le cookie. |
 
 ```bash
@@ -159,10 +161,10 @@ Dans ce tableau, « Organisation » désigne l'organisation de l'administrateur.
 |---|---|---|---|
 | `GET /api/users` | `403` | Soi + équipe | Organisation |
 | `GET /api/users/:id` | Soi | Soi + équipe | Organisation |
-| `POST /api/users` | `403` | `403` | Oui, dans son organisation |
+| `POST /api/users` | `403` | `403` | `403` |
 | `PUT /api/users/:id` | Soi | Soi | Organisation |
 | `PUT /api/users/:id/role` | `403` | `403` | Organisation, sauf soi-même |
-| `DELETE /api/users/:id` | `403` | `403` | Organisation, sauf le dernier administrateur |
+| `DELETE /api/users/:id` | Soi avec mot de passe actuel | Soi avec mot de passe actuel | Organisation, sauf le dernier administrateur |
 | `GET /api/roles` | Oui | Oui | Oui |
 | `GET /api/teams` | Ses équipes (noms seuls) | Ses équipes, avec membres | Celles de l'organisation |
 | `POST/PUT/DELETE /api/teams…` | `403` | `403` | Organisation |
@@ -178,12 +180,14 @@ Ces routes suivent le contrat [CONTRAT_BACKEND_ORGANISATIONS.md](CONTRAT_BACKEND
 
 | Méthode | Route | Accès | Effet |
 |---|---|---|---|
-| `POST` | `/api/organizations` | Public | Crée l'organisation et son administrateur, ouvre sa session (`201` + cookie + `csrf_token`). `409` si le nom (casse, accents et espaces ignorés) ou l'e-mail est déjà pris. |
+| `POST` | `/api/organizations` | Désactivé | `403` ; Gotham et le super administrateur sont provisionnés manuellement. |
 | `GET` | `/api/organizations/lookup?name=…` | Public | `{id, name}` du nom exact normalisé, sinon `404`. |
 | `POST` | `/api/join-requests` | Public | Demande en attente, sans compte ni mot de passe ; renvoie une référence privée. `409` si l'e-mail a déjà un compte ou une demande en attente. |
+| `POST` | `/api/join-requests/verify-email` | Public | `{email, code}` ; vérifie le code de 6 chiffres, valide 10 minutes, avant affichage de la demande à l’administration. |
+| `POST` | `/api/join-requests/resend-verification` | Public | `{email}` ; renvoie le code de vérification. |
 | `POST` | `/api/join-requests/status` | Public | Statut et motif de refus à partir de la référence, jamais le profil. |
-| `GET` | `/api/organizations/:org_id/join-requests` | Admin de `:org_id` | Les demandes, sans leur référence. |
-| `POST` | `/api/organizations/:org_id/join-requests/:id/approve` | Admin de `:org_id` | Crée l'employé avec le mot de passe choisi par l'admin, en une transaction. `409` si déjà traitée. |
+| `GET` | `/api/organizations/:org_id/join-requests` | Admin de `:org_id` | Les demandes vérifiées, sans leur référence. |
+| `POST` | `/api/organizations/:org_id/join-requests/:id/approve` | Admin de `:org_id` | Crée l'employé avec le mot de passe choisi par l'admin, en une transaction, puis envoie les identifiants par email. `409` si déjà traitée ; `503` si l’envoi échoue après création du compte. |
 | `POST` | `/api/organizations/:org_id/join-requests/:id/reject` | Admin de `:org_id` | Refus avec un motif de 1 à 500 caractères. `409` si déjà traitée. |
 | `GET` | `/api/organizations/:org_id/members` | Admin de `:org_id` | Les membres, avec leurs données personnelles. |
 | `PATCH` | `/api/organizations/:org_id/members/:id` | Admin de `:org_id` | `employee` ou `manager` uniquement ; jamais sur un administrateur (`403`). |
@@ -199,7 +203,7 @@ Le `:org_id` de l'URL n'est jamais cru sur parole : s'il n'est pas l'organisatio
 | Le `:userID` de l'URL est toujours comparé à l'utilisateur connecté et à son périmètre. | Lire les heures d'un collègue en changeant un chiffre dans l'URL (IDOR). |
 | `PUT` et `DELETE /api/workingtime/:id` chargent d'abord la période pour connaître son propriétaire. | Contourner le contrôle avec une route qui ne nomme que la ressource. |
 | `GET /api/workingtime/:userID/:id` vérifie que la période appartient à `:userID`. | Lire la période d'un autre en mettant son propre identifiant dans l'URL. |
-| `PUT /api/users/:id` ne lit que `username`, `email` et `password`. Le rôle a sa propre route. | Se promouvoir en ajoutant `"role": "administrator"` au formulaire de profil (*mass assignment*). |
+| `PUT /api/users/:id` ne lit que les champs de profil autorisés et le changement de mot de passe. Le rôle a sa propre route. | Se promouvoir en ajoutant `"role": "administrator"` au formulaire de profil (*mass assignment*). |
 | Changer son propre mot de passe exige `current_password`. | Prendre le contrôle d'un compte avec une session volée. |
 | Personne ne change son propre rôle ; le dernier administrateur d'une organisation ne peut être ni rétrogradé ni supprimé (`409`). | L'auto-promotion, et le blocage définitif de l'administration. |
 | Le manager et les membres d'une équipe appartiennent à l'organisation de l'équipe. | Rattacher un inconnu à son équipe pour lire ses heures. |
@@ -305,13 +309,9 @@ Exceptions : la connexion (`{"email", "password"}`), le changement de rôle (`{"
 
 **Lister.** Le résultat est limité au périmètre : tout le monde pour un administrateur, le manager et les membres de ses équipes pour un manager. Un employé reçoit `403`. Les filtres `?email=` et `?username=` s'appliquent à l'intérieur de ce périmètre.
 
-**Créer (administrateur).** Le corps accepte `username`, `email`, `password` et `role` (par défaut `employee`).
+**Créer.** `POST /api/users` est désactivé (`403`), même pour un administrateur. L’approbation d’une demande d’adhésion crée le compte employé.
 
-```json
-{ "user": { "username": "lucie", "email": "lucie@gotham.gov", "password": "mot de passe provisoire", "role": "manager" } }
-```
-
-**Modifier.** Soi-même, ou n'importe qui pour un administrateur. Seuls `username`, `email` et `password` sont lus ; un champ omis garde sa valeur.
+**Modifier.** Soi-même, ou n'importe qui pour un administrateur. `username`, `email`, `first_name`, `last_name` et le changement de `password` sont pris en compte ; un champ omis garde sa valeur.
 
 | Cas | Corps |
 |---|---|
@@ -323,7 +323,7 @@ Profil et mot de passe sont enregistrés dans une même transaction : si l'un es
 
 **Changer le rôle (administrateur).** `PUT /api/users/:id/role` avec `{"role": "manager"}`. L'effet est immédiat, puisque le rôle est relu à chaque requête. Erreurs : `403` sur soi-même, `422` pour un rôle inconnu, `409` pour le dernier administrateur.
 
-**Supprimer (administrateur).** `DELETE /api/users/:id` renvoie `204`. Les pointages et temps de travail de la personne sont supprimés avec elle. Le dernier administrateur ne peut pas être supprimé (`409`).
+**Supprimer.** `DELETE /api/users/:id` renvoie `204`. Tout rôle peut supprimer son propre compte avec `{"current_password":"<mot de passe actuel>"}` ; seul l’administrateur peut supprimer un autre compte de son organisation. Le dernier administrateur reste protégé (`409`). Les pointages et temps de travail de la personne sont supprimés avec elle. Le dernier administrateur ne peut pas être supprimé (`409`).
 
 ---
 
@@ -449,9 +449,31 @@ curl -s -b $JAR -c $JAR -H "X-CSRF-Token: $CSRF" -X POST $API/auth/logout
 |---|---|---|
 | Les compteurs de tentatives (`429`) sont en mémoire et propres au serveur. | Ils repartent de zéro au redémarrage et ne sont pas partagés entre plusieurs instances. | Stockage partagé (Redis, ou PostgreSQL) si l'API passe à plusieurs instances. |
 | Derrière Nginx, toutes les requêtes ont l'adresse IP du proxy. | Les seuils « par IP » s'appliquent à tous les clients ensemble ; ils sont donc larges. Le seuil par e-mail de la connexion, lui, reste efficace. | Lire `X-Real-IP` posé par Nginx, à condition que le port 4000 ne soit plus exposé directement. |
-| `/api/auth/register` crée encore un compte actif hors organisation. | On peut ouvrir un compte sans validation, isolé de toute organisation. | Le supprimer une fois le front passé au circuit organisations. |
+| Un seul cookie JWT par profil de navigateur. | Les onglets partagent le même compte courant. | La restauration synchronise désormais les onglets pour ce compte ; utiliser des profils distincts pour des comptes indépendants. |
 | `COOKIE_SECURE` désactivé tant que le site est en HTTP. | Le cookie peut circuler en clair sur le réseau. | Passer en HTTPS (reverse proxy) puis `COOKIE_SECURE=true`. |
 | `time` du pointage fourni par le client. | Un client peut pointer à une heure arbitraire. | Utiliser l'heure du serveur, ou borner l'écart accepté. |
-| Pas de validation mensuelle ni de journal d'audit. | Une période corrigée par un manager ne garde pas la trace de l'auteur. | Champs `created_by`/`validated_by` et table d'audit. |
+| Pas de clôture mensuelle dédiée. | La validation porte actuellement sur les feuilles hebdomadaires. | Les corrections et décisions sont déjà historisées via les workflows et le journal ; voir BACKEND.md. |
 | Formats de date différents en sortie. | Les temps de travail sont renvoyés sans `T` ni `Z`. | Renvoyer partout de l'ISO 8601. |
-| Temps de travail qui se chevauchent acceptés. | Les totaux d'heures peuvent compter deux fois la même plage. | Contrainte d'exclusion PostgreSQL. |
+| Pas de contrainte SQL d’exclusion des périodes. | Les contrôles applicatifs empêchent les chevauchements avec verrouillage par utilisateur ; les écritures directes en base les contournent. | Ajouter une contrainte d’exclusion si nécessaire. |
+
+## Ajouts du 13–14 octobre 2026
+
+Les payloads complets, codes HTTP et fichiers d’implémentation figurent dans [BACKEND.md](BACKEND.md) et les sections [14](CONTRAT_BACKEND_ORGANISATIONS.md#14-validations-recuperation-et-accessibilite-13-octobre-2026) / [15](CONTRAT_BACKEND_ORGANISATIONS.md#15-fusion-avec-main-14-octobre-2026) du contrat.
+
+- Récupération : `POST /api/auth/forgot-password`, `POST /api/auth/reset-password`, code hashé à usage unique, cinq essais, révocation de toutes les anciennes sessions et email d’alerte.
+- Identité : 18 ans révolus à l’adhésion, prénom/nom sans chiffres, nouvelle politique de qualité des mots de passe ; connexion des anciens comptes conservée.
+- Équipes : le manager ne peut pas être membre de sa propre équipe ; changement de manager et nettoyage des anciennes appartenances redondantes.
+- Notifications : `GET /api/notifications?status=all|read|unread&page=1`, 50 résultats par page ; `GET /api/notifications/count` renvoie `data.unread` ; décision de correction explicitement annoncée.
+- Préférences : `PATCH /api/auth/preferences` accepte `{"language":"fr"}` ou `{"language":"en"}`.
+- Adhésion : code email de 6 chiffres avant affichage à l’administration, puis email d’identifiants après acceptation réelle.
+- Migrations et configuration email : [déploiement](DEPLOIEMENT_WORKFLOWS.md). Tests manuels et automatiques : [recette](RECETTE_VALIDATIONS.md).
+
+### Restauration dans un nouvel onglet
+
+```http
+GET /api/auth/session
+Cookie: jwt=<cookie HttpOnly géré par le navigateur>
+X-Session-Restore: 1
+```
+
+Succès : `200 {"data":{"role":"employee","user":{...},"organization":null,"csrf_token":"<lié au cookie>"}}`. L’en-tête de restauration remplace le CSRF uniquement sur cette lecture de session. Il ne permet ni POST/logout, ni modification de profil, ni accès aux autres GET protégés. Un cookie expiré/révoqué ou un compte supprimé donne toujours `401`. À la suite, utiliser `X-CSRF-Token` comme auparavant pour les opérations métier.

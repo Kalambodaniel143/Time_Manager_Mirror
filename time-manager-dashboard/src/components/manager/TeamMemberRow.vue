@@ -10,7 +10,7 @@
     />
     <div class="who">
       <p class="name">{{ row.name }}</p>
-      <p class="job">{{ row.job }}</p>
+      <p class="job">{{ $t(row.job) }}</p>
     </div>
     <div class="tags">
       <HourTag v-for="tag in tags" :key="tag.kind" :kind="tag.kind" :hours="tag.hours" />

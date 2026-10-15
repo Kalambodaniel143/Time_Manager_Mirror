@@ -222,7 +222,20 @@ defmodule TimeManagerWeb.AuthController do
     summary: "Current session",
     description:
       "Role, user and organization, read from the database: a promotion shows at the next " <>
-        "call. 401 when the session is missing, expired or revoked.",
+        "call. A new tab may use X-Session-Restore: 1 with its valid JWT cookie to recover " <>
+        "the session-bound CSRF token. Read-only, no cookie rotation. " <>
+        "401 when the session is missing, expired or revoked.",
+    parameters: [
+      "X-Session-Restore": [
+        in: :header,
+        type: :string,
+        description: "1 for read-only restoration"
+      ]
+    ],
+    security: [
+      %{"jwtCookie" => [], "csrfToken" => []},
+      %{"jwtCookie" => [], "sessionRestoreHeader" => []}
+    ],
     responses: [
       ok: {"Session", "application/json", SessionData},
       unauthorized: {"Not logged in", "application/json", ErrorResponse}
@@ -231,7 +244,13 @@ defmodule TimeManagerWeb.AuthController do
 
   def session(conn, _params) do
     user = conn |> Authz.current_user() |> Accounts.preload_organization()
-    json(conn, %{data: SessionJSON.data(user)})
+
+    conn
+    |> put_resp_header("cache-control", "no-store")
+    |> put_resp_header("vary", "Cookie")
+    |> json(%{
+      data: Map.put(SessionJSON.data(user), :csrf_token, conn.assigns.session_claims["xsrf"])
+    })
   end
 
   operation(:logout,

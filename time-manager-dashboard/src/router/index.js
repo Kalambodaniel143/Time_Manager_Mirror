@@ -8,7 +8,7 @@ import Profile from '../components/Profile.vue'
 import WorkingTime from '../components/WorkingTime.vue'
 import WorkingTimes from '../components/WorkingTimes.vue'
 import { configureHttp } from '../services/http'
-import { auth, clearSession, fetchMe, hasRole, isSelf } from '../stores/auth'
+import { auth, clearSession, fetchMe, hasRole, isSelf, restoreForRequest } from '../stores/auth'
 import { notify } from '../utils/toast'
 import { homeFor } from '../utils/session'
 import AdminTeams from '../views/AdminTeams.vue'
@@ -89,8 +89,10 @@ const router = createRouter({
 // Every API call carries the CSRF token; a 401 means the session is gone.
 configureHttp({
   csrfToken: () => auth.csrfToken,
-  onUnauthorized: () => {
-    if (!auth.user || auth.organizationSession) return
+  currentUser: () => auth.user?.id,
+  restoreSession: restoreForRequest,
+  onUnauthorized: (expectedUserId) => {
+    if ((!auth.user && !expectedUserId) || auth.organizationSession) return
 
     clearSession()
     notify('Votre session a expiré. Reconnectez-vous.', 'error')

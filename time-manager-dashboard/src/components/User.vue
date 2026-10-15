@@ -1,6 +1,6 @@
 <template>
   <div class="user-card">
-    <RouterLink class="avatar" :to="{ name: 'profile' }" :aria-label="$t(`Profil de ${user.username}`)">{{ $t(badge) }}</RouterLink>
+    <RouterLink class="avatar" :to="{ name: 'profile' }" :aria-label="$t('Profil de {name}', { name: user.username })">{{ $t(badge) }}</RouterLink>
     <div class="user-text">
       <RouterLink class="user-name" :to="{ name: 'profile' }">{{ name }}</RouterLink>
       <p class="user-job">{{ $t(roleLabel) }}</p>
