@@ -1,3 +1,4 @@
+import { intlLocale } from './i18n.js'
 import { formatClockDate } from './clockDate'
 
 const API_PATTERN = /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?/
@@ -83,7 +84,7 @@ export function formatDayLabel(value) {
   const date = parseDateTime(value)
   if (!date) return ''
 
-  return date.toLocaleDateString('fr-FR', { weekday: 'short', day: '2-digit', month: 'short' })
+  return date.toLocaleDateString(intlLocale(), { weekday: 'short', day: '2-digit', month: 'short' })
 }
 
 export function formatTimeLabel(value) {
@@ -101,14 +102,14 @@ export function formatLongDate(value) {
   const date = parseDateTime(value)
   if (!date) return ''
 
-  return date.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })
+  return date.toLocaleDateString(intlLocale(), { weekday: 'long', day: 'numeric', month: 'long' })
 }
 
 export function formatWeekday(value) {
   const date = parseDateTime(value)
   if (!date) return ''
 
-  const label = date.toLocaleDateString('fr-FR', { weekday: 'short' })
+  const label = date.toLocaleDateString(intlLocale(), { weekday: 'short' })
   return label.charAt(0).toUpperCase() + label.slice(1)
 }
 
@@ -116,7 +117,7 @@ export function formatDayMonth(value) {
   const date = parseDateTime(value)
   if (!date) return ''
 
-  return date.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })
+  return date.toLocaleDateString(intlLocale(), { day: 'numeric', month: 'short' })
 }
 
 export function toDateInput(value) {

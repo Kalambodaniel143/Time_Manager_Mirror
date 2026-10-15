@@ -1,41 +1,41 @@
 <template>
   <div class="admin-users">
-    <PageHeader eyebrow="Administration" title="Utilisateurs et rôles" />
+    <PageHeader :eyebrow="$t(&quot;Administration&quot;)" :title="$t(&quot;Utilisateurs et rôles&quot;)" />
 
     <div class="layout">
       <section class="card accounts">
         <header class="accounts-header">
-          <h2 class="card-title">Comptes</h2>
-          <p class="card-subtitle">Le changement de rôle s’applique dès la requête suivante de la personne. Vous ne pouvez pas changer votre propre rôle.</p>
+          <h2 class="card-title">{{ $t("Comptes") }}</h2>
+          <p class="card-subtitle">{{ $t("Le changement de rôle s’applique dès la requête suivante de la personne. Vous ne pouvez pas changer votre propre rôle.") }}</p>
         </header>
 
-        <p v-if="error" class="field-error" role="alert">{{ error }}</p>
+        <p v-if="error" class="field-error" role="alert">{{ $t(error) }}</p>
         <div v-else-if="loading" class="skeleton table-skeleton"></div>
 
         <div v-else class="table-scroll">
         <table class="table">
           <thead>
             <tr>
-              <th scope="col">Identifiant</th>
-              <th scope="col">E-mail</th>
-              <th scope="col">Rôle</th>
-              <th scope="col"><span class="sr-only">Actions</span></th>
+              <th scope="col">{{ $t("Identifiant") }}</th>
+              <th scope="col">{{ $t("E-mail") }}</th>
+              <th scope="col">{{ $t("Rôle") }}</th>
+              <th scope="col"><span class="sr-only">{{ $t("Actions") }}</span></th>
             </tr>
           </thead>
           <tbody>
             <tr v-for="user in users" :key="user.id">
-              <td>{{ user.username }}<span v-if="user.id === me.id" class="you">vous</span></td>
+              <td>{{ user.username }}<span v-if="user.id === me.id" class="you">{{ $t("vous") }}</span></td>
               <td class="email">{{ user.email }}</td>
               <td>
-                <span v-if="user.role === 'administrator'" class="badge badge-accent">Super administrateur · compte manuel</span>
+                <span v-if="user.role === 'administrator'" class="badge badge-accent">{{ $t("Super administrateur · compte manuel") }}</span>
                 <select v-else
                   class="input select"
                   :value="user.role"
                   :disabled="user.id === me.id || busy === user.id"
-                  :aria-label="`Rôle de ${user.username}`"
+                  :aria-label="$t('Rôle de {name}', { name: user.username })"
                   @change="changeRole(user, $event.target.value)"
                 >
-                  <option v-for="role in roles" :key="role" :value="role">{{ labels[role] }}</option>
+                  <option v-for="role in roles" :key="role" :value="role">{{ $t(labels[role]) }}</option>
                 </select>
               </td>
               <td class="actions">
@@ -47,7 +47,7 @@
                   :disabled="user.id === me.id || busy === user.id"
                   @click="armed === user.id ? remove(user) : (armed = user.id)"
                 >
-                  {{ armed === user.id ? 'Confirmer' : 'Supprimer' }}
+                  {{ $t(armed === user.id ? 'Confirmer' : 'Supprimer') }}
                 </button>
               </td>
             </tr>
@@ -56,8 +56,8 @@
         </div>
       </section>
 
-      <aside v-if="organization" class="card admission"><h2 class="card-title">Nouveaux employés</h2><p>Les nouveaux comptes sont créés après acceptation d’une demande pour rejoindre Gotham City. Le super administrateur fournit le mot de passe à cette étape.</p><RouterLink class="btn btn-primary" :to="{ name: 'organization' }">Examiner les demandes</RouterLink></aside>
-      <aside v-else class="card admission"><h2 class="card-title">Compte sans organisation</h2><p>Ce compte accède uniquement aux utilisateurs et équipes de son espace actuel. Pour traiter les demandes d’adhésion à Gotham City, son rattachement doit être effectué par l’équipe qui gère le serveur.</p></aside>
+      <aside v-if="organization" class="card admission"><h2 class="card-title">{{ $t("Nouveaux employés") }}</h2><p>{{ $t("Les nouveaux comptes sont créés après acceptation d’une demande pour rejoindre Gotham City. Le super administrateur fournit le mot de passe à cette étape.") }}</p><RouterLink class="btn btn-primary" :to="{ name: 'organization' }">{{ $t("Examiner les demandes") }}</RouterLink></aside>
+      <aside v-else class="card admission"><h2 class="card-title">{{ $t("Compte sans organisation") }}</h2><p>{{ $t("Ce compte accède uniquement aux utilisateurs et équipes de son espace actuel. Pour traiter les demandes d’adhésion à Gotham City, son rattachement doit être effectué par l’équipe qui gère le serveur.") }}</p></aside>
     </div>
   </div>
 </template>

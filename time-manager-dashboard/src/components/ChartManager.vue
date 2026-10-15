@@ -2,16 +2,16 @@
   <section class="card chart-manager">
     <header class="card-header">
       <div>
-        <h3 class="card-title">Tendances</h3>
-        <p class="card-subtitle">Heures enregistrées cette semaine · jours en UTC</p>
+        <h3 class="card-title">{{ $t("Tendances") }}</h3>
+        <p class="card-subtitle">{{ $t("Heures enregistrées cette semaine · jours en UTC") }}</p>
       </div>
-      <button class="btn btn-outline btn-sm" type="button" :disabled="loading" @click="load">Actualiser</button>
+      <button class="btn btn-outline btn-sm" type="button" :disabled="loading" @click="load">{{ $t("Actualiser") }}</button>
     </header>
 
-    <p v-if="loading" class="card-body" role="status">Chargement des heures…</p>
-    <p v-else-if="error" class="card-body field-error" role="alert">{{ error }}</p>
+    <p v-if="loading" class="card-body" role="status">{{ $t("Chargement des heures…") }}</p>
+    <p v-else-if="error" class="card-body field-error" role="alert">{{ $t(error) }}</p>
     <div v-else class="card-body">
-      <div class="segmented" role="tablist" aria-label="Type de graphique">
+      <div class="segmented" role="tablist" :aria-label="$t(&quot;Type de graphique&quot;)">
         <button
           v-for="chart in charts"
           :key="chart.key"
@@ -22,12 +22,12 @@
           :aria-selected="chart.key === activeChart"
           @click="activeChart = chart.key"
         >
-          {{ chart.label }}
+          {{ $t(chart.label) }}
         </button>
       </div>
 
-      <p class="card-subtitle">{{ hours(total) }} enregistrées</p>
-      <div class="chart-placeholder" role="img" :aria-label="`${activeLabel} : ${days.map(day => `${label(day.date)} ${hours(day.hours)}`).join(', ')}`">
+      <p class="card-subtitle">{{ hours(total) }} {{ $t("enregistrées") }}</p>
+      <div class="chart-placeholder" role="img" :aria-label="`${$t(activeLabel)} : ${days.map(day => `${label(day.date)} ${hours(day.hours)}`).join(', ')}`">
         <svg v-if="activeChart === 'bar'" viewBox="0 0 320 140" preserveAspectRatio="none">
           <rect
             v-for="(height, index) in barHeights"
@@ -68,12 +68,14 @@
           />
         </svg>
       </div>
-      <ul class="daily-values"><li v-for="day in days" :key="day.key">{{ label(day.date) }} : {{ hours(day.hours) }}</li></ul>
+      <ul class="daily-values"><li v-for="day in days" :key="day.key">{{ $t(label(day.date)) }} : {{ hours(day.hours) }}</li></ul>
     </div>
   </section>
 </template>
 
 <script>
+import { intlLocale } from '../utils/i18n.js'
+
 import { getWorkingTimes } from '../services/workingTimeService'
 import { dailyHours } from '../services/reportService'
 import { formatHours, mondayOf } from '../utils/hours'
@@ -112,7 +114,7 @@ export default {
   beforeUnmount() { this.version += 1 },
   methods: {
     hours: formatHours,
-    label(date) { return date.toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric' }) },
+    label(date) { return date.toLocaleDateString(intlLocale(), { weekday: 'short', day: 'numeric' }) },
     async load() {
       const version = ++this.version; this.loading = true; this.error = ''; this.entries = []; this.monday = mondayOf()
       try { const entries = await getWorkingTimes(this.userId); if (!Array.isArray(entries)) throw new Error('Liste des heures invalide.'); dailyHours(entries, this.monday); if (version === this.version) this.entries = entries }

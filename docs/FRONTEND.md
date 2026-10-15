@@ -28,7 +28,7 @@ Le navigateur appelle `/api` sur son origine Vite. Le proxy transmet au backend 
 
 ## Architecture
 
-- `main.js` crée Vue, installe le routeur et monte `App.vue`.
+- `main.js` crée Vue, installe la traduction et le routeur et monte `App.vue`.
 - `App.vue` fournit la session, le thème, les préférences serveur et le contexte de l’utilisateur aux pages.
 - `router/index.js` applique les règles de navigation. Les autorisations réelles sont répétées dans les contrôleurs et contextes Phoenix.
 - `stores/auth.js` conserve l’utilisateur et le jeton CSRF. Le JWT reste dans un cookie HttpOnly.
@@ -119,3 +119,24 @@ Les tests couvrent les accès entre organisations, la rétrogradation, les valid
 - La lecture vocale dépend du support du navigateur et des voix de l’appareil.
 - Le fuseau configurable au-delà d’UTC, les charges/net fiscal, les déclarations et l’intégration d’un logiciel de paie nécessitent un contrat métier supplémentaire.
 - Journal et notifications sont limités aux 200/100 dernières entrées ; une pagination complète et l’archivage des anciens plans seraient utiles pour un usage à grande échelle.
+
+## Identité, langue et récupération — 13 octobre 2026
+
+- `utils/registration.js` valide l’âge (18 ans révolus), les noms sans chiffres et la qualité des nouveaux mots de passe. Les contrôles sont répétés par le backend ; les mots de passe de connexion existants ne sont pas filtrés par la nouvelle politique.
+- `utils/apiErrors.js` nomme le champ invalide et précise comment corriger la demande ; `http.js` distingue notamment réseau, session, droits, conflit et serveur. Les erreurs toast restent visibles jusqu’à fermeture.
+- `components/auth/PasswordRecovery.vue` et `services/passwordRecoveryService.js` appellent `/auth/forgot-password` puis `/auth/reset-password`. Aucun compte ni mot de passe n’est créé dans localStorage pour ce parcours. Le mode mock explique l’absence d’envoi email.
+- Mon compte conserve le changement personnel du mot de passe pour employés/managers, demande le mot de passe actuel et déconnecte après succès. Le serveur invalide les autres sessions et tente l’email d’alerte.
+- `utils/i18n.js`, `locales/en.json` et `LanguageSelect.vue` fournissent le français/anglais sans dépendance supplémentaire. `$t(texte, paramètres)` traduit les libellés connus ; `intlLocale()` adapte les dates/nombres. Ajouter tout nouveau libellé au catalogue anglais et utiliser `$t` dans les templates. Ne pas traduire les noms/notes saisis par les utilisateurs.
+- La langue est accessible à la connexion, dans le menu et Mon compte. `tm-language` conserve le choix local avant connexion ; `PATCH /auth/preferences` le sauvegarde pour le compte réel. La lecture du guide utilise le texte traduit et la langue sélectionnée, sous réserve des voix du navigateur.
+- Notifications : filtres Toutes/Lues/Non lues, pagination et compteur serveur. Le badge est actualisé à la connexion, après lecture, au retour au premier plan et toutes les 30 secondes si la page est visible.
+- Administration : le manager est exclu des membres de sa propre équipe ; les boutons Retirer sont alignés dans une colonne dédiée.
+
+Validation complète : `npm run check` lance ESLint, les tests Node et le build Vite. [Recette manuelle](RECETTE_VALIDATIONS.md).
+
+## Plusieurs onglets et traductions — 15 octobre 2026
+
+`fetchMe()` appelle maintenant `/auth/session` même sans CSRF local, avec `X-Session-Restore: 1`. Il conserve le CSRF retourné dans sessionStorage et restaure le compte courant. Les lectures concurrentes sont regroupées ; une réponse ancienne ne réouvre pas une session après déconnexion.
+
+`utils/sessionEvents.js` transmet uniquement un signal de changement via BroadcastChannel et l’événement storage (repli). Connexion, déconnexion et retour au premier plan provoquent une relecture de la session. `http.js` ne retente une requête refusée qu’une fois et seulement après confirmation du **même identifiant utilisateur**. Un changement de compte affiche une explication et ne rejoue pas l’action. Les pages sont recréées lors d’un changement d’utilisateur pour effacer leur ancien état ; une reconnexion au même compte conserve la page en cours. Plusieurs identités indépendantes restent impossibles dans un même profil avec notre cookie unique.
+
+Les salutations traduisent maintenant le libellé avant d’y ajouter le prénom. Les titres avec semaines, plages et mois utilisent des paramètres `$t('Semaine {week} · {range}', { week, range })`, afin de ne pas chercher une traduction contenant une valeur variable. Les noms et textes saisis par les utilisateurs restent inchangés.

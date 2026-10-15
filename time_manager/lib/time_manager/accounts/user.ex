@@ -43,6 +43,7 @@ defmodule TimeManager.Accounts.User do
     |> update_change(:last_name, &String.trim/1)
     |> validate_length(:first_name, max: 100)
     |> validate_length(:last_name, max: 100)
+    |> Profile.validate_names()
     |> validate_email()
   end
 
@@ -87,6 +88,7 @@ defmodule TimeManager.Accounts.User do
     |> cast(attrs, [:password])
     |> validate_required([:password])
     |> validate_length(:password, min: @min_password_length, max: @max_password_length)
+    |> TimeManager.Accounts.PasswordPolicy.validate()
     |> hash_password()
   end
 

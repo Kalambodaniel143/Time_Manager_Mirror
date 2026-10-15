@@ -468,6 +468,7 @@ defmodule TimeManager.Accounts do
     end)
   end
 
+  @doc "Sets a new password without checking the old one (administrator reset)."
   def reset_password(%User{} = user, attrs),
     do: update_password(user.id, attrs, fn _ -> :ok end)
 
@@ -482,9 +483,24 @@ defmodule TimeManager.Accounts do
              |> User.password_changeset(attrs)
              |> Ecto.Changeset.put_change(:session_version, current.session_version + 1)
              |> Repo.update() do
+        from(r in TimeManager.Accounts.PasswordRecovery, where: r.user_id == ^id)
+        |> Repo.delete_all()
+
         {:ok, Repo.preload(user, :role)}
       end
     end)
+  end
+
+  def deliver_password_changed(user) do
+    case user.email |> TimeManager.Email.password_changed() |> TimeManager.EmailDelivery.send() do
+      :ok ->
+        :ok
+
+      {:error, _} ->
+        require Logger
+        Logger.error("Password changed, but its confirmation email could not be delivered")
+        :ok
+    end
   end
 
   @doc """

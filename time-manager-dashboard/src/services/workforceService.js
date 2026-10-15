@@ -3,14 +3,15 @@ import { request, requestHistory, buildQuery } from './http'
 import { org } from './orgService'
 import { auth } from '../stores/auth'
 
-export const workforce = reactive({ ready: false, loading: false, error: '', permissions: [], preferences: {}, notifications: [], version: 0 })
+export const workforce = reactive({ ready: false, loading: false, error: '', permissions: [], preferences: {}, notifications: [], unreadCount: 0, version: 0 })
+let notificationVersion = 0
 const call = async (path, method = 'GET', body) => {
   const result = await request(path, { method, ...(body === undefined ? {} : { body: JSON.stringify(body) }) })
   if (!result || typeof result !== 'object') throw new Error('Réponse du serveur invalide.')
   return result
 }
 const rows = async path => {
-  const history = /^\/(shift-swaps|absence-requests|audit-events|notifications|correction-requests)(\?|$)/.test(path)
+  const history = /^\/(shift-swaps|absence-requests|audit-events|correction-requests)(\?|$)/.test(path)
   const result = history ? await requestHistory(path) : await call(path)
   if (!Array.isArray(result)) throw new Error('Liste du serveur invalide.')
   return result
@@ -18,6 +19,8 @@ const rows = async path => {
 
 export function clearWorkforce() {
   workforce.version += 1
+  notificationVersion += 1
+  workforce.unreadCount = 0
   Object.assign(workforce, { ready: false, loading: false, error: '', permissions: [], preferences: {}, notifications: [] })
   Object.assign(org.rules, { maxConsecutiveNights: Infinity, maxNightsPerWeek: 0, maxNightsPerMonth: 0, overtimeThreshold: Infinity, publishDaysAhead: 0 })
 }
@@ -74,8 +77,19 @@ export async function savePreferences(settings) {
   return prefs
 }
 export const getJournal = () => rows('/audit-events')
-export const listNotifications = () => rows('/notifications')
-export const readNotification = id => call(`/notifications/${id}/read`, 'PATCH', {})
+export const listNotifications = (status = 'all', page = 1) => rows(`/notifications${buildQuery({ status, page })}`)
+export async function refreshNotificationCount() {
+  const version = ++notificationVersion
+  const userId = auth.user?.id
+  if (!userId || auth.organizationSession) return
+  const result = await call('/notifications/count')
+  if (version === notificationVersion && auth.user?.id === userId && Number.isInteger(result.unread)) workforce.unreadCount = result.unread
+}
+export async function readNotification(id) {
+  const result = await call(`/notifications/${id}/read`, 'PATCH', {})
+  await refreshNotificationCount()
+  return result
+}
 export function canReviewTarget(id, key = 'validate') {
   if (!auth.user || auth.user.id === id) return false
   if (auth.user.role === 'administrator') return true

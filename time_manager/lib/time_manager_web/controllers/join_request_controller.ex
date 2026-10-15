@@ -78,12 +78,28 @@ defmodule TimeManagerWeb.JoinRequestController do
   def create(_conn, _params), do: {:error, :bad_request}
 
   operation(:verify_email,
-    summary: "Verify an applicant's email before admission",
+    summary: "Verify the email address of a join request",
     security: [],
-    responses: [ok: {"Email verified", "application/json", %OpenApiSpex.Schema{type: :object}}]
+    request_body:
+      {"Email and six-digit code", "application/json",
+       %OpenApiSpex.Schema{
+         type: :object,
+         properties: %{
+           email: %OpenApiSpex.Schema{type: :string, format: :email},
+           code: %OpenApiSpex.Schema{type: :string, pattern: "^[0-9]{6}$"}
+         },
+         required: [:email, :code]
+       }},
+    responses: [
+      ok: {"Email verified", "application/json", TimeManagerWeb.Schemas.WorkflowResponse},
+      bad_request: {"Malformed fields", "application/json", ErrorResponse},
+      unprocessable_entity: {"Invalid or expired code", "application/json", ErrorResponse},
+      too_many_requests: {"Too many attempts", "application/json", ErrorResponse}
+    ]
   )
 
-  def verify_email(conn, %{"email" => email, "code" => code}) do
+  def verify_email(conn, %{"email" => email, "code" => code})
+      when is_binary(email) and is_binary(code) do
     case Accounts.verify_join_request_email(email, code) do
       {:ok, request} ->
         json(conn, %{
@@ -104,9 +120,15 @@ defmodule TimeManagerWeb.JoinRequestController do
   def verify_email(_conn, _params), do: {:error, :bad_request}
 
   operation(:resend_verification,
-    summary: "Resend the applicant's verification code",
+    summary: "Resend a join-request email verification code",
     security: [],
-    responses: [ok: {"Request received", "application/json", %OpenApiSpex.Schema{type: :object}}]
+    request_body: {"Email", "application/json", TimeManagerWeb.Schemas.PasswordRecoveryRequest},
+    responses: [
+      ok: {"Verification required", "application/json", TimeManagerWeb.Schemas.WorkflowResponse},
+      bad_request: {"Malformed email", "application/json", ErrorResponse},
+      too_many_requests: {"Rate limit", "application/json", ErrorResponse},
+      service_unavailable: {"Email unavailable", "application/json", ErrorResponse}
+    ]
   )
 
   def resend_verification(conn, %{"email" => email}) when is_binary(email) do

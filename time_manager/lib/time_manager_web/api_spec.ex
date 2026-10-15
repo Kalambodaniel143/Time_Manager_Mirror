@@ -15,12 +15,19 @@ defmodule TimeManagerWeb.ApiSpec do
         version: "2.0.0"
       },
       paths: Paths.from_router(TimeManagerWeb.Router),
-      # Both are required on every route except login and register. In Swagger UI,
+      # Protected routes require both, except read-only session restoration.
+      # Public routes override security in their operation specs. In Swagger UI,
       # log in first (the browser stores the cookie), then paste csrf_token under
       # "Authorize".
       components: %Components{
         securitySchemes: %{
           "jwtCookie" => %SecurityScheme{type: "apiKey", in: "cookie", name: "jwt"},
+          "sessionRestoreHeader" => %SecurityScheme{
+            type: "apiKey",
+            in: "header",
+            name: "X-Session-Restore",
+            description: "Use value 1 only on GET /api/auth/session to restore a fresh tab"
+          },
           "csrfToken" => %SecurityScheme{type: "apiKey", in: "header", name: "X-CSRF-Token"}
         }
       },

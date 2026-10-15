@@ -2,8 +2,8 @@
   <div class="banner" :class="`banner-${tone}`" :role="tone === 'danger' ? 'alert' : 'status'">
     <AppIcon class="banner-icon" :name="tone === 'danger' ? 'alert' : 'warning'" />
     <div class="banner-body">
-      <p class="banner-title">{{ title }}</p>
-      <p v-if="text" class="banner-text">{{ text }}</p>
+      <p class="banner-title">{{ $t(title) }}</p>
+      <p v-if="text" class="banner-text">{{ $t(text) }}</p>
     </div>
     <slot />
   </div>

@@ -6,12 +6,12 @@
       <span class="deco deco-b" aria-hidden="true"></span>
 
       <div class="intro-body">
-        <h1 class="intro-title">Time Manager</h1>
-        <p class="intro-eyebrow">Votre organisation</p>
+        <h1 class="intro-title">{{ $t("Time Manager") }}</h1>
+        <p class="intro-eyebrow">{{ $t("Votre organisation") }}</p>
         <ul class="intro-list">
           <li v-for="point in points" :key="point.icon">
             <AppIcon :name="point.icon" />
-            {{ point.text }}
+            {{ $t(point.text) }}
           </li>
         </ul>
       </div>
@@ -27,9 +27,7 @@
 
 
 
-        <InfoNote icon="phone" title="Pas d’ordinateur ?">
-          Utilisez un téléphone ou un appareil partagé. Si vous avez besoin d’aide, demandez un accompagnement à votre responsable.
-        </InfoNote>
+        <InfoNote icon="phone" :title="$t(&quot;Pas d’ordinateur ?&quot;)"> {{ $t("Utilisez un téléphone ou un appareil partagé. Si vous avez besoin d’aide, demandez un accompagnement à votre responsable.") }} </InfoNote>
       </div>
     </section>
   </div>

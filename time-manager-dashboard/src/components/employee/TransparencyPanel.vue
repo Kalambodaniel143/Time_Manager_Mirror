@@ -1,18 +1,18 @@
 <template>
   <section class="transparency card">
-    <h2 class="card-title">Ce que voit votre manager</h2>
+    <h2 class="card-title">{{ $t("Ce que voit votre manager") }}</h2>
 
-    <p class="group-title"><AppIcon name="eye" /> Visible par votre manager</p>
+    <p class="group-title"><AppIcon name="eye" /> {{ $t("Visible par votre manager") }}</p>
     <ul class="list">
-      <li v-for="item in visible" :key="item"><AppIcon name="check" />{{ item }}</li>
+      <li v-for="item in visible" :key="item"><AppIcon name="check" />{{ $t(item) }}</li>
     </ul>
 
-    <p class="group-title"><AppIcon class="is-ok" name="shield" /> Jamais enregistré</p>
+    <p class="group-title"><AppIcon class="is-ok" name="shield" /> {{ $t("Jamais enregistré") }}</p>
     <ul class="list">
-      <li v-for="item in never" :key="item"><AppIcon name="eye-off" />{{ item }}</li>
+      <li v-for="item in never" :key="item"><AppIcon name="eye-off" />{{ $t(item) }}</li>
     </ul>
 
-    <p class="footer">Votre responsable consulte les heures des membres des équipes qu’il gère. L’administration consulte les comptes de son organisation.</p>
+    <p class="footer">{{ $t("Votre responsable consulte les heures des membres des équipes qu’il gère. L’administration consulte les comptes de son organisation.") }}</p>
   </section>
 </template>
 

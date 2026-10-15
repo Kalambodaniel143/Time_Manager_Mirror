@@ -1,9 +1,9 @@
 <template>
   <section class="next-shifts">
-    <h2 class="card-title">Prochaines gardes</h2><p v-if="demo" class="field-hint">Exemple de planning · à confirmer auprès de votre responsable.</p>
-    <p v-if="loading" role="status">Chargement des gardes…</p>
-    <p v-else-if="error" class="field-error" role="alert">{{ error }}</p>
-    <p v-else-if="shifts.length === 0" class="card-subtitle">Aucune garde publiée sur cette période.</p>
+    <h2 class="card-title">{{ $t("Prochaines gardes") }}</h2><p v-if="demo" class="field-hint">{{ $t("Exemple de planning · à confirmer auprès de votre responsable.") }}</p>
+    <p v-if="loading" role="status">{{ $t("Chargement des gardes…") }}</p>
+    <p v-else-if="error" class="field-error" role="alert">{{ $t(error) }}</p>
+    <p v-else-if="shifts.length === 0" class="card-subtitle">{{ $t("Aucune garde publiée sur cette période.") }}</p>
     <article v-for="(shift, index) in shifts" :key="shift.date.toISOString()" class="shift card">
       <div class="shift-date">
         <span class="shift-weekday">{{ weekday(shift.date) }}</span>
@@ -14,8 +14,7 @@
         <p class="shift-place">{{ shift.place }}</p>
         <HourTag :kind="shift.kind" :hours="shift.shift.hours" />
         <p class="shift-published">
-          <AppIcon name="calendar" />
-          Publié le {{ demo ? publishedLabel : shift.publishedLabel }}<template v-if="demo && index === 0">, {{ daysAhead }} jours à l’avance</template>
+          <AppIcon name="calendar" /> {{ $t("Publié le") }} {{ $t(demo ? publishedLabel : shift.publishedLabel) }}<template v-if="demo && index === 0">, {{ daysAhead }} {{ $t("jours à l’avance") }}</template>
         </p>
       </div>
     </article>

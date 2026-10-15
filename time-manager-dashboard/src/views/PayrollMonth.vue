@@ -1,31 +1,29 @@
 <template>
   <MonthlyHours v-if="!demo" :now="now" />
   <div v-else class="payroll">
-    <PageHeader :eyebrow="`${monthName} · ${data.rows.length} services`" :title="`Paie de ${monthName}`">
+    <PageHeader :eyebrow="$t('{month} · {count} services', { month: monthName, count: data.rows.length })" :title="$t('Paie de {month}', { month: monthName })">
       <button class="btn btn-primary" type="button" @click="exportCsv">
-        <AppIcon name="check" />
-        Télécharger le relevé CSV
-      </button>
+        <AppIcon name="check" /> {{ $t("Télécharger le relevé CSV") }} </button>
     </PageHeader>
 
-    <p class="demo-notice">Relevé d’exemple · ces valeurs ne sont pas calculées à partir des comptes de votre organisation. Le téléchargement ne transmet rien à un logiciel de paie.</p>
+    <p class="demo-notice">{{ $t("Relevé d’exemple · ces valeurs ne sont pas calculées à partir des comptes de votre organisation. Le téléchargement ne transmet rien à un logiciel de paie.") }}</p>
     <div class="kpis">
       <article v-for="kpi in kpis" :key="kpi.kind" class="kpi card">
         <HourTag :kind="kpi.kind" />
         <p class="kpi-value serif num">{{ hours(data.totals[kpi.kind]) }}</p>
-        <p class="kpi-hint">{{ kpi.hint }}</p>
+        <p class="kpi-hint">{{ $t(kpi.hint) }}</p>
       </article>
     </div>
 
     <section class="card services">
-      <h2 class="card-title">Par service</h2>
+      <h2 class="card-title">{{ $t("Par service") }}</h2>
       <div class="table-wrap">
         <table class="table">
           <thead>
             <tr>
-              <th scope="col">Service</th>
-              <th v-for="column in columns" :key="column.key" scope="col" class="right">{{ column.label }}</th>
-              <th scope="col" class="right">Total</th>
+              <th scope="col">{{ $t("Service") }}</th>
+              <th v-for="column in columns" :key="column.key" scope="col" class="right">{{ $t(column.label) }}</th>
+              <th scope="col" class="right">{{ $t("Total") }}</th>
             </tr>
           </thead>
           <tbody>
@@ -39,13 +37,13 @@
       </div>
     </section>
 
-    <InfoNote icon="info" title="Astreintes du Bat-signal" flat>
-      Ce sont des horaires contraints prévus au planning : elles ne sont pas comptées comme heures sup.
-    </InfoNote>
+    <InfoNote icon="info" :title="$t(&quot;Astreintes du Bat-signal&quot;)" flat> {{ $t("Ce sont des horaires contraints prévus au planning : elles ne sont pas comptées comme heures sup.") }} </InfoNote>
   </div>
 </template>
 
 <script>
+import { intlLocale } from '../utils/i18n.js'
+
 import AppIcon from '../components/ui/AppIcon.vue'
 import HourTag from '../components/ui/HourTag.vue'
 import InfoNote from '../components/ui/InfoNote.vue'
@@ -81,7 +79,7 @@ export default {
     demo: isDemoData,
     monthName() {
       const month = new Date(this.now.getFullYear(), this.now.getMonth() - 1, 1)
-      return month.toLocaleDateString('fr-FR', { month: 'long' })
+      return month.toLocaleDateString(intlLocale(), { month: 'long' })
     },
 
     kpis() {
@@ -102,7 +100,7 @@ export default {
     },
 
     number(value) {
-      return value.toLocaleString('fr-FR')
+      return value.toLocaleString(intlLocale())
     },
 
     exportCsv() {

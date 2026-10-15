@@ -354,8 +354,13 @@ defmodule TimeManager.Workforce.TimeSheets do
 
           Workforce.notify(
             row.user_id,
-            "Correction examinée",
-            "Votre demande est #{row.status}. #{row.review_reason}"
+            if(row.status == "approved", do: "Correction acceptée", else: "Correction refusée"),
+            if(row.status == "approved",
+              do:
+                "Votre demande de correction des heures a été acceptée. Vos horaires ont été mis à jour. ",
+              else:
+                "Votre demande de correction des heures a été refusée. Vos horaires sont inchangés. "
+            ) <> row.review_reason
           )
 
           {:ok, correction_data(row)}

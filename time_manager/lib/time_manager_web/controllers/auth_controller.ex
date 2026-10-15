@@ -30,9 +30,82 @@ defmodule TimeManagerWeb.AuthController do
   plug RateLimit, [bucket: :register, limit: 20] when action == :register
 
   plug RateLimit,
+       [bucket: :password_recovery_email, limit: 5, by: :email] when action == :forgot_password
+
+  plug RateLimit, [bucket: :password_recovery_ip, limit: 50] when action == :forgot_password
+
+  plug RateLimit,
+       [bucket: :password_reset_email, limit: 10, by: :email] when action == :reset_password
+
+  plug RateLimit, [bucket: :password_reset_ip, limit: 100] when action == :reset_password
+
+  plug RateLimit,
        [bucket: :verify_email, limit: 20] when action in [:verify_email, :resend_verification]
 
   tags(["auth"])
+
+  operation(:forgot_password,
+    summary: "Send a password recovery code",
+    security: [],
+    request_body:
+      {"Email address", "application/json", TimeManagerWeb.Schemas.PasswordRecoveryRequest},
+    responses: [
+      accepted:
+        {"Same reply for known and unknown accounts", "application/json",
+         TimeManagerWeb.Schemas.WorkflowResponse},
+      bad_request: {"Missing or malformed fields", "application/json", ErrorResponse},
+      unprocessable_entity: {"Invalid email", "application/json", ErrorResponse},
+      too_many_requests: {"Rate limit", "application/json", ErrorResponse}
+    ]
+  )
+
+  def forgot_password(conn, %{"email" => email}) when is_binary(email) do
+    if String.length(email) <= 254 and
+         Regex.match?(~r/^[^\s@]+@[^\s@]+\.[^\s@]+$/, String.trim(email)) do
+      with :ok <- TimeManager.Accounts.PasswordRecovery.request(email) do
+        conn
+        |> put_status(:accepted)
+        |> json(%{
+          data: %{
+            message:
+              "Si un compte actif correspond à cette adresse, un code vous sera envoyé. Vérifiez votre boîte mail et vos courriers indésirables. Le code expire dans 15 minutes."
+          }
+        })
+      end
+    else
+      {:error,
+       {:unprocessable_entity, "Saisissez une adresse email valide, par exemple nom@domaine.fr."}}
+    end
+  end
+
+  def forgot_password(_, _), do: {:error, :bad_request}
+
+  operation(:reset_password,
+    summary: "Reset a password with a one-use eight-digit code; revoke all old sessions",
+    security: [],
+    request_body:
+      {"Email, code and new password", "application/json",
+       TimeManagerWeb.Schemas.PasswordResetRequest},
+    responses: [
+      ok: {"Password reset", "application/json", TimeManagerWeb.Schemas.WorkflowResponse},
+      bad_request: {"Missing or malformed fields", "application/json", ErrorResponse},
+      unprocessable_entity: {"Invalid code or weak password", "application/json", ErrorResponse},
+      too_many_requests: {"Rate limit", "application/json", ErrorResponse}
+    ]
+  )
+
+  def reset_password(conn, %{"email" => email, "code" => code, "password" => password})
+      when is_binary(email) and is_binary(code) and is_binary(password) do
+    with :ok <- TimeManager.Accounts.PasswordRecovery.complete(email, String.trim(code), password) do
+      json(conn, %{
+        data: %{
+          message: "Mot de passe réinitialisé. Connectez-vous avec votre nouveau mot de passe."
+        }
+      })
+    end
+  end
+
+  def reset_password(_, _), do: {:error, :bad_request}
 
   operation(:login,
     summary: "Log in",
@@ -149,7 +222,20 @@ defmodule TimeManagerWeb.AuthController do
     summary: "Current session",
     description:
       "Role, user and organization, read from the database: a promotion shows at the next " <>
-        "call. 401 when the session is missing, expired or revoked.",
+        "call. A new tab may use X-Session-Restore: 1 with its valid JWT cookie to recover " <>
+        "the session-bound CSRF token. Read-only, no cookie rotation. " <>
+        "401 when the session is missing, expired or revoked.",
+    parameters: [
+      "X-Session-Restore": [
+        in: :header,
+        type: :string,
+        description: "1 for read-only restoration"
+      ]
+    ],
+    security: [
+      %{"jwtCookie" => [], "csrfToken" => []},
+      %{"jwtCookie" => [], "sessionRestoreHeader" => []}
+    ],
     responses: [
       ok: {"Session", "application/json", SessionData},
       unauthorized: {"Not logged in", "application/json", ErrorResponse}
@@ -158,7 +244,13 @@ defmodule TimeManagerWeb.AuthController do
 
   def session(conn, _params) do
     user = conn |> Authz.current_user() |> Accounts.preload_organization()
-    json(conn, %{data: SessionJSON.data(user)})
+
+    conn
+    |> put_resp_header("cache-control", "no-store")
+    |> put_resp_header("vary", "Cookie")
+    |> json(%{
+      data: Map.put(SessionJSON.data(user), :csrf_token, conn.assigns.session_claims["xsrf"])
+    })
   end
 
   operation(:logout,

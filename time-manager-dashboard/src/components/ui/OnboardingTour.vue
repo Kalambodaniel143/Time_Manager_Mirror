@@ -1,14 +1,14 @@
 <template>
-  <ModalDialog v-if="step" :title="step.title" id="tour-title" @close="$emit('close')">
-    <p class="tour-step">Prise en main · Étape {{ index + 1 }} sur {{ steps.length }}</p>
-    <p class="tour-text">{{ step.text }}</p>
-    <button v-if="supported" class="btn btn-outline" type="button" @click="read">Écouter cette étape</button>
+  <ModalDialog v-if="step" :title="$t(step.title)" id="tour-title" @close="$emit('close')">
+    <p class="tour-step">{{ $t("Prise en main · Étape") }} {{ index + 1 }} {{ $t("sur") }} {{ steps.length }}</p>
+    <p class="tour-text">{{ $t(step.text) }}</p>
+    <button v-if="supported" class="btn btn-outline" type="button" @click="read">{{ $t("Écouter cette étape") }}</button>
     <footer class="tour-footer">
       <span class="tour-dots" aria-hidden="true">
         <span v-for="(item, dot) in steps" :key="item.title" class="tour-dot" :class="{ 'is-current': dot === index }"></span>
       </span>
-      <button class="btn btn-quiet tour-later" type="button" @click="$emit('close')">Plus tard</button>
-      <button class="btn btn-primary tour-next" type="button" @click="next">{{ isLast ? 'Terminer' : 'Suivant' }}</button>
+      <button class="btn btn-quiet tour-later" type="button" @click="$emit('close')">{{ $t("Plus tard") }}</button>
+      <button class="btn btn-primary tour-next" type="button" @click="next">{{ $t(isLast ? 'Terminer' : 'Suivant') }}</button>
     </footer>
   </ModalDialog>
 </template>
@@ -44,7 +44,7 @@ export default {
   },
 
   methods: {
-    read() { readAloud(`${this.step.title}. ${this.step.text}`) },
+    read() { readAloud(`${this.$t(this.step.title)}. ${this.$t(this.step.text)}`) },
     next() {
       stopReading()
       if (this.isLast) this.$emit('close')

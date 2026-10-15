@@ -1,40 +1,38 @@
 <template>
   <div class="hours">
-    <PageHeader :eyebrow="`Semaine ${weekNumber} · ${rangeLabel}`" :title="isSelf ? 'Mes heures' : `Heures de l’agent n° ${userID}`">
-      <RouterLink class="btn btn-outline" :to="{ name: 'chartManager', params: { userid: userID } }">Graphiques</RouterLink>
+    <PageHeader :eyebrow="$t('Semaine {week} · {range}', { week: weekNumber, range: rangeLabel })" :title="isSelf ? $t('Mes heures') : $t('Heures de l’agent n° {id}', { id: userID })">
+      <RouterLink class="btn btn-outline" :to="{ name: 'chartManager', params: { userid: userID } }">{{ $t("Graphiques") }}</RouterLink>
       <button class="btn btn-outline" type="button" @click="$emit('tour')">
-        <AppIcon name="help" />
-        Revoir la prise en main
-      </button>
+        <AppIcon name="help" /> {{ $t("Revoir la prise en main") }} </button>
     </PageHeader>
 
     <div class="layout">
       <section class="detail card">
         <header class="detail-header">
           <div class="detail-title">
-            <h2 class="card-title">Détail de la semaine</h2>
+            <h2 class="card-title">{{ $t("Détail de la semaine") }}</h2>
             <span class="week-nav">
-              <button class="btn btn-quiet btn-icon btn-sm" type="button" aria-label="Semaine précédente" @click="shiftWeek(-7)">
+              <button class="btn btn-quiet btn-icon btn-sm" type="button" :aria-label="$t(&quot;Semaine précédente&quot;)" @click="shiftWeek(-7)">
                 <AppIcon name="chevron-left" />
               </button>
-              <button class="btn btn-quiet btn-icon btn-sm" type="button" aria-label="Semaine suivante" :disabled="isCurrentWeek" @click="shiftWeek(7)">
+              <button class="btn btn-quiet btn-icon btn-sm" type="button" :aria-label="$t(&quot;Semaine suivante&quot;)" :disabled="isCurrentWeek" @click="shiftWeek(7)">
                 <AppIcon name="chevron-right" />
               </button>
             </span>
           </div>
           <p class="card-subtitle">
-            {{ canEdit ? 'Corrigez les périodes enregistrées dans votre périmètre.' : 'Une erreur ? Proposez une correction : votre responsable l’examine avant toute modification.' }}
+            {{ $t(canEdit ? 'Corrigez les périodes enregistrées dans votre périmètre.' : 'Une erreur ? Proposez une correction : votre responsable l’examine avant toute modification.') }}
           </p>
         </header>
 
-        <p v-if="error" class="field-error" role="alert">Impossible de charger vos heures : {{ error }}</p>
+        <p v-if="error" class="field-error" role="alert">{{ $t("Impossible de charger vos heures :") }} {{ $t(error) }}</p>
         <div v-else-if="loading && workingTimes.length === 0" class="skeleton table-skeleton"></div>
         <!-- Seul l'agent lui-même peut compléter son départ : l'API refuse les autres. -->
         <WeekTable v-else :monday="monday" :entries="workingTimes" :now="now" :user-id="isSelf ? userId : null" :can-edit="canEdit && weekStatus === 'open'" :can-request="isSelf && weekStatus === 'open'" @edit="openEdit" @create="openCreate" @completed="onDepartureCompleted" @request="openRequest" />
       </section>
 
       <aside class="side">
-        <LastWeekCard title="Total de la semaine" :buckets="buckets" :target="target" :loading="loading" :error="error" />
+        <LastWeekCard :title="$t(&quot;Total de la semaine&quot;)" :buckets="buckets" :target="target" :loading="loading" :error="error" />
         <ManagerNote v-if="username || !demo" :user-id="userId" :username="username" :week-key="weekKey" />
       </aside>
     </div>

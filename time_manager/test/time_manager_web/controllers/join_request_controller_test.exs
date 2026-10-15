@@ -74,6 +74,59 @@ defmodule TimeManagerWeb.JoinRequestControllerTest do
     end
   end
 
+  describe "email verification after merging main" do
+    test "a request becomes visible only after its email is verified", %{org: org, admin: admin} do
+      profile = join_profile()
+      created = post(build_conn(), ~p"/api/join-requests", organization_id: org, profile: profile)
+      request_id = json_response(created, 201)["data"]["id"]
+      assert_receive {:email, mail}
+      [code] = Regex.run(~r/\d{6}/, mail.text_body)
+      admin_conn = log_in(build_conn(), admin)
+
+      assert json_response(get(admin_conn, ~p"/api/organizations/#{org}/join-requests"), 200)[
+               "data"
+             ] == []
+
+      verified =
+        post(build_conn(), ~p"/api/join-requests/verify-email",
+          email: profile["email"],
+          code: code
+        )
+
+      assert json_response(verified, 200)["data"]["request_submitted"]
+
+      assert [%{"id" => ^request_id}] =
+               json_response(get(admin_conn, ~p"/api/organizations/#{org}/join-requests"), 200)[
+                 "data"
+               ]
+
+      assert json_response(
+               post(build_conn(), ~p"/api/join-requests/verify-email",
+                 email: profile["email"],
+                 code: code
+               ),
+               422
+             )
+
+      approved =
+        post(admin_conn, ~p"/api/organizations/#{org}/join-requests/#{request_id}/approve",
+          password: "une phrase de recette"
+        )
+
+      assert json_response(approved, 200)["data"]["user"]["email"] == profile["email"]
+      assert_receive {:email, credentials}
+      refute credentials.text_body =~ "une phrase de recette"
+      assert credentials.text_body =~ "canal sécurisé séparé"
+      refute response(approved, 200) =~ "une phrase de recette"
+    end
+
+    test "malformed verification data is a client error", %{} do
+      for body <- [%{email: nil, code: "000000"}, %{email: "test@example.test", code: []}] do
+        assert json_response(post(build_conn(), ~p"/api/join-requests/verify-email", body), 400)
+      end
+    end
+  end
+
   describe "status" do
     test "follows the request with its reference, without exposing the profile",
          %{conn: conn, org: org} do

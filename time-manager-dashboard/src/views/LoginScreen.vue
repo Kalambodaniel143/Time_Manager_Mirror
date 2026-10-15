@@ -1,14 +1,14 @@
 <template>
   <div class="login">
-    <div class="auth-theme-controls"><ThemeToggle :model-value="theme" @update:model-value="$emit('update:theme', $event)" /></div>
+    <div class="auth-theme-controls"><LanguageSelect /><ThemeToggle :model-value="theme" @update:model-value="$emit('update:theme', $event)" /></div>
     <section class="intro">
       <span class="deco deco-a" aria-hidden="true"></span>
       <span class="deco deco-b" aria-hidden="true"></span>
       <div class="intro-body">
-        <h1 class="intro-title">Time Manager</h1>
-        <p class="intro-eyebrow">Gotham City · Services municipaux</p>
+        <h1 class="intro-title">{{ $t("Time Manager") }}</h1>
+        <p class="intro-eyebrow">{{ $t("Gotham City · Services municipaux") }}</p>
         <ul class="intro-list">
-          <li v-for="point in points" :key="point.icon"><AppIcon :name="point.icon" />{{ point.text }}</li>
+          <li v-for="point in points" :key="point.icon"><AppIcon :name="point.icon" />{{ $t(point.text) }}</li>
         </ul>
       </div>
       <div class="pixels" aria-hidden="true"><span v-for="(tone, index) in pixels" :key="index" :class="`pixel-${tone}`"></span></div>
@@ -16,70 +16,77 @@
 
     <main class="panel">
       <div class="form">
-        <nav class="access-nav" aria-label="Accès à Time Manager">
+        <nav class="access-nav" :aria-label="$t(&quot;Accès à Time Manager&quot;)">
           <button v-for="option in modes" :key="option.value" class="access-choice" :class="{ active: mode === option.value }" type="button" :aria-pressed="mode === option.value" :disabled="busy" @click="changeMode(option.value)">
-            <AppIcon :name="option.icon" />{{ option.label }}
+            <AppIcon :name="option.icon" />{{ $t(option.label) }}
           </button>
         </nav>
 
         <div v-if="receipt" class="card receipt" role="status">
-          <span class="pill" :class="statusClass">{{ statusLabel }}</span>
+          <span class="pill" :class="statusClass">{{ $t(statusLabel) }}</span>
           <h2 class="card-title">{{ receipt.organization_name }}</h2>
-          <p v-if="receipt.status === 'pending'">Votre demande attend la décision du super administrateur. Aucun compte n’est encore actif.</p>
-          <p v-else-if="receipt.status === 'approved'">Votre demande a été acceptée. Le super administrateur vous fournit votre mot de passe ; utilisez votre email pour vous connecter.</p>
-          <p v-else>Votre demande a été refusée. {{ receipt.rejection_reason }}</p>
-          <label class="field"><span class="field-label">Référence de suivi à conserver</span><input class="input num" :value="receipt.reference" readonly /></label>
-          <div class="actions"><button class="btn btn-outline" type="button" :disabled="busy" @click="refreshStatus">Actualiser le statut</button><button class="btn btn-quiet" type="button" @click="dismissReceipt">Fermer</button></div>
+          <p v-if="receipt.status === 'pending'">{{ $t("Votre demande attend la décision du super administrateur. Aucun compte n’est encore actif.") }}</p>
+          <p v-else-if="receipt.status === 'approved'">{{ $t("Votre demande a été acceptée. Le super administrateur vous fournit votre mot de passe ; utilisez votre email pour vous connecter.") }}</p>
+          <p v-else>{{ $t("Votre demande a été refusée.") }} {{ receipt.rejection_reason }}</p>
+          <label class="field"><span class="field-label">{{ $t("Référence de suivi à conserver") }}</span><input class="input num" :value="receipt.reference" readonly /></label>
+          <div class="actions"><button class="btn btn-outline" type="button" :disabled="busy" @click="refreshStatus">{{ $t("Actualiser le statut") }}</button><button class="btn btn-quiet" type="button" @click="dismissReceipt">{{ $t("Fermer") }}</button></div>
         </div>
 
         <form v-if="mode === 'login'" novalidate :aria-busy="busy" @submit.prevent="submitLogin">
-          <h2 class="page-title">Connexion</h2>
-          <p class="lede">Votre email et le mot de passe fourni par le super administrateur vous donnent accès aux services de Gotham City.</p>
-          <label class="field"><span class="field-label">Adresse email</span><input v-model.trim="email" class="input" type="email" autocomplete="username" required /></label>
-          <label class="field"><span class="field-label">Mot de passe</span><span class="password-control"><input v-model="password" class="input" :type="showLoginPassword ? 'text' : 'password'" autocomplete="current-password" required /><button class="password-toggle" type="button" :aria-label="showLoginPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'" :aria-pressed="showLoginPassword" @click="showLoginPassword = !showLoginPassword"><AppIcon :name="showLoginPassword ? 'eye-off' : 'eye'" /></button></span></label>
-          <p v-if="error" class="field-error" role="alert">{{ error }}</p>
-          <button class="btn btn-primary btn-login" type="submit" :disabled="busy"><AppIcon name="login" />{{ busy ? 'Connexion…' : 'Se connecter' }}</button>
-          <p class="field-hint">Demande en attente ? Utilisez « Suivre ma demande » ci-dessous.</p>
+          <h2 class="page-title">{{ $t("Connexion") }}</h2>
+          <p class="lede">{{ $t("Votre email et le mot de passe fourni par le super administrateur vous donnent accès aux services de Gotham City.") }}</p>
+          <label class="field"><span class="field-label">{{ $t("Adresse email") }}</span><input v-model.trim="email" class="input" type="email" autocomplete="username" required /></label>
+          <label class="field"><span class="field-label">{{ $t("Mot de passe") }}</span><span class="password-control"><input v-model="password" class="input" :type="showLoginPassword ? 'text' : 'password'" autocomplete="current-password" required /><button class="password-toggle" type="button" :aria-label="$t(showLoginPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe')" :aria-pressed="showLoginPassword" @click="showLoginPassword = !showLoginPassword"><AppIcon :name="showLoginPassword ? 'eye-off' : 'eye'" /></button></span></label>
+          <p v-if="error" class="field-error" role="alert">{{ $t(error) }}</p>
+          <button class="btn btn-primary btn-login" type="submit" :disabled="busy"><AppIcon name="login" />{{ $t(busy ? 'Connexion…' : 'Se connecter') }}</button>
+          <p class="field-hint">{{ $t("Demande en attente ? Utilisez « Suivre ma demande » ci-dessous.") }}</p>
+          <button class="link" type="button" :disabled="busy" @click="changeMode('recover')">{{ $t("Mot de passe oublié ?") }}</button>
         </form>
 
         <form v-else-if="mode === 'join'" novalidate :aria-busy="busy" @submit.prevent="submitRegistration">
-          <div><p class="eyebrow">Services municipaux de Gotham City</p><h2 class="page-title">Rejoindre Gotham City</h2></div>
-          <p class="lede">Votre demande est adressée au super administrateur de Gotham City. Après son accord, vous rejoignez les services municipaux en tant qu’employé.</p>
+          <div><p class="eyebrow">{{ $t("Services municipaux de Gotham City") }}</p><h2 class="page-title">{{ $t("Rejoindre Gotham City") }}</h2></div>
+          <p class="lede">{{ $t("Votre demande est adressée au super administrateur de Gotham City. Après son accord, vous rejoignez les services municipaux en tant qu’employé.") }}</p>
           <template v-if="!verificationPending">
             <ProfileFields v-model="profile" :errors="errors" personal-details />
-            <InfoNote title="Votre mot de passe vient du super administrateur" flat>Vous n’avez pas de mot de passe à choisir ici. Après acceptation, le super administrateur définit votre mot de passe et vous transmet vos identifiants.</InfoNote>
+            <InfoNote :title="$t('Votre mot de passe vient du super administrateur')" flat>{{ $t('Vous n’avez pas de mot de passe à choisir ici. Après acceptation, le super administrateur définit votre mot de passe et vous transmet vos identifiants.') }}</InfoNote>
+            <button class="btn btn-primary btn-login" type="submit" :disabled="busy">{{ $t(busy ? 'Envoi…' : 'Envoyer ma demande') }}</button>
           </template>
           <template v-else>
-            <p class="lede">Un code de vérification a été envoyé à {{ email }}. Validez votre adresse avant que la demande ne soit transmise à l’administrateur.</p>
-            <label class="field"><span class="field-label">Code de vérification</span><input v-model.trim="verificationCode" class="input" inputmode="numeric" autocomplete="one-time-code" maxlength="6" required /></label>
-            <button class="btn btn-primary btn-login" type="button" :disabled="busy" @click="verifyRegistrationEmail">{{ busy ? 'Vérification…' : 'Vérifier mon adresse' }}</button>
-            <button class="btn btn-secondary btn-login" type="button" :disabled="busy" @click="resendRegistrationVerification">Renvoyer le code</button>
+            <p class="lede">{{ $t('Un code de vérification a été envoyé à {email}. Validez votre adresse avant que la demande ne soit transmise à l’administrateur.', { email }) }}</p>
+            <label class="field"><span class="field-label">{{ $t('Code de vérification') }}</span><input v-model.trim="verificationCode" class="input" inputmode="numeric" autocomplete="one-time-code" maxlength="6" required /></label>
+            <button class="btn btn-primary btn-login" type="submit" :disabled="busy">{{ $t(busy ? 'Vérification…' : 'Vérifier mon adresse') }}</button>
+            <button class="btn btn-outline btn-login" type="button" :disabled="busy" @click="resendRegistrationVerification">{{ $t('Renvoyer le code') }}</button>
           </template>
-          <p v-if="error" class="field-error" role="alert">{{ error }}</p>
-          <button class="btn btn-primary btn-login" type="submit" :disabled="busy">{{ busy ? 'Envoi…' : 'Envoyer ma demande' }}</button>
+          <p v-if="error" class="field-error" role="alert">{{ $t(error) }}</p>
         </form>
+
+        <PasswordRecovery v-else-if="mode === 'recover'" :initial-email="email" @close="email = $event; changeMode('login')" />
 
         <form v-else novalidate :aria-busy="busy" @submit.prevent="refreshStatus">
-          <h2 class="page-title">Suivre ma demande</h2>
-          <p class="lede">Saisissez la référence reçue lors de votre demande d’adhésion.</p>
-          <label class="field"><span class="field-label">Référence de suivi</span><input v-model.trim="reference" class="input" autocomplete="off" required /></label>
-          <p v-if="error" class="field-error" role="alert">{{ error }}</p>
-          <button class="btn btn-primary" type="submit" :disabled="busy">{{ busy ? 'Recherche…' : 'Consulter le statut' }}</button>
+          <h2 class="page-title">{{ $t("Suivre ma demande") }}</h2>
+          <p class="lede">{{ $t("Saisissez la référence reçue lors de votre demande d’adhésion.") }}</p>
+          <label class="field"><span class="field-label">{{ $t("Référence de suivi") }}</span><input v-model.trim="reference" class="input" autocomplete="off" required /></label>
+          <p v-if="error" class="field-error" role="alert">{{ $t(error) }}</p>
+          <button class="btn btn-primary" type="submit" :disabled="busy">{{ $t(busy ? 'Recherche…' : 'Consulter le statut') }}</button>
         </form>
 
-        <button v-if="mode !== 'status'" class="link follow-link" type="button" :disabled="busy" @click="changeMode('status')">Suivre ma demande</button>
+        <button v-if="mode !== 'status'" class="link follow-link" type="button" :disabled="busy" @click="changeMode('status')">{{ $t("Suivre ma demande") }}</button>
+        <RouterLink class="link follow-link" :to="{ name: 'help' }">{{ $t('Aide et FAQ') }}</RouterLink>
 
-        <p v-if="mock" class="field-hint">Simulation locale : les comptes et demandes restent dans ce navigateur. Aucun email n’est envoyé.</p>
+        <p v-if="mock" class="field-hint">{{ $t("Simulation locale : les comptes et demandes restent dans ce navigateur. Aucun email n’est envoyé.") }}</p>
       </div>
     </main>
   </div>
 </template>
 
 <script>
+import { RouterLink } from 'vue-router'
+import LanguageSelect from '../components/ui/LanguageSelect.vue'
 import ThemeToggle from '../components/ui/ThemeToggle.vue'
 import AppIcon from '../components/ui/AppIcon.vue'
 import InfoNote from '../components/ui/InfoNote.vue'
 import ProfileFields from '../components/auth/ProfileFields.vue'
+import PasswordRecovery from '../components/auth/PasswordRecovery.vue'
 import { AUTH_USE_MOCK, getRequestStatus, joinOrganization, loginAccount, resendJoinRequestVerification, verifyJoinRequestEmail } from '../services/organizationService'
 import { emptyProfile, errorFields, profileErrors, profilePayload } from '../utils/registration'
 
@@ -87,7 +94,7 @@ import { emptyProfile, errorFields, profileErrors, profilePayload } from '../uti
 
 export default {
   name: 'LoginScreen',
-  components: { ThemeToggle, AppIcon, InfoNote, ProfileFields },
+  components: { RouterLink, LanguageSelect, PasswordRecovery, ThemeToggle, AppIcon, InfoNote, ProfileFields },
   props: { theme: { type: String, required: true }, initialMode: { type: String, default: 'login' } },
   emits: ['login', 'update:theme'],
   data() {
@@ -108,7 +115,7 @@ export default {
   watch: { initialMode(mode) { this.changeMode(mode === 'join' ? 'join' : 'login') } },
   methods: {
     changeMode(mode) {
-      if (!['login', 'join', 'status'].includes(mode)) return
+      if (!['login', 'join', 'status', 'recover'].includes(mode)) return
       this.mode = mode
       if (this.$router && ['login', 'join'].includes(mode)) {
         const name = mode === 'join' ? 'register' : 'login'
@@ -132,6 +139,7 @@ export default {
     },
     async submitRegistration() {
       if (this.busy) return
+      if (this.verificationPending) return this.verifyRegistrationEmail()
       this.error = ''
       this.errors = profileErrors(this.profile, true)
       if (Object.keys(this.errors).length) return
@@ -140,7 +148,8 @@ export default {
         this.receipt = await joinOrganization({ profile: profilePayload(this.profile, true) })
         this.reference = this.receipt.reference
         this.email = this.profile.email
-        this.verificationPending = true
+        this.verificationPending = !this.mock
+        if (this.mock) { this.profile = emptyProfile(); this.changeMode('login') }
       } catch (error) { this.error = error.message; this.errors = { ...this.errors, ...errorFields(error) } }
       finally { this.busy = false }
     },
@@ -404,6 +413,6 @@ export default {
 }
 
 .login { position: relative; }
-.auth-theme-controls { position: absolute; z-index: 1; top: 16px; right: 20px; }
+.auth-theme-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; position: absolute; z-index: 1; top: 16px; right: 20px; }
 @media (max-width: 760px) { .auth-theme-controls { position: static; display: flex; justify-content: flex-end; padding: 12px 16px; background: var(--bg); } }
 </style>

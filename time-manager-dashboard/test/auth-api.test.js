@@ -5,7 +5,7 @@ import { createServer } from 'vite'
 let server, auth
 const originalFetch = globalThis.fetch
 const user = { id: 14, first_name: 'Sara', last_name: 'Martin', username: 'sara@example.com', email: 'sara@example.com', organization_id: 'org-123', role: 'employee' }
-const session = { role: 'employee', user, organization: { id: 'org-123', name: 'Gotham City' } }
+const session = { csrf_token: 'csrf-token', role: 'employee', user, organization: { id: 'org-123', name: 'Gotham City' } }
 
 before(async () => {
   server = await createServer({ configFile: false, server: { middlewareMode: true, hmr: false }, appType: 'custom', define: { 'import.meta.env.VITE_AUTH_USE_MOCK': JSON.stringify('false') } })
@@ -28,7 +28,7 @@ function expectRequest(path, method, body, result = session, status = 200) {
 test('public organization creation is removed; login and session use the existing backend', async () => {
   assert.equal(auth.createOrganization, undefined)
   assert.equal(auth.lookupOrganization, undefined)
-  const credentials = { email: user.email, password: 'Password8' }
+  const credentials = { email: user.email, password: 'Lantern8' }
   expectRequest('/auth/login', 'POST', credentials, { ...session, csrf_token: 'csrf-token' })
   assert.deepEqual(await auth.loginAccount(credentials), { ...session, csrf_token: 'csrf-token' })
   expectRequest('/auth/session', 'GET')
@@ -54,7 +54,7 @@ test('joining always resolves Gotham City and ignores an organization ID supplie
 test('receipt, review and role requests preserve the existing API paths and payloads', async () => {
   expectRequest('/join-requests/status', 'POST', { reference: 'private' }, { status: 'pending' }); await auth.getRequestStatus('private')
   expectRequest('/organizations/org-123/join-requests', 'GET', undefined, []); await auth.listJoinRequests('org-123')
-  expectRequest('/organizations/org-123/join-requests/req-123/approve', 'POST', { password: 'Password8' }, { request: {}, user }); await auth.approveJoinRequest('org-123', 'req-123', 'Password8')
+  expectRequest('/organizations/org-123/join-requests/req-123/approve', 'POST', { password: 'Lantern8' }, { request: {}, user }); await auth.approveJoinRequest('org-123', 'req-123', 'Lantern8')
   expectRequest('/organizations/org-123/join-requests/req-123/reject', 'POST', { reason: 'Demande incorrecte' }, {}); await auth.rejectJoinRequest('org-123', 'req-123', 'Demande incorrecte')
   expectRequest('/organizations/org-123/members', 'GET', undefined, [user]); await auth.listMembers('org-123')
   expectRequest('/organizations/org-123/members/14', 'PATCH', { role: 'manager' }, { ...user, role: 'manager' }); await auth.setMemberRole('org-123', 14, 'manager')
@@ -70,8 +70,8 @@ test('administrator responses map to the super-administrator interface; other or
 test('missing Gotham never submits an application; malformed sessions and API failures remain visible', async () => {
   globalThis.fetch = async url => { assert.equal(url, '/api/organizations/lookup?name=Gotham%20City'); return { ok: false, status: 404, json: async () => ({ errors: { detail: 'Not found' } }) } }
   await assert.rejects(auth.joinOrganization({ profile: {} }), /pas encore configurée/)
-  expectRequest('/auth/login', 'POST', { email: user.email, password: 'Password8' }, session)
-  await assert.rejects(auth.loginAccount({ email: user.email, password: 'Password8' }), /CSRF absent/)
+  expectRequest('/auth/login', 'POST', { email: user.email, password: 'Lantern8' }, { ...session, csrf_token: undefined })
+  await assert.rejects(auth.loginAccount({ email: user.email, password: 'Lantern8' }), /CSRF absent/)
   expectRequest('/auth/session', 'GET', undefined, { ...session, role: 'admin' })
   await assert.rejects(auth.getSession(), /Réponse de session invalide/)
   globalThis.fetch = async () => ({ ok: true, status: 200, json: async () => ({ unexpected: [] }) })

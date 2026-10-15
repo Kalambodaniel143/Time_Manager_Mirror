@@ -10,6 +10,7 @@ defmodule TimeManager.Application do
     children = [
       TimeManagerWeb.Telemetry,
       TimeManager.Repo,
+      {Task.Supervisor, name: TimeManager.EmailTasks, max_children: 100},
       {DNSCluster, query: Application.get_env(:time_manager, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: TimeManager.PubSub},
       # Counters of the rate limits on the public routes

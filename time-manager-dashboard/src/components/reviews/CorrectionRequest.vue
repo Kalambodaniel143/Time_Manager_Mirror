@@ -1,13 +1,13 @@
 <template>
- <ModalDialog title="Proposer une correction" id="correction-title" :busy="busy" @close="$emit('close')">
-  <p>Vos horaires restent inchangés jusqu’à l’accord de votre responsable. La proposition et la décision seront conservées.</p>
-  <p class="field-hint">Une erreur de plus de sept jours peut aussi faire l’objet d’une demande de régularisation.</p>
+ <ModalDialog :title="$t(&quot;Proposer une correction&quot;)" id="correction-title" :busy="busy" @close="$emit('close')">
+  <p>{{ $t("Vos horaires restent inchangés jusqu’à l’accord de votre responsable. La proposition et la décision seront conservées.") }}</p>
+  <p class="field-hint">{{ $t("Une erreur de plus de sept jours peut aussi faire l’objet d’une demande de régularisation.") }}</p>
   <form class="page-stack" novalidate @submit.prevent="send">
-   <label class="field"><span class="field-label">Arrivée réelle</span><input v-model="start" class="input" type="datetime-local" step="1" required /></label>
-   <label class="field"><span class="field-label">Départ réel</span><input v-model="end" class="input" type="datetime-local" step="1" required /></label>
-   <label class="field"><span class="field-label">Motif de la correction</span><textarea v-model.trim="reason" class="input" rows="3" maxlength="500" required /></label>
-   <p v-if="error" class="field-error" role="alert">{{ error }}</p>
-   <button class="btn btn-primary" type="submit" :disabled="busy">{{ busy ? 'Envoi…' : 'Envoyer la proposition' }}</button>
+   <label class="field"><span class="field-label">{{ $t("Arrivée réelle") }}</span><input v-model="start" class="input" type="datetime-local" step="1" required /></label>
+   <label class="field"><span class="field-label">{{ $t("Départ réel") }}</span><input v-model="end" class="input" type="datetime-local" step="1" required /></label>
+   <label class="field"><span class="field-label">{{ $t("Motif de la correction") }}</span><textarea v-model.trim="reason" class="input" rows="3" maxlength="500" required /></label>
+   <p v-if="error" class="field-error" role="alert">{{ $t(error) }}</p>
+   <button class="btn btn-primary" type="submit" :disabled="busy">{{ $t(busy ? 'Envoi…' : 'Envoyer la proposition') }}</button>
   </form>
  </ModalDialog>
 </template>

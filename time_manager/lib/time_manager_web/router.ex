@@ -17,12 +17,18 @@ defmodule TimeManagerWeb.Router do
     plug TimeManagerWeb.Plugs.RateLimit, bucket: :writes, limit: 60, by: :user, writes_only: true
   end
 
+  pipeline :session_restore do
+    plug TimeManagerWeb.Plugs.Authenticate, session_restore: true
+  end
+
   # Public routes: the only ones reachable without a session. Each one is
   # rate-limited in its controller.
   scope "/api", TimeManagerWeb do
     pipe_through :api
 
     post "/auth/login", AuthController, :login
+    post "/auth/forgot-password", AuthController, :forgot_password
+    post "/auth/reset-password", AuthController, :reset_password
     post "/auth/register", AdmissionPolicyController, :registration
     post "/auth/verify-email", AuthController, :verify_email
     post "/auth/resend-verification", AuthController, :resend_verification
@@ -36,10 +42,14 @@ defmodule TimeManagerWeb.Router do
   end
 
   scope "/api", TimeManagerWeb do
+    pipe_through [:api, :session_restore]
+    get "/auth/session", AuthController, :session
+  end
+
+  scope "/api", TimeManagerWeb do
     pipe_through [:api, :auth]
 
     get "/auth/me", AuthController, :me
-    get "/auth/session", AuthController, :session
     post "/auth/logout", AuthController, :logout
 
     # Administrators of :org_id only (checked against the session, not the URL).
@@ -92,6 +102,7 @@ defmodule TimeManagerWeb.Router do
     patch "/auth/preferences", WorkforceController, :update_preferences
     get "/audit-events", WorkforceController, :journal
     get "/notifications", WorkforceController, :notifications
+    get "/notifications/count", WorkforceController, :notification_count
     patch "/notifications/:id/read", WorkforceController, :read_notification
 
     resources "/teams", TeamController, except: [:new, :edit]

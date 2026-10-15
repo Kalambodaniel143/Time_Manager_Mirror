@@ -5,30 +5,30 @@
       type="checkbox"
       :checked="selected"
       :disabled="!canValidate || row.validated || row.departureInWeek || !!row.clockError"
-      :aria-label="`Sélectionner ${row.name}`"
+      :aria-label="$t(`Sélectionner ${row.name}`)"
       @change="$emit('toggle', row.username)"
     />
     <div class="who">
       <p class="name">{{ row.name }}</p>
-      <p class="job">{{ row.job }}</p>
+      <p class="job">{{ $t(row.job) }}</p>
     </div>
     <div class="tags">
       <HourTag v-for="tag in tags" :key="tag.kind" :kind="tag.kind" :hours="tag.hours" />
     </div>
     <p class="total serif num">{{ total }}</p>
     <p class="status">
-      <span v-if="row.clockError" class="pill pill-todo"><AppIcon name="alert" />Pointages non vérifiés</span>
-      <span v-else-if="row.departureInWeek" class="pill pill-todo"><AppIcon name="clock" />Départ à compléter</span>
-      <span v-else-if="row.frequencyExceeded" class="pill pill-warn"><AppIcon name="alert" />Fréquence de nuits à examiner</span>
-      <span v-else-if="row.nightRun > maxNights" class="pill pill-danger"><AppIcon name="alert" />{{ row.nightRun }} nuits d’affilée</span>
-      <span v-else-if="row.validated" class="pill pill-ok"><AppIcon name="check" />{{ row.sheetStatus === 'closed' ? 'Clôturée' : 'Validée' }}</span>
-      <span v-else-if="canValidate" class="pill pill-todo"><AppIcon name="clock" />À valider</span>
-      <span v-else class="pill pill-ok">{{ row.buckets.total > 0 ? 'Périodes enregistrées' : 'Aucune période' }}</span>
+      <span v-if="row.clockError" class="pill pill-todo"><AppIcon name="alert" />{{ $t("Pointages non vérifiés") }}</span>
+      <span v-else-if="row.departureInWeek" class="pill pill-todo"><AppIcon name="clock" />{{ $t("Départ à compléter") }}</span>
+      <span v-else-if="row.frequencyExceeded" class="pill pill-warn"><AppIcon name="alert" />{{ $t("Fréquence de nuits à examiner") }}</span>
+      <span v-else-if="row.nightRun > maxNights" class="pill pill-danger"><AppIcon name="alert" />{{ row.nightRun }} {{ $t("nuits d’affilée") }}</span>
+      <span v-else-if="row.validated" class="pill pill-ok"><AppIcon name="check" />{{ $t(row.sheetStatus === 'closed' ? 'Clôturée' : 'Validée') }}</span>
+      <span v-else-if="canValidate" class="pill pill-todo"><AppIcon name="clock" />{{ $t("À valider") }}</span>
+      <span v-else class="pill pill-ok">{{ $t(row.buckets.total > 0 ? 'Périodes enregistrées' : 'Aucune période') }}</span>
     </p>
-    <div v-if="canTransition" class="sheet-actions"><button class="btn btn-outline btn-sm" @click="action = row.sheetStatus === 'validated' ? 'close' : 'reopen'; reason = ''">{{ row.sheetStatus === 'validated' ? 'Clôturer' : 'Rouvrir' }}</button></div>
-    <p v-if="canValidate" class="note"><AppIcon name="message" />{{ row.note || 'Aucune note partagée' }}</p>
-    <ModalDialog v-if="action" :title="action === 'close' ? 'Clôturer la semaine' : 'Rouvrir la semaine'" :id="`sheet-${row.user.id}`" @close="action = ''"><label class="field"><span class="field-label">Motif</span><textarea v-model.trim="reason" class="input" maxlength="500" /></label><button class="btn btn-primary" :disabled="!reason" @click="transition">Confirmer</button></ModalDialog>
-    <RouterLink v-if="row.user" class="btn btn-outline btn-sm view-link" :to="{ name: 'workingTimes', params: { userID: row.user.id } }">Voir la fiche</RouterLink>
+    <div v-if="canTransition" class="sheet-actions"><button class="btn btn-outline btn-sm" @click="action = row.sheetStatus === 'validated' ? 'close' : 'reopen'; reason = ''">{{ $t(row.sheetStatus === 'validated' ? 'Clôturer' : 'Rouvrir') }}</button></div>
+    <p v-if="canValidate" class="note"><AppIcon name="message" />{{ row.note || $t('Aucune note partagée') }}</p>
+    <ModalDialog v-if="action" :title="$t(action === 'close' ? 'Clôturer la semaine' : 'Rouvrir la semaine')" :id="`sheet-${row.user.id}`" @close="action = ''"><label class="field"><span class="field-label">{{ $t("Motif") }}</span><textarea v-model.trim="reason" class="input" maxlength="500" /></label><button class="btn btn-primary" :disabled="!reason" @click="transition">{{ $t("Confirmer") }}</button></ModalDialog>
+    <RouterLink v-if="row.user" class="btn btn-outline btn-sm view-link" :to="{ name: 'workingTimes', params: { userID: row.user.id } }">{{ $t("Voir la fiche") }}</RouterLink>
   </li>
 </template>
 

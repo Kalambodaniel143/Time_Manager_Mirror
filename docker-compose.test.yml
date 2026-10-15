@@ -1,0 +1,26 @@
+# Isolated test database: never connects to or migrates the deployed database.
+services:
+  test-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: time_manager_test
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d time_manager_test"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+  backend-tests:
+    build: ./time_manager
+    entrypoint: ["sh", "-c"]
+    command: ["mix format --check-formatted && mix compile --warnings-as-errors && mix test"]
+    environment:
+      MIX_ENV: test
+      PGHOST: test-db
+    depends_on:
+      test-db:
+        condition: service_healthy
+  frontend-tests:
+    build:
+      context: ./time-manager-dashboard
+      dockerfile: Dockerfile.test

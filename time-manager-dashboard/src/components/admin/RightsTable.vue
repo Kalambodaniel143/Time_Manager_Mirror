@@ -1,14 +1,14 @@
 <template>
   <section class="card block">
-    <h2 class="card-title">Droits des managers</h2>
-    <p v-if="error" class="field-error" role="alert">{{ error }}</p>
-    <p v-if="loading" role="status">Chargement des permissions…</p>
+    <h2 class="card-title">{{ $t("Droits des managers") }}</h2>
+    <p v-if="error" class="field-error" role="alert">{{ $t(error) }}</p>
+    <p v-if="loading" role="status">{{ $t("Chargement des permissions…") }}</p>
     <div class="table-wrap">
       <table class="table">
         <thead>
           <tr>
-            <th scope="col">Manager</th>
-            <th v-for="column in columns" :key="column.key" scope="col" class="center">{{ column.label }}</th>
+            <th scope="col">{{ $t("Manager") }}</th>
+            <th v-for="column in columns" :key="column.key" scope="col" class="center">{{ $t(column.label) }}</th>
           </tr>
         </thead>
         <tbody>
@@ -23,10 +23,10 @@
                 type="checkbox"
                 :checked="right[column.key]"
                 :disabled="loading || busy === right.id"
-                :aria-label="`${right.name} : ${column.label}`"
+                :aria-label="`${right.name} : ${$t(column.label)}`"
                 @change="setRight(right.id, column.key, $event.target.checked)"
               />
-              <span class="right-state">{{ right[column.key] ? 'Autorisé' : 'Non autorisé' }}</span>
+              <span class="right-state">{{ $t(right[column.key] ? 'Autorisé' : 'Non autorisé') }}</span>
             </td>
           </tr>
         </tbody>

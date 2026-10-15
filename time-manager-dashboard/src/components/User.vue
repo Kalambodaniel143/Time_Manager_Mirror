@@ -1,10 +1,10 @@
 <template>
   <div class="user-card">
-    <RouterLink class="avatar" :to="{ name: 'profile' }" :aria-label="`Profil de ${user.username}`">{{ badge }}</RouterLink>
+    <RouterLink class="avatar" :to="{ name: 'profile' }" :aria-label="$t('Profil de {name}', { name: user.username })">{{ $t(badge) }}</RouterLink>
     <div class="user-text">
       <RouterLink class="user-name" :to="{ name: 'profile' }">{{ name }}</RouterLink>
-      <p class="user-job">{{ roleLabel }}</p>
-      <button class="user-logout" type="button" @click="$emit('logout')">Se déconnecter</button>
+      <p class="user-job">{{ $t(roleLabel) }}</p>
+      <button class="user-logout" type="button" @click="$emit('logout')">{{ $t("Se déconnecter") }}</button>
     </div>
   </div>
 </template>

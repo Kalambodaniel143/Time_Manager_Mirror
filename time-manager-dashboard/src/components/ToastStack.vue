@@ -1,7 +1,7 @@
 <template>
   <div class="toast-stack" aria-live="polite">
     <TransitionGroup name="toast">
-      <div v-for="toast in toasts" :key="toast.id" class="toast" :class="`toast-${toast.tone}`">
+      <div v-for="toast in toasts" :key="toast.id" class="toast" :class="`toast-${toast.tone}`" :role="toast.tone === 'error' ? 'alert' : 'status'">
         <span class="toast-icon" aria-hidden="true">
           <svg v-if="toast.tone === 'error'" viewBox="0 0 16 16">
             <path d="M8 4.5v4M8 11h.01" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
@@ -10,8 +10,8 @@
             <path d="M4 8.5l2.5 2.5L12 5.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
           </svg>
         </span>
-        <span class="toast-message">{{ toast.message }}</span>
-        <button class="toast-close" type="button" aria-label="Fermer" @click="close(toast.id)">
+        <span class="toast-message">{{ $t(toast.message) }}</span>
+        <button class="toast-close" type="button" :aria-label="$t(&quot;Fermer&quot;)" @click="close(toast.id)">
           <svg viewBox="0 0 16 16" aria-hidden="true">
             <path d="M4.5 4.5l7 7M11.5 4.5l-7 7" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
           </svg>
@@ -86,6 +86,8 @@ export default {
 }
 
 .toast-message {
+  min-width: 0;
+  overflow-wrap: anywhere;
   font-size: 13.5px;
   line-height: 1.4;
 }

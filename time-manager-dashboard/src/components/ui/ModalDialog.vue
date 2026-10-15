@@ -1,5 +1,5 @@
 <template>
-  <Teleport to="body"><div class="overlay" @click.self="close"><section ref="dialog" class="dialog card" role="dialog" aria-modal="true" :aria-labelledby="id" tabindex="-1" @keydown="keydown"><header class="dialog-header"><h2 :id="id" class="card-title">{{ title }}</h2><button class="btn btn-quiet btn-icon" type="button" aria-label="Fermer" :disabled="busy" @click="close"><AppIcon name="close" /></button></header><div class="dialog-body"><slot /></div></section></div></Teleport>
+  <Teleport to="body"><div class="overlay" @click.self="close"><section ref="dialog" class="dialog card" role="dialog" aria-modal="true" :aria-labelledby="id" tabindex="-1" @keydown="keydown"><header class="dialog-header"><h2 :id="id" class="card-title">{{ $t(title) }}</h2><button class="btn btn-quiet btn-icon" type="button" :aria-label="$t(&quot;Fermer&quot;)" :disabled="busy" @click="close"><AppIcon name="close" /></button></header><div class="dialog-body"><slot /></div></section></div></Teleport>
 </template>
 <script>
 import AppIcon from './AppIcon.vue'

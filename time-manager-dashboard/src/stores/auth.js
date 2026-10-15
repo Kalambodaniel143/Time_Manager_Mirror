@@ -1,13 +1,17 @@
 import { reactive } from 'vue'
+import { announceSessionChange } from '../utils/sessionEvents'
 import * as authService from '../services/authService'
 import { AUTH_USE_MOCK, getSession, loginAccount, logoutAccount } from '../services/organizationService'
 
 // The JWT lives in an HttpOnly cookie: page scripts can never read it. The
 // front-end only keeps the CSRF token returned at login, in memory and in
-// sessionStorage (so it survives a page refresh, but not a closed tab). On its
+// sessionStorage. A new tab obtains its own copy from /auth/session. On its
 // own the token is useless: the API also needs the cookie, that only this
 // browser sends.
 const CSRF_KEY = 'tm-csrf'
+let sessionRevision = 0
+let pendingSession = null
+let logoutPending = false
 
 export const ROLE_LABELS = {
   employee: 'Employé',
@@ -45,6 +49,7 @@ function writeCsrf(token) {
 function startSession(session) {
   // Supprime l'ancien reçu privé partagé par tous les utilisateurs du navigateur.
   try { localStorage.removeItem('tm-last-join-receipt') } catch { /* Stockage indisponible. */ }
+  sessionRevision += 1
   if (session.csrf_token) writeCsrf(session.csrf_token)
   auth.organization = session.organization || null
   auth.user = { ...session.user, role: session.user.role === 'admin' ? 'administrator' : session.user.role }
@@ -54,7 +59,12 @@ function startSession(session) {
 
 // Keep real organization context separate from the local demo workspace.
 export function startOrganizationSession(session) {
-  if (!AUTH_USE_MOCK) { auth.organizationSession = null; return startSession(session) }
+  if (!AUTH_USE_MOCK) {
+    auth.organizationSession = null
+    const user = startSession(session)
+    announceSessionChange()
+    return user
+  }
   writeCsrf(null)
   auth.organization = session.organization
   auth.organizationSession = session
@@ -64,7 +74,9 @@ export function startOrganizationSession(session) {
 }
 
 export async function login(email, password) {
-  return startOrganizationSession(await loginAccount({ email, password }))
+  sessionRevision += 1
+  const user = startOrganizationSession(await loginAccount({ email, password }))
+  return user
 }
 
 export async function register(attrs) {
@@ -82,41 +94,55 @@ export async function resendVerification(email) {
   return authService.resendVerification(email)
 }
 
-// Asks the API who is logged in. Without a CSRF token there is no usable
-// session, so the call is skipped.
-export async function fetchMe() {
-  const requestedToken = auth.csrfToken
+// Restore from the shared HttpOnly cookie even when this tab has no CSRF yet.
+// Concurrent callers share one read; a stale read cannot undo login/logout.
+export async function fetchMe({ throwOnFailure = false } = {}) {
   if (AUTH_USE_MOCK) {
     try { return startOrganizationSession(await getSession()) }
     catch { clearSession(); return null }
   }
-
-  if (!auth.csrfToken) {
-    auth.checked = true
-    return null
+  if (logoutPending) return null
+  const revision = sessionRevision
+  if (!pendingSession || pendingSession.revision !== revision) {
+    pendingSession = { revision, promise: getSession() }
   }
-
+  const pending = pendingSession
   try {
-    startSession(await getSession())
-  } catch {
-    if (auth.csrfToken === requestedToken) clearSession()
+    const session = await pending.promise
+    if (revision === sessionRevision) startSession(session)
+  } catch (error) {
+    if (revision === sessionRevision) {
+      if (error.status === 401) clearSession()
+      else if (throwOnFailure) throw error
+    }
+  } finally {
+    if (pendingSession === pending) pendingSession = null
   }
-
   auth.checked = true
   return auth.user
 }
 
+// An unauthorized action is retried only if the API confirms the same user.
+export async function restoreForRequest(expectedUserId) {
+  await fetchMe({ throwOnFailure: true })
+  if (!auth.user) return 'expired'
+  return auth.user.id === expectedUserId ? 'restored' : 'changed'
+}
+
 export async function logout() {
-  const requestedToken = auth.csrfToken
-  try {
-    await logoutAccount()
-  } finally {
-    if (auth.csrfToken === requestedToken) clearSession()
+  logoutPending = true
+  const revision = ++sessionRevision
+  try { await logoutAccount() }
+  finally {
+    logoutPending = false
+    if (revision === sessionRevision) clearSession()
+    if (!AUTH_USE_MOCK) announceSessionChange()
   }
 }
 
 // Forgets the session locally (logout, or a 401 from the API).
 export function clearSession() {
+  sessionRevision += 1
   auth.organizationSession = null
   auth.organization = null
   auth.user = null

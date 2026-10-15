@@ -1,32 +1,36 @@
 <template>
   <div class="sidebar-shell">
-    <header class="mobile-header"><RouterLink class="brand" :to="homeRoute">Time Manager</RouterLink><ThemeToggle class="mobile-theme-controls" :model-value="theme" @update:model-value="$emit('update:theme', $event)" /><button class="btn btn-outline btn-sm" type="button" :aria-expanded="open" aria-controls="sidebar" @click="open = !open">{{ open ? 'Fermer' : 'Menu' }}</button></header>
-    <button v-if="open" class="menu-backdrop" type="button" aria-label="Fermer le menu" @click="open = false"></button>
+    <header class="mobile-header"><RouterLink class="brand" :to="homeRoute">{{ $t("Time Manager") }}</RouterLink><ThemeToggle class="mobile-theme-controls" :model-value="theme" @update:model-value="$emit('update:theme', $event)" /><button class="btn btn-outline btn-sm" type="button" :aria-expanded="open" aria-controls="sidebar" @click="open = !open">{{ $t(open ? 'Fermer' : 'Menu') }}</button></header>
+    <button v-if="open" class="menu-backdrop" type="button" :aria-label="$t(&quot;Fermer le menu&quot;)" @click="open = false"></button>
     <aside id="sidebar" class="sidebar" :class="{ 'is-open': open }" @keydown.esc="open = false">
-      <RouterLink class="brand" :to="homeRoute" @click="open = false">Time Manager</RouterLink>
-      <p class="space">{{ space }}</p>
-      <nav class="nav" aria-label="Navigation principale">
-        <RouterLink v-for="item in links" :key="item.label" class="nav-link" :to="item.to" active-class="is-active" @click="open = false"><AppIcon :name="item.icon" />{{ item.label }}</RouterLink>
+      <RouterLink class="brand" :to="homeRoute" @click="open = false">{{ $t("Time Manager") }}</RouterLink>
+      <p class="space">{{ space === 'Mon espace' ? $t('Mon espace') : space }}</p>
+      <nav class="nav" :aria-label="$t(&quot;Navigation principale&quot;)">
+        <RouterLink v-for="item in links" :key="item.label" class="nav-link" :to="item.to" active-class="is-active" @click="open = false"><AppIcon :name="item.icon" />{{ $t(item.label) }}<span v-if="item.to.name === 'notifications' && unreadCount" class="notification-badge" :aria-label="$t(`${unreadCount} notifications non lues`)">{{ $t(unreadCount > 99 ? '99+' : unreadCount) }}</span></RouterLink>
       </nav>
-      <div class="settings"><ThemeToggle :model-value="theme" @update:model-value="$emit('update:theme', $event)" /><slot /></div>
+      <div class="settings"><LanguageSelect /><ThemeToggle :model-value="theme" @update:model-value="$emit('update:theme', $event)" /><slot /></div>
     </aside>
-    <nav class="mobile-nav" aria-label="Navigation mobile">
-      <RouterLink v-for="item in mobileLinks" :key="item.label" :to="item.to" active-class="is-active" @click="open = false"><AppIcon :name="item.icon" /><span>{{ item.label }}</span></RouterLink>
+    <nav class="mobile-nav" :aria-label="$t(&quot;Navigation mobile&quot;)">
+      <RouterLink v-for="item in mobileLinks" :key="item.label" :to="item.to" active-class="is-active" @click="open = false"><AppIcon :name="item.icon" /><span>{{ $t(item.label) }}</span><span v-if="item.to.name === 'notifications' && unreadCount" class="notification-badge">{{ $t(unreadCount > 99 ? '99+' : unreadCount) }}</span></RouterLink>
     </nav>
   </div>
 </template>
 <script>
+import LanguageSelect from '../ui/LanguageSelect.vue'
 import { RouterLink } from 'vue-router'
 import ThemeToggle from '../ui/ThemeToggle.vue'
 import AppIcon from '../ui/AppIcon.vue'
+import { workforce } from '../../services/workforceService'
 export default {
-  name: 'AppSidebar', components: { ThemeToggle, AppIcon, RouterLink },
+  name: 'AppSidebar', components: { LanguageSelect, ThemeToggle, AppIcon, RouterLink },
   props: { demo: Boolean, organizationAccess: { type: Boolean, default: false }, role: { type: String, required: true }, theme: { type: String, required: true }, space: { type: String, required: true }, userId: { type: [Number, String], default: null } },
   emits: ['update:theme'],
   data() { return { open: false } },
   watch: { '$route.fullPath'() { this.open = false } },
   computed: {
+    unreadCount() { return workforce.unreadCount },
     accountLink() { return { label: 'Mon compte', icon: 'users', to: { name: 'profile' } } },
+    helpLink() { return { label: 'Aide et FAQ', icon: 'help', to: { name: 'help' } } },
     hoursLink() { return { label: 'Mes heures', icon: 'clock', to: this.userId ? { name: 'workingTimes', params: { userID: this.userId } } : { name: 'overview' } } },
     primaryLinks() {
       if (this.role === 'manager') return [{ label: 'Mon équipe', icon: 'users', to: { name: 'team' } }, { label: 'Planning d’équipe', icon: 'calendar', to: { name: 'teamPlanning' } }]
@@ -36,17 +40,20 @@ export default {
     links() {
       const extra = this.role === 'administrator' ? [
         { label: 'Paie du mois', icon: 'check-circle', to: { name: 'payroll' } },
-        ...(!this.demo ? [...(this.organizationAccess ? [{ label: 'Utilisateurs et rôles', icon: 'shield', to: { name: 'adminUsers' } }] : []), { label: 'Équipes', icon: 'users', to: { name: 'adminTeams' } }, { label: 'Vue des heures', icon: 'clock', to: { name: 'team' } }] : []),
+        ...(!this.demo ? [...(this.organizationAccess ? [{ label: 'Utilisateurs et rôles', icon: 'shield', to: { name: 'adminUsers' } }] : []), { label: 'Équipes', icon: 'users', to: { name: 'adminTeams' } }, { label: 'Vue des heures', icon: 'clock', to: { name: 'team' } }, { label: 'Planning d’équipe', icon: 'calendar', to: { name: 'teamPlanning' } }] : []),
       ] : this.role === 'manager' && !this.demo ? [{ label: 'Mes équipes', icon: 'users', to: { name: 'adminTeams' } }] : []
       if (this.role !== 'employee' && this.userId) extra.push({ label: 'Mon pointage', icon: 'clock', to: { name: 'clock', params: { userid: this.userId } } }, this.hoursLink)
-      return [...this.primaryLinks, ...extra, ...(!this.demo ? [{ label: 'Notifications', icon: 'message', to: { name: 'notifications' } }] : []), this.accountLink]
+      return [...this.primaryLinks, ...extra, ...(!this.demo ? [{ label: 'Notifications', icon: 'message', to: { name: 'notifications' } }] : []), this.accountLink, this.helpLink]
     },
-    mobileLinks() { return [...this.primaryLinks, this.accountLink] },
+    mobileLinks() { return [...this.primaryLinks, ...(!this.demo ? [{ label: 'Notifications', icon: 'message', to: { name: 'notifications' } }] : []), this.accountLink] },
     homeRoute() { return this.primaryLinks[0].to },
   },
 }
 </script>
 <style scoped>
+.notification-badge { display: inline-flex; align-items: center; justify-content: center; min-width: 22px; padding: 2px 5px; border-radius: 999px; background: var(--brand); color: var(--on-brand); font-size: 11px; font-weight: 700; margin-left: auto; }
+.mobile-nav a { position: relative; }
+.mobile-nav .notification-badge { position: absolute; right: 8px; top: -5px; }
 .sidebar { position: sticky; top: 0; display: flex; flex-direction: column; min-height: 100vh; padding: 32px 18px 24px; background: var(--side-bg); color: var(--side-ink); }
 .brand { font-size: 21px; font-weight: 700; letter-spacing: -.04em; color: inherit; text-decoration: none; }
 .space { margin: 22px 10px 30px; font-size: 12px; color: var(--side-muted); overflow-wrap: anywhere; }
@@ -55,7 +62,7 @@ export default {
 .nav-link svg { width: 18px; height: 18px; flex-shrink: 0; }
 .nav-link:hover { background: var(--side-well); }
 .nav-link.is-active { background: var(--side-active-bg); color: var(--side-active-ink); }
-.settings { margin-top: auto; padding: 32px 0 0; }
+.settings { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; margin-top: auto; padding: 32px 0 0; }
 .mobile-header, .mobile-nav, .menu-backdrop { display: none; }
 @media (max-width: 900px) {
  .mobile-header { display: flex; align-items: center; justify-content: space-between; padding: 15px 16px; background: var(--surface); border-bottom: 1px solid var(--border); color: var(--title); }

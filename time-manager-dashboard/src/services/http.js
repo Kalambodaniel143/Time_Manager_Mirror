@@ -1,4 +1,5 @@
 import { API_URL, MOCK_LATENCY } from '../config'
+import { apiErrorMessage } from '../utils/apiErrors'
 
 export class ApiError extends Error {
   constructor(status, payload) {
@@ -9,20 +10,7 @@ export class ApiError extends Error {
   }
 
   static buildMessage(status, payload) {
-    const errors = payload && payload.errors
-
-    if (errors && typeof errors === 'object' && !errors.detail) {
-      const details = Object.entries(errors)
-        .map(([field, messages]) => `${field} ${[].concat(messages).join(', ')}`)
-        .join(' · ')
-
-      if (details) return details
-    }
-
-    if (status === 403) return 'Accès refusé'
-    if (errors && errors.detail) return errors.detail
-
-    return `Erreur ${status}`
+    return apiErrorMessage(status, payload)
   }
 }
 
@@ -30,38 +18,61 @@ export class ApiError extends Error {
 // do when the session is no longer valid. Kept as hooks to avoid import cycles.
 let csrfTokenProvider = () => null
 let unauthorizedHandler = () => {}
+let restoreHandler = null
+let sessionIdentity = () => null
 
-export function configureHttp({ csrfToken, onUnauthorized }) {
+export function configureHttp({ csrfToken, onUnauthorized, restoreSession, currentUser }) {
   if (csrfToken) csrfTokenProvider = csrfToken
   if (onUnauthorized) unauthorizedHandler = onUnauthorized
+  if (restoreSession) restoreHandler = restoreSession
+  if (currentUser) sessionIdentity = currentUser
 }
 
 export async function request(path, options = {}) {
+  const expectedUserId = sessionIdentity()
   const headers = { 'Content-Type': 'application/json', ...options.headers }
   const csrfToken = csrfTokenProvider()
   if (csrfToken) headers['X-CSRF-Token'] = csrfToken
 
-  const response = await fetch(`${API_URL}${path}`, {
+  let response
+  try { response = await fetch(`${API_URL}${path}`, {
     ...options,
     headers,
     // Sends the HttpOnly jwt cookie. The API is served under the same origin
     // (/api, through the Nginx or Vite proxy), so no CORS setup is needed.
     credentials: 'same-origin',
-  })
+  }) } catch (error) { if (error.name === 'AbortError') throw error; throw new ApiError(0, null) }
 
   // Une réponse de l'ancien compte ne doit ni remplir l'écran ni déconnecter le nouveau.
   const checkSession = () => {
-    if (csrfToken !== csrfTokenProvider()) throw new ApiError(409, { errors: { detail: 'Le compte a changé. Recommencez cette action.' } })
+    if (csrfToken === csrfTokenProvider()) return false
+    if (response.status === 401 && expectedUserId && expectedUserId === sessionIdentity() &&
+        !options.skipSessionRecovery && !options.sessionRecoveryAttempted) return true
+    throw new ApiError(409, { errors: { detail: 'Le compte a changé. Recommencez cette action.' } })
   }
-  checkSession()
+  if (checkSession()) return request(path, { ...options, sessionRecoveryAttempted: true })
   if (response.status === 204) return null
 
-  if (response.ok && options.responseType === 'text') { const text = await response.text(); checkSession(); return text }
+  if (response.ok && options.responseType === 'text') {
+    const text = await response.text()
+    checkSession()
+    return text
+  }
 
   const payload = await response.json().catch(() => null)
 
-  checkSession()
-  if (response.status === 401 && !options.skipUnauthorizedHandler) unauthorizedHandler()
+  if (checkSession()) return request(path, { ...options, sessionRecoveryAttempted: true })
+  if (response.status === 401 && !options.skipUnauthorizedHandler) {
+    if (restoreHandler && expectedUserId && !options.skipSessionRecovery && !options.sessionRecoveryAttempted) {
+      const outcome = await restoreHandler(expectedUserId)
+      if (outcome === 'restored') return request(path, { ...options, sessionRecoveryAttempted: true })
+      if (outcome === 'changed') throw new ApiError(409, { errors: { detail: 'Le compte connecté a changé dans un autre onglet. Vérifiez le compte affiché avant de reprendre cette action.' } })
+    }
+    if (expectedUserId && sessionIdentity() && expectedUserId !== sessionIdentity()) {
+      throw new ApiError(409, { errors: { detail: 'Le compte connecté a changé dans un autre onglet. Vérifiez le compte affiché avant de reprendre cette action.' } })
+    }
+    unauthorizedHandler(expectedUserId)
+  }
   if (!response.ok) throw new ApiError(response.status, payload)
 
   const data = payload ? payload.data : null
