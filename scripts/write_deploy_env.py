@@ -7,7 +7,7 @@ import sys
 
 REQUIRED = (
     "DOCKER_USERNAME", "IMAGE_TAG", "PGUSER", "PGPASSWORD", "PGDATABASE",
-    "DATABASE_URL", "JWT_SECRET", "SECRET_KEY_BASE", "PHX_HOST", "TLS_CERT_DIR",
+    "DATABASE_URL", "JWT_SECRET", "SECRET_KEY_BASE", "PHX_HOST",
     "RESEND_API_KEY", "RESEND_FROM",
 )
 
@@ -21,7 +21,7 @@ def write_environment(destination):
         raise ValueError("DOCKER_USERNAME invalide")
     if not re.fullmatch(r"[0-9a-f]{40}", values["IMAGE_TAG"]):
         raise ValueError("IMAGE_TAG doit être le SHA du commit validé")
-    for key in ("HTTPS_PORT", "ADMIN_EMAIL", "ADMIN_PASSWORD"):
+    for key in ("PUBLIC_PORT", "ADMIN_EMAIL", "ADMIN_PASSWORD"):
         value = os.environ.get(key, "")
         if "\n" in value or "\r" in value:
             raise ValueError(f"{key} doit tenir sur une seule ligne")

@@ -11,7 +11,7 @@ export default defineConfig(({ mode, command }) => {
     throw new Error('Une version compilée ne peut pas activer les données simulées.')
   }
   if (command === 'build' && env.VITE_API_URL && env.VITE_API_URL !== '/api') {
-    throw new Error('La version serveur utilise exclusivement /api sur la même origine HTTPS.')
+    throw new Error('La version serveur utilise exclusivement /api sur la même origine.')
   }
   const backend = env.VITE_BACKEND_URL || 'http://localhost:4000'
 
