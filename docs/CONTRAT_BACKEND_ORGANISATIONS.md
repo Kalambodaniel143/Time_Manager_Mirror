@@ -832,3 +832,13 @@ Après acceptation réelle, main envoie les identifiants choisis par l’adminis
 Conserver la migration `20261013100000_add_join_request_email_verification.exs` de main et appliquer aussi `allow_join_request_verification_without_user` : une vérification d’adhésion appartient à une demande, avant qu’un utilisateur n’existe. `email_verifications.user_id` doit donc pouvoir être null ; la contrainte exige toujours exactement un propriétaire (user_id ou join_request_id). Cette correction est additive et ne supprime aucune vérification.
 
 La configuration `.travis.yml` est restaurée à l’identique de main, conformément à la règle du projet. Les scripts et tests locaux restent disponibles.
+
+## 16. Restauration entre onglets et traductions — 15 octobre 2026
+
+GET `/api/auth/session` renvoie désormais `csrf_token` dans `data`, en plus de role/user/organization. La requête accepte soit les en-têtes habituels (cookie JWT + X-CSRF-Token), soit le cookie JWT avec **X-Session-Restore: 1**, exclusivement en lecture seule. Le JWT reste HttpOnly. Aucun nouveau JWT/cookie n’est émis pour cette restauration ; tous les onglets récupèrent le CSRF de la même session. La réponse est `Cache-Control: no-store`, avec `Vary: Cookie`. Le JWT signé, sa durée de validité, sa révocation, l’utilisateur et session_version sont toujours contrôlés. La route ne doit pas autoriser un accès CORS depuis une origine tierce ; les métadonnées Fetch cross-origin sont refusées.
+
+Les autres routes, y compris GET métier, gardent le CSRF obligatoire. La restauration n’autorise aucune écriture. Le frontend peut reprendre une requête `401` **une seule fois**, après confirmation du même utilisateur. Si un autre compte a remplacé le cookie, la requête n’est pas rejouée ; un message explique le changement. Une session expirée/révoquée déconnecte normalement.
+
+BroadcastChannel/storage ne transportent qu’un signal de relecture : aucun JWT, CSRF, mot de passe ou profil. Le CSRF reste dans la mémoire/sessionStorage de chaque onglet. Connexion, déconnexion et retour au premier plan actualisent la session. Le code garde une seule identité partagée par profil de navigateur.
+
+Le frontend traduit les libellés avant d’ajouter noms/dates et utilise des paramètres pour les titres de semaine, de paie et d’accessibilité. Ces corrections ne traduisent pas les textes libres des utilisateurs. Aucune migration supplémentaire n’est nécessaire ; déployer ensemble le nouveau backend (retour du CSRF et en-tête de restauration) et le frontend. Travis reste inchangé.

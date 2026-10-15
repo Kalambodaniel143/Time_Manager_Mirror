@@ -5,7 +5,7 @@ import { createServer } from 'vite'
 let server, auth
 const originalFetch = globalThis.fetch
 const user = { id: 14, first_name: 'Sara', last_name: 'Martin', username: 'sara@example.com', email: 'sara@example.com', organization_id: 'org-123', role: 'employee' }
-const session = { role: 'employee', user, organization: { id: 'org-123', name: 'Gotham City' } }
+const session = { csrf_token: 'csrf-token', role: 'employee', user, organization: { id: 'org-123', name: 'Gotham City' } }
 
 before(async () => {
   server = await createServer({ configFile: false, server: { middlewareMode: true, hmr: false }, appType: 'custom', define: { 'import.meta.env.VITE_AUTH_USE_MOCK': JSON.stringify('false') } })
@@ -70,7 +70,7 @@ test('administrator responses map to the super-administrator interface; other or
 test('missing Gotham never submits an application; malformed sessions and API failures remain visible', async () => {
   globalThis.fetch = async url => { assert.equal(url, '/api/organizations/lookup?name=Gotham%20City'); return { ok: false, status: 404, json: async () => ({ errors: { detail: 'Not found' } }) } }
   await assert.rejects(auth.joinOrganization({ profile: {} }), /pas encore configurée/)
-  expectRequest('/auth/login', 'POST', { email: user.email, password: 'Lantern8' }, session)
+  expectRequest('/auth/login', 'POST', { email: user.email, password: 'Lantern8' }, { ...session, csrf_token: undefined })
   await assert.rejects(auth.loginAccount({ email: user.email, password: 'Lantern8' }), /CSRF absent/)
   expectRequest('/auth/session', 'GET', undefined, { ...session, role: 'admin' })
   await assert.rejects(auth.getSession(), /Réponse de session invalide/)

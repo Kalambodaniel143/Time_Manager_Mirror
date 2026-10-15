@@ -32,7 +32,7 @@
                   class="input select"
                   :value="user.role"
                   :disabled="user.id === me.id || busy === user.id"
-                  :aria-label="$t(`Rôle de ${user.username}`)"
+                  :aria-label="$t('Rôle de {name}', { name: user.username })"
                   @change="changeRole(user, $event.target.value)"
                 >
                   <option v-for="role in roles" :key="role" :value="role">{{ $t(labels[role]) }}</option>

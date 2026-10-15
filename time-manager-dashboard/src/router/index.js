@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import Notifications from '../views/Notifications.vue'
 import LoginScreen from '../views/LoginScreen.vue'
+import HelpFaq from '../views/HelpFaq.vue'
 import OrganizationAdmin from '../views/OrganizationAdmin.vue'
 import ChartManager from '../components/ChartManager.vue'
 import ClockManager from '../components/ClockManager.vue'
@@ -8,7 +9,7 @@ import Profile from '../components/Profile.vue'
 import WorkingTime from '../components/WorkingTime.vue'
 import WorkingTimes from '../components/WorkingTimes.vue'
 import { configureHttp } from '../services/http'
-import { auth, clearSession, fetchMe, hasRole, isSelf } from '../stores/auth'
+import { auth, clearSession, fetchMe, hasRole, isSelf, restoreForRequest } from '../stores/auth'
 import { notify } from '../utils/toast'
 import { homeFor } from '../utils/session'
 import AdminTeams from '../views/AdminTeams.vue'
@@ -29,6 +30,7 @@ const ADMINS = ['administrator']
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
+    { path: '/aide', name: 'help', component: HelpFaq, meta: { public: true, help: true } },
     { path: '/connexion', name: 'login', component: LoginScreen, meta: { public: true } },
     { path: '/inscription', name: 'register', component: LoginScreen, props: { initialMode: 'join' }, meta: { public: true } },
     { path: '/notifications', name: 'notifications', component: Notifications, meta: { roles: EVERYONE } },
@@ -89,8 +91,10 @@ const router = createRouter({
 // Every API call carries the CSRF token; a 401 means the session is gone.
 configureHttp({
   csrfToken: () => auth.csrfToken,
-  onUnauthorized: () => {
-    if (!auth.user || auth.organizationSession) return
+  currentUser: () => auth.user?.id,
+  restoreSession: restoreForRequest,
+  onUnauthorized: (expectedUserId) => {
+    if ((!auth.user && !expectedUserId) || auth.organizationSession) return
 
     clearSession()
     notify('Votre session a expiré. Reconnectez-vous.', 'error')
@@ -115,7 +119,7 @@ router.beforeEach(async (to) => {
 
   const user = auth.user
 
-  if (to.meta.public) return user ? sessionHome(user.role) : true
+  if (to.meta.public) return user && !to.meta.help ? sessionHome(user.role) : true
   if (!user) return { name: 'login', query: to.fullPath === '/' ? {} : { redirect: to.fullPath } }
 
   // The home page of each space.

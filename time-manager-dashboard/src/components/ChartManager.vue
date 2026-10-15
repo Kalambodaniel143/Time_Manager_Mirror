@@ -27,7 +27,7 @@
       </div>
 
       <p class="card-subtitle">{{ hours(total) }} {{ $t("enregistrées") }}</p>
-      <div class="chart-placeholder" role="img" :aria-label="$t(`${activeLabel} : ${days.map(day => `${label(day.date)} ${hours(day.hours)}`).join(', ')}`)">
+      <div class="chart-placeholder" role="img" :aria-label="`${$t(activeLabel)} : ${days.map(day => `${label(day.date)} ${hours(day.hours)}`).join(', ')}`">
         <svg v-if="activeChart === 'bar'" viewBox="0 0 320 140" preserveAspectRatio="none">
           <rect
             v-for="(height, index) in barHeights"

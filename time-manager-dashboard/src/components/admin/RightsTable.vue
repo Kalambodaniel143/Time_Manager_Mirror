@@ -23,7 +23,7 @@
                 type="checkbox"
                 :checked="right[column.key]"
                 :disabled="loading || busy === right.id"
-                :aria-label="$t(`${right.name} : ${column.label}`)"
+                :aria-label="`${right.name} : ${$t(column.label)}`"
                 @change="setRight(right.id, column.key, $event.target.checked)"
               />
               <span class="right-state">{{ $t(right[column.key] ? 'Autorisé' : 'Non autorisé') }}</span>

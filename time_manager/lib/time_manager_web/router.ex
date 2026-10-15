@@ -15,6 +15,10 @@ defmodule TimeManagerWeb.Router do
     plug TimeManagerWeb.Plugs.Authenticate
   end
 
+  pipeline :session_restore do
+    plug TimeManagerWeb.Plugs.Authenticate, session_restore: true
+  end
+
   # Public routes: the only ones reachable without a session. Each one is
   # rate-limited in its controller.
   scope "/api", TimeManagerWeb do
@@ -36,10 +40,14 @@ defmodule TimeManagerWeb.Router do
   end
 
   scope "/api", TimeManagerWeb do
+    pipe_through [:api, :session_restore]
+    get "/auth/session", AuthController, :session
+  end
+
+  scope "/api", TimeManagerWeb do
     pipe_through [:api, :auth]
 
     get "/auth/me", AuthController, :me
-    get "/auth/session", AuthController, :session
     post "/auth/logout", AuthController, :logout
 
     # Administrators of :org_id only (checked against the session, not the URL).

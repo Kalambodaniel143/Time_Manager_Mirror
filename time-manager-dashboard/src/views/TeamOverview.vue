@@ -1,6 +1,6 @@
 <template>
   <div class="team">
-    <PageHeader :eyebrow="$t(`Semaine ${weekNumber} · ${rangeLabel}`)" :title="$t(teamName)">
+    <PageHeader :eyebrow="$t('Semaine {week} · {range}', { week: weekNumber, range: rangeLabel })" :title="!demo && !selectedTeamId ? $t(teamName) : teamName">
       <button class="btn btn-outline" type="button" :disabled="loading" @click="loadTeam">
         {{ $t(loading ? 'Actualisation…' : 'Actualiser') }}
       </button>
@@ -30,8 +30,8 @@
           v-for="row in departureAlerts"
           :key="`departure-${row.username}`"
           class="departure-alert"
-          :title="$t(`${row.short} : départ à vérifier`)"
-          :text="$t(`Service commencé le ${arrivalLabel(row)}. Aucun départ enregistré depuis plus de 24 heures.`)"
+          :title="$t('{name} : départ à vérifier', { name: row.short })"
+          :text="$t('Service commencé le {date}. Aucun départ enregistré depuis plus de 24 heures.', { date: arrivalLabel(row) })"
         >
           <a v-if="departureMail(row)" class="btn btn-outline btn-sm" :href="departureMail(row)"> {{ $t("Demander l’heure à") }} {{ row.name.split(' ')[0] }}
           </a>
@@ -113,7 +113,7 @@ export default {
       sheets: {}, validationBusy: false,
       teams: [],
       selectedTeamId: null,
-      teamName: team().name,
+      teamName: isDemoData() ? team().name : 'Mon équipe',
       entries: {},
       monthEntries: {},
       users: {},

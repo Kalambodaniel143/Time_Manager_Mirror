@@ -71,6 +71,7 @@
         </form>
 
         <button v-if="mode !== 'status'" class="link follow-link" type="button" :disabled="busy" @click="changeMode('status')">{{ $t("Suivre ma demande") }}</button>
+        <RouterLink class="link follow-link" :to="{ name: 'help' }">{{ $t('Aide et FAQ') }}</RouterLink>
 
         <p v-if="mock" class="field-hint">{{ $t("Simulation locale : les comptes et demandes restent dans ce navigateur. Aucun email n’est envoyé.") }}</p>
       </div>
@@ -79,6 +80,7 @@
 </template>
 
 <script>
+import { RouterLink } from 'vue-router'
 import LanguageSelect from '../components/ui/LanguageSelect.vue'
 import ThemeToggle from '../components/ui/ThemeToggle.vue'
 import AppIcon from '../components/ui/AppIcon.vue'
@@ -94,7 +96,7 @@ const RECEIPT_KEY = 'tm-last-join-receipt'
 
 export default {
   name: 'LoginScreen',
-  components: { LanguageSelect, PasswordRecovery, ThemeToggle, AppIcon, InfoNote, ProfileFields },
+  components: { RouterLink, LanguageSelect, PasswordRecovery, ThemeToggle, AppIcon, InfoNote, ProfileFields },
   props: { theme: { type: String, required: true }, initialMode: { type: String, default: 'login' } },
   emits: ['login', 'update:theme'],
   data() {

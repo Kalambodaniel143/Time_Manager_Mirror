@@ -1,5 +1,5 @@
 <template>
-  <RouterView v-if="!user || $route.meta.public" v-slot="{ Component }">
+  <RouterView v-if="!user || ($route.meta.public && !$route.meta.help)" v-slot="{ Component }">
     <component :is="Component" v-if="Component && $route.meta.public" v-bind="publicBindings" />
   </RouterView>
 
@@ -24,7 +24,7 @@
         @tour="openTour"
       />
       <RouterView v-slot="{ Component }">
-        <component :is="Component" v-if="Component" :ref="routeRef" :key="$route.path" v-bind="routeBindings" />
+        <component :is="Component" v-if="Component" :ref="routeRef" :key="`${userId}:${$route.path}`" v-bind="routeBindings" />
       </RouterView>
     </main>
 
@@ -45,6 +45,7 @@ import AppSidebar from './components/layout/AppSidebar.vue'
 import OnboardingTour from './components/ui/OnboardingTour.vue'
 import { personaFor } from './services/orgService'
 import { getWorkingTimes } from './services/workingTimeService'
+import { listenForSessionChanges } from './utils/sessionEvents'
 import { auth, logout, clearSession, fetchMe, startOrganizationSession } from './stores/auth'
 import { notify } from './utils/toast'
 import SpeechControls from './components/workforce/SpeechControls.vue'
@@ -93,6 +94,7 @@ export default {
     citySession() { return auth.organizationSession || (auth.organization ? { organization: auth.organization, user: auth.user, role: auth.user?.role === 'administrator' ? 'admin' : auth.user?.role } : null) },
 
     publicBindings() {
+      if (this.$route.meta.help) return { standalone: true, theme: this.theme, 'onUpdate:theme': this.setTheme }
       return { theme: this.theme, onLogin: this.loginOrganization, 'onUpdate:theme': this.setTheme }
     },
 
@@ -170,7 +172,10 @@ export default {
   watch: {
     userId: {
       immediate: true,
-      handler(id) {
+      handler(id, previous) {
+        if (id !== previous) {
+          clearWorkforce(); stopReading(); this.workingTimes = []; this.currentUser = null
+        }
         this.loadStats()
         this.refreshNotificationBadge()
         // The theme may have been picked on the login page.
@@ -185,6 +190,7 @@ export default {
   created() { applyStrongText(readStrongText()) },
 
   mounted() {
+    this.stopSessionSync = listenForSessionChanges(this.refreshOrganizationSession)
     window.addEventListener('focus', this.refreshOrganizationSession)
     this.notificationsClock = setInterval(this.refreshNotificationBadge, 30000)
     this.clock = setInterval(() => {
@@ -193,6 +199,7 @@ export default {
   },
 
   beforeUnmount() {
+    this.stopSessionSync?.()
     window.removeEventListener('focus', this.refreshOrganizationSession)
     clearInterval(this.clock)
     clearInterval(this.notificationsClock)
@@ -205,12 +212,19 @@ export default {
       catch { /* The page displays workforce.error; existing account actions stay usable. */ }
     },
     async refreshOrganizationSession() {
-      if (!this.citySession) return
-      await fetchMe()
+      if (this.organizationSession) return
+      const previousId = this.user?.id
+      try { await fetchMe({ throwOnFailure: true }) }
+      catch (error) { notify(error.message, 'error'); return }
+      if (previousId && this.user && previousId !== this.user.id) {
+        notify('Le compte connecté a changé dans un autre onglet. Vérifiez le compte affiché avant de reprendre cette action.', 'error')
+        this.$router.push({ name: this.user.role === 'administrator' ? (this.citySession ? 'organization' : 'adminUsers') : this.user.role === 'manager' ? 'team' : 'overview' })
+        return
+      }
       this.refreshNotificationBadge()
-      if (!this.user) this.$router.push({ name: 'login' })
-      else if (this.$route.meta.roles && !this.$route.meta.roles.includes(this.user.role)) {
-        this.$router.push({ name: this.user.role === 'administrator' ? 'organization' : this.user.role === 'manager' ? 'team' : 'overview' })
+      if (!this.user) { if (!this.$route.meta.public) this.$router.push({ name: 'login' }) }
+      else if ((this.$route.meta.public && !this.$route.meta.help) || (this.$route.meta.roles && !this.$route.meta.roles.includes(this.user.role))) {
+        this.$router.push({ name: this.user.role === 'administrator' ? (this.citySession ? 'organization' : 'adminUsers') : this.user.role === 'manager' ? 'team' : 'overview' })
       }
     },
 

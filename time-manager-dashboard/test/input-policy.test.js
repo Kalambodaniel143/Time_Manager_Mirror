@@ -2,8 +2,10 @@ import assert from 'node:assert/strict'
 import { before, after, test } from 'node:test'
 import { createServer } from 'vite'
 import vue from '@vitejs/plugin-vue'
+import { createSSRApp, h } from 'vue'
+import { renderToString } from '@vue/server-renderer'
 
-let server, registration, errors, locale, recovery, workforce, store, AdminTeams, LoginScreen
+let server, registration, errors, locale, recovery, workforce, store, AdminTeams, LoginScreen, EmployeeToday
 const originalFetch = globalThis.fetch
 before(async () => {
   server = await createServer({ configFile: false, plugins: [vue()], server: { middlewareMode: true, hmr: false }, appType: 'custom', define: { 'import.meta.env.VITE_AUTH_USE_MOCK': '"false"', 'import.meta.env.VITE_USE_MOCK': '"false"' } })
@@ -13,6 +15,7 @@ before(async () => {
   recovery = await server.ssrLoadModule('/src/services/passwordRecoveryService.js')
   workforce = await server.ssrLoadModule('/src/services/workforceService.js')
   store = await server.ssrLoadModule('/src/stores/auth.js')
+  EmployeeToday = (await server.ssrLoadModule('/src/views/EmployeeToday.vue')).default
   LoginScreen = (await server.ssrLoadModule('/src/views/LoginScreen.vue')).default
   AdminTeams = (await server.ssrLoadModule('/src/views/AdminTeams.vue')).default
 })
@@ -101,4 +104,19 @@ test('real admission keeps the tracking receipt and submits the email verificati
   assert.equal(instance.mode,'login')
   assert.equal(calls.filter(url=>url==='/api/join-requests').length,1)
   assert.equal(calls.at(-1),'/api/join-requests/verify-email')
+})
+
+test('employee home translates dynamic greetings and last-week headings while preserving the employee name', async () => {
+  const hidden = {render:()=>null}
+  const components=Object.fromEntries(Object.keys(EmployeeToday.components).map(key=>[key,hidden]))
+  components.PageHeader={props:['title','eyebrow'],render(){return h('h1',this.title)}}
+  components.LastWeekCard={props:['title'],render(){return h('h2',this.title)}}
+  const props={persona:{name:'Éléonore Martin'},userId:14,now:new Date(2026,9,15,1,0,0)}
+  locale.setLocale('en')
+  const english=await renderToString(createSSRApp({...EmployeeToday,components},props).use(locale.i18n))
+  assert.match(english,/Good night Éléonore/);assert.match(english,/Last week/)
+  assert.doesNotMatch(english,/Bonne nuit|Semaine dernière/)
+  locale.setLocale('fr')
+  const french=await renderToString(createSSRApp({...EmployeeToday,components},props).use(locale.i18n))
+  assert.match(french,/Bonne nuit Éléonore/);assert.match(french,/Semaine dernière/)
 })
