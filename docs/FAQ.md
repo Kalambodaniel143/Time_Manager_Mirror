@@ -1,0 +1,85 @@
+# Aide et FAQ — Time Manager
+
+Cette FAQ accompagne les agents, managers et administrateurs de Gotham City. Elle décrit les fonctionnalités actuelles et distingue les actions du logiciel des décisions des responsables et des RH.
+
+La page `/aide` est accessible depuis la connexion et depuis le menu de tous les rôles. Elle existe en français et en anglais.
+
+## Compte et connexion
+
+### Comment rejoindre Gotham City ?
+
+Depuis la connexion, choisissez « Rejoindre Gotham City » et remplissez le formulaire. En mode réel, vérifiez votre email avec le code reçu. Le super administrateur examine ensuite la demande ; elle ne crée pas immédiatement un compte actif.
+
+### Qui fournit mon premier mot de passe ?
+
+Le super administrateur définit votre premier mot de passe après acceptation. Vous pouvez ensuite le modifier dans « Mon compte ». Ne partagez pas votre mot de passe avec vos collègues.
+
+### Que faire si j’ai oublié mon mot de passe ?
+
+Sur la page de connexion, choisissez « Mot de passe oublié ? ». Suivez la procédure par email et saisissez le code reçu. Vérifiez aussi vos courriers indésirables. Si le message n’arrive pas, contactez votre administrateur ; en simulation locale, aucun email n’est envoyé.
+
+### Puis-je ouvrir plusieurs onglets ?
+
+Oui, les onglets d’un même navigateur peuvent utiliser le même compte. Une déconnexion concerne également les autres onglets. Pour utiliser deux comptes indépendants, ouvrez des profils de navigateur distincts : les onglets d’un même profil partagent le cookie de connexion.
+
+## Pointage et corrections
+
+### Comment enregistrer ma journée ?
+
+Utilisez le pointage pour enregistrer votre arrivée et votre départ. Pour une pause, utilisez « Prendre une pause », puis la reprise. Les pauses enregistrées sont exclues des heures travaillées. Consultez ensuite « Mes heures » pour vérifier vos périodes.
+
+### J’ai oublié de pointer mon départ : que faire ?
+
+Dans « Mes heures », utilisez l’action permettant de compléter un départ oublié et indiquez l’heure réelle. Si l’action n’est pas disponible ou si la période est verrouillée, contactez votre responsable. Ne créez pas une seconde journée pour contourner le problème.
+
+### Comment corriger des heures incorrectes ?
+
+Depuis « Mes heures », proposez une correction avec les horaires souhaités et une explication. La demande ne modifie pas immédiatement vos heures : un autre responsable autorisé doit l’examiner. Vous ne pouvez pas approuver votre propre demande.
+
+### Les heures affichées constituent-elles ma fiche de paie ?
+
+Non. Les périodes et le récapitulatif de paie servent à vérifier les heures enregistrées et leur classement selon les règles configurées. Ils ne remplacent pas une fiche de paie officielle. Signalez toute différence à votre responsable ou au service RH/comptabilité.
+
+## Données et confidentialité
+
+### L’application surveille-t-elle mon ordinateur ou ma position ?
+
+Le pointage de Time Manager enregistre vos horaires ; il ne mesure pas votre activité sur l’ordinateur, les sites consultés ou votre position GPS. Un nombre d’heures ne suffit pas, à lui seul, à mesurer la qualité ou la productivité de votre travail.
+
+### Qui peut consulter mes heures ?
+
+Vous pouvez consulter vos propres heures. Les managers autorisés accèdent aux données des membres de leurs équipes ; les administrateurs disposent d’un périmètre plus large dans leur organisation. Les droits sont contrôlés par le serveur. Pour connaître les responsables précis de votre service, contactez votre administrateur.
+
+### Puis-je supprimer mon compte ?
+
+L’action de suppression se trouve dans « Mon compte » et demande une confirmation avec votre mot de passe actuel. Le dernier super administrateur est protégé contre la suppression. Avant de confirmer, lisez les conséquences affichées et contactez les RH si vous devez conserver un justificatif de vos heures.
+
+## Planning et responsabilités
+
+### Que faire si mon planning change ou si les nuits sont mal réparties ?
+
+Consultez le planning publié et les notifications. Signalez à votre manager les changements tardifs, les nuits répétées ou les contraintes personnelles. L’application peut afficher des alertes selon les règles configurées ; le responsable reste chargé d’organiser les horaires et de traiter les difficultés.
+
+### Comment comptabiliser les déplacements, pauses ou heures atypiques ?
+
+Demandez au responsable ou aux RH les règles applicables à votre situation. Le logiciel ne décide pas si un déplacement, une attente ou un repas doit être rémunéré. Faites clarifier les consignes et signalez une période incorrecte au lieu d’inventer une règle de pointage.
+
+## Accessibilité et assistance
+
+### Je n’ai pas d’ordinateur au travail : comment faire ?
+
+L’interface s’adapte aux téléphones, mais vous devez disposer d’un accès autorisé à internet et d’un appareil adapté. Si ce n’est pas le cas, demandez à votre responsable une solution de pointage et les moyens nécessaires. L’application ne fournit pas de matériel et ne garantit pas un fonctionnement hors ligne.
+
+### Quelles aides sont disponibles pour lire et utiliser l’application ?
+
+Vous pouvez choisir le français ou l’anglais, modifier le thème et activer le contraste. Dans « Mon compte », activez la lecture vocale si votre navigateur la prend en charge. Pour une difficulté persistante, demandez une démonstration accompagnée à votre responsable ; ces aides ne remplacent pas un accompagnement adapté.
+
+### Que transmettre lorsqu’une erreur apparaît ?
+
+Notez le message exact, la page, l’heure et les étapes qui ont déclenché l’erreur. Transmettez ces informations à votre responsable ou administrateur, avec une capture masquant les données personnelles inutiles. Ne transmettez jamais votre mot de passe ni un code reçu par email.
+
+## Maintenir cette FAQ
+
+Le contenu affiché dans l’application est défini dans `time-manager-dashboard/src/content/faq.json`. Les traductions anglaises se trouvent dans `src/locales/en.json`. Lorsqu’une fonctionnalité ou une règle change, mettre à jour ces deux sources et ce document. Ne pas annoncer une fonctionnalité future comme déjà disponible.
+
+Cette FAQ ne fixe ni les règles de rémunération ni une politique de conservation des données : ces éléments doivent être précisés et validés par les responsables de l’organisation.

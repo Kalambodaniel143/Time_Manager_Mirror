@@ -3,6 +3,7 @@ site_description: Documentation du projet Time Manager
 
 nav:
   - Accueil: index.md
+  - Aide et FAQ: FAQ.md
   - DevOps: DEVOPS.md
   - API: API.md
   - Backend: BACKEND.md

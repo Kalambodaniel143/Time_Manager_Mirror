@@ -1,5 +1,5 @@
 <template>
-  <RouterView v-if="!user || $route.meta.public" v-slot="{ Component }">
+  <RouterView v-if="!user || ($route.meta.public && !$route.meta.help)" v-slot="{ Component }">
     <component :is="Component" v-if="Component && $route.meta.public" v-bind="publicBindings" />
   </RouterView>
 
@@ -94,6 +94,7 @@ export default {
     citySession() { return auth.organizationSession || (auth.organization ? { organization: auth.organization, user: auth.user, role: auth.user?.role === 'administrator' ? 'admin' : auth.user?.role } : null) },
 
     publicBindings() {
+      if (this.$route.meta.help) return { standalone: true, theme: this.theme, 'onUpdate:theme': this.setTheme }
       return { theme: this.theme, onLogin: this.loginOrganization, 'onUpdate:theme': this.setTheme }
     },
 
@@ -221,8 +222,8 @@ export default {
         return
       }
       this.refreshNotificationBadge()
-      if (!this.user) this.$router.push({ name: 'login' })
-      else if (this.$route.meta.public || (this.$route.meta.roles && !this.$route.meta.roles.includes(this.user.role))) {
+      if (!this.user) { if (!this.$route.meta.public) this.$router.push({ name: 'login' }) }
+      else if ((this.$route.meta.public && !this.$route.meta.help) || (this.$route.meta.roles && !this.$route.meta.roles.includes(this.user.role))) {
         this.$router.push({ name: this.user.role === 'administrator' ? (this.citySession ? 'organization' : 'adminUsers') : this.user.role === 'manager' ? 'team' : 'overview' })
       }
     },

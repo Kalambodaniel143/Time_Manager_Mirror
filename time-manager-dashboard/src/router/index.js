@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import Notifications from '../views/Notifications.vue'
 import LoginScreen from '../views/LoginScreen.vue'
+import HelpFaq from '../views/HelpFaq.vue'
 import OrganizationAdmin from '../views/OrganizationAdmin.vue'
 import ChartManager from '../components/ChartManager.vue'
 import ClockManager from '../components/ClockManager.vue'
@@ -29,6 +30,7 @@ const ADMINS = ['administrator']
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
+    { path: '/aide', name: 'help', component: HelpFaq, meta: { public: true, help: true } },
     { path: '/connexion', name: 'login', component: LoginScreen, meta: { public: true } },
     { path: '/inscription', name: 'register', component: LoginScreen, props: { initialMode: 'join' }, meta: { public: true } },
     { path: '/notifications', name: 'notifications', component: Notifications, meta: { roles: EVERYONE } },
@@ -117,7 +119,7 @@ router.beforeEach(async (to) => {
 
   const user = auth.user
 
-  if (to.meta.public) return user ? sessionHome(user.role) : true
+  if (to.meta.public) return user && !to.meta.help ? sessionHome(user.role) : true
   if (!user) return { name: 'login', query: to.fullPath === '/' ? {} : { redirect: to.fullPath } }
 
   // The home page of each space.

@@ -30,6 +30,7 @@ export default {
   computed: {
     unreadCount() { return workforce.unreadCount },
     accountLink() { return { label: 'Mon compte', icon: 'users', to: { name: 'profile' } } },
+    helpLink() { return { label: 'Aide et FAQ', icon: 'help', to: { name: 'help' } } },
     hoursLink() { return { label: 'Mes heures', icon: 'clock', to: this.userId ? { name: 'workingTimes', params: { userID: this.userId } } : { name: 'overview' } } },
     primaryLinks() {
       if (this.role === 'manager') return [{ label: 'Mon équipe', icon: 'users', to: { name: 'team' } }, { label: 'Planning d’équipe', icon: 'calendar', to: { name: 'teamPlanning' } }]
@@ -42,7 +43,7 @@ export default {
         ...(!this.demo ? [...(this.organizationAccess ? [{ label: 'Utilisateurs et rôles', icon: 'shield', to: { name: 'adminUsers' } }] : []), { label: 'Équipes', icon: 'users', to: { name: 'adminTeams' } }, { label: 'Vue des heures', icon: 'clock', to: { name: 'team' } }, { label: 'Planning d’équipe', icon: 'calendar', to: { name: 'teamPlanning' } }] : []),
       ] : this.role === 'manager' && !this.demo ? [{ label: 'Mes équipes', icon: 'users', to: { name: 'adminTeams' } }] : []
       if (this.role !== 'employee' && this.userId) extra.push({ label: 'Mon pointage', icon: 'clock', to: { name: 'clock', params: { userid: this.userId } } }, this.hoursLink)
-      return [...this.primaryLinks, ...extra, ...(!this.demo ? [{ label: 'Notifications', icon: 'message', to: { name: 'notifications' } }] : []), this.accountLink]
+      return [...this.primaryLinks, ...extra, ...(!this.demo ? [{ label: 'Notifications', icon: 'message', to: { name: 'notifications' } }] : []), this.accountLink, this.helpLink]
     },
     mobileLinks() { return [...this.primaryLinks, ...(!this.demo ? [{ label: 'Notifications', icon: 'message', to: { name: 'notifications' } }] : []), this.accountLink] },
     homeRoute() { return this.primaryLinks[0].to },
