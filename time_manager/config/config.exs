@@ -7,6 +7,16 @@
 # General application configuration
 import Config
 
+config :phoenix, :filter_parameters, [
+  "password",
+  "current_password",
+  "code",
+  "reference",
+  "token",
+  "csrf_token",
+  "secret"
+]
+
 config :time_manager,
   ecto_repos: [TimeManager.Repo],
   generators: [timestamp_type: :utc_datetime]

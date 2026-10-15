@@ -13,6 +13,8 @@ defmodule TimeManagerWeb.Router do
   # X-CSRF-Token header; the plug assigns conn.assigns.current_user.
   pipeline :auth do
     plug TimeManagerWeb.Plugs.Authenticate
+    plug TimeManagerWeb.Plugs.RateLimit, bucket: :authenticated, limit: 300, by: :user
+    plug TimeManagerWeb.Plugs.RateLimit, bucket: :writes, limit: 60, by: :user, writes_only: true
   end
 
   # Public routes: the only ones reachable without a session. Each one is
@@ -124,14 +126,5 @@ defmodule TimeManagerWeb.Router do
       title: "Time Manager API"
   end
 
-  if Application.compile_env(:time_manager, :dev_routes) do
-    import Phoenix.LiveDashboard.Router
-
-    scope "/dev" do
-      pipe_through [:fetch_session, :protect_from_forgery]
-
-      live_dashboard "/dashboard", metrics: TimeManagerWeb.Telemetry
-      forward "/mailbox", Plug.Swoosh.MailboxPreview
-    end
-  end
+  TimeManagerWeb.dev_routes()
 end

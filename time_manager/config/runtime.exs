@@ -47,34 +47,58 @@ if email_delivery == :mailpit and config_env() != :test do
     port: String.to_integer(System.get_env("MAILPIT_PORT", "1025"))
 end
 
-# Key used to sign the session JWTs (HS256). It must be secret, long and random:
-# generate one with `mix phx.gen.secret`. Development and tests fall back to a
-# fixed key, so that they work without any setup; never deploy without JWT_SECRET.
-jwt_secret =
-  case {System.get_env("JWT_SECRET"), config_env()} do
-    {secret, _env} when is_binary(secret) and byte_size(secret) >= 32 ->
-      secret
+# Anciennes clés publiques : elles ne doivent plus être utilisées.
+public_secrets = [
+  "dev-only-jwt-secret-do-not-use-in-production-0000",
+  "U1l53a02xhNAUKkphogJq1VuG533+D4OGef2TOzxA0z95FN4KQVvdPbVIggAUKDj",
+  "azfg0P/xPARZWOqu2eJ22UYgd1ojQgOF82ZlKpjtBnkOGeuQQnCYcx+6EuVGRymk"
+]
 
-    {_missing, env} when env in [:dev, :test] ->
-      "dev-only-jwt-secret-do-not-use-in-production-0000"
+required_secret! = fn name, minimum ->
+  secret = System.get_env(name)
 
-    _ ->
-      raise "environment variable JWT_SECRET is missing or shorter than 32 characters"
+  unless is_binary(secret) and byte_size(secret) >= minimum and
+           not String.match?(secret, ~r/\s/u) and secret not in public_secrets do
+    raise "#{name} requise : clé privée sans espaces, au moins #{minimum} octets"
   end
+
+  secret
+end
+
+# Aucun repli, même en développement ou dans les tests.
+jwt_secret = required_secret!.("JWT_SECRET", 32)
 
 config :joken, default_signer: jwt_secret
 
 # The session cookie only travels over HTTPS when COOKIE_SECURE=true. Enable it
 # as soon as the site is served in HTTPS: browsers drop Secure cookies over HTTP.
-config :time_manager, :auth_cookie_secure, System.get_env("COOKIE_SECURE") in ~w(true 1)
+config :time_manager,
+       :auth_cookie_secure,
+       config_env() == :prod or System.get_env("COOKIE_SECURE") in ~w(true 1)
 
 if config_env() == :prod do
-  database_url =
-    System.get_env("DATABASE_URL") ||
-      raise """
-      environment variable DATABASE_URL is missing.
-      For example: ecto://USER:PASS@HOST/DATABASE
-      """
+  database_url = System.get_env("DATABASE_URL", "")
+
+  # Valide l'URL sans inclure sa valeur (et son mot de passe) dans les erreurs.
+  valid_database_url? =
+    try do
+      uri = URI.parse(database_url)
+      options = Ecto.Repo.Supervisor.parse_url(database_url)
+
+      uri.scheme in ["postgres", "postgresql"] and
+        is_binary(uri.host) and uri.host != "" and
+        is_binary(options[:username]) and options[:username] != "" and
+        is_binary(options[:password]) and options[:password] != "" and
+        is_binary(options[:database]) and options[:database] != "" and
+        (is_nil(uri.port) or uri.port in 1..65_535) and
+        is_nil(uri.fragment) and not String.match?(database_url, ~r/\s/u)
+    rescue
+      _ -> false
+    end
+
+  unless valid_database_url? do
+    raise "DATABASE_URL requise : URL postgres://USER:PASSWORD@HOST:PORT/DATABASE valide"
+  end
 
   maybe_ipv6 = if System.get_env("ECTO_IPV6") in ~w(true 1), do: [:inet6], else: []
 
@@ -91,19 +115,39 @@ if config_env() == :prod do
   # want to use a different value for prod and you most likely don't want
   # to check this value into version control, so we use an environment
   # variable instead.
-  secret_key_base =
-    System.get_env("SECRET_KEY_BASE") ||
-      raise """
-      environment variable SECRET_KEY_BASE is missing.
-      You can generate one by calling: mix phx.gen.secret
-      """
+  secret_key_base = required_secret!.("SECRET_KEY_BASE", 64)
 
-  host = System.get_env("PHX_HOST") || "example.com"
+  host = System.get_env("PHX_HOST", "")
+
+  unless byte_size(host) in 1..253 and
+           Regex.match?(~r/\A[a-zA-Z0-9](?:[a-zA-Z0-9.-]*[a-zA-Z0-9])?\z/, host) and
+           not String.contains?(host, "..") do
+    raise "PHX_HOST requis : nom de domaine sans protocole, chemin ni port"
+  end
+
+  public_port = String.to_integer(System.get_env("HTTPS_PORT", "443"))
+  unless public_port in 1..65_535, do: raise("HTTPS_PORT invalide")
+  public_origin = URI.to_string(%URI{scheme: "https", host: host, port: public_port})
+  config :time_manager, :public_origin, public_origin
+
+  proxy = System.get_env("TRUSTED_PROXY_IP", "")
+
+  case :inet.parse_address(String.to_charlist(proxy)) do
+    {:ok, address} -> config :time_manager, :trusted_proxy_ip, address
+    _ -> raise "TRUSTED_PROXY_IP requise : adresse IP du proxy interne"
+  end
+
+  if email_delivery == :resend do
+    for name <- ["RESEND_API_KEY", "RESEND_FROM"] do
+      if String.trim(System.get_env(name, "")) == "",
+        do: raise("#{name} requise pour les courriels")
+    end
+  end
 
   config :time_manager, :dns_cluster_query, System.get_env("DNS_CLUSTER_QUERY")
 
   config :time_manager, TimeManagerWeb.Endpoint,
-    url: [host: host, port: 443, scheme: "https"],
+    url: [host: host, port: public_port, scheme: "https"],
     http: [
       # Enable IPv6 and bind on all interfaces.
       # Set it to  {0, 0, 0, 0, 0, 0, 0, 1} for local network only access.
