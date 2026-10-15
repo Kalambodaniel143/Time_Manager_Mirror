@@ -36,6 +36,7 @@ nav:
   - Architecture et flux: ARCHITECTURE.md
   - Backend et API: BACKEND.md
   - Frontend: FRONTEND.md
+  - Sécurité: SECURITE.md
   - DevOps et déploiement: DEVOPS.md
   - Dépannage: FAQ.md
   - Glossaire: GLOSSAIRE.md

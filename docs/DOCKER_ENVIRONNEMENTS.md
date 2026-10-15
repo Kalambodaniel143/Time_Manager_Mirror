@@ -52,7 +52,7 @@ Le script temporaire d'intégration utilisé pendant le durcissement a été ret
 
 Le contrôle du rôle actif du manager existe déjà dans `TeamController.index/2` et `show/2`, et `Authenticate` recharge le rôle depuis la base à chaque requête. Deux tests de régression vérifient qu'un ancien JWT ne permet plus à un manager rétrogradé de lire les membres de l'équipe, même si `manager_id` le désigne encore. S'il reste membre, il conserve seulement la liste sans membres autorisée aux employés.
 
-HTTPS, les réglages de cookies, les autres autorisations et la gestion des sessions ne sont pas durcis par cette correction. `prod.exs` impose déjà une redirection HTTPS hors localhost ; activer réellement cette configuration rend nécessaire un frontal TLS correctement configuré avant une mise en ligne. Mailpit et les ports du Compose existant sont conservés et restent à examiner. Cette étape ne certifie pas la conformité globale au Thème 7.
+Le dépôt utilise maintenant Nginx uniquement pour servir Vue en HTTP et transmettre `/api`. Aucun transport chiffré n'est configuré. Cette composition doit rester locale ou isolée ; elle ne certifie pas la conformité globale au Thème 7 et ne doit pas être présentée comme prête pour Internet.
 
 ## Résultats du 13 octobre 2026
 

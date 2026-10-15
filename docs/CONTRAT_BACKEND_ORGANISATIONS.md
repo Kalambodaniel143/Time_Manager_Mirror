@@ -298,7 +298,7 @@ Seules les valeurs `employee` et `manager` sont autorisées. Le membre doit appa
 
 ## 6. Session et permissions serveur
 
-Le front ne reçoit pas de bearer token. Utiliser un cookie de session `HttpOnly`, `Secure` en production, et `SameSite` adapté à un déploiement de même origine. Le proxy Vite/nginx existant expose l’API sous `/api`.
+Le front ne reçoit pas de bearer token. Il utilise un cookie de session `HttpOnly` et `SameSite=Strict`. Le proxy Vite/Nginx expose l’API sous `/api`. La configuration actuelle reste en HTTP et ne doit pas être exposée sur un réseau non fiable.
 
 Le front conserve l’utilisateur dans `stores/auth.js` et le jeton CSRF dans `sessionStorage` (`tm-csrf`). L’identité et l’organisation sont restaurées par `/auth/session` en mode backend. La simulation restaure séparément sa session locale. Aucun état navigateur ne constitue une preuve d’identité pour le serveur.
 
