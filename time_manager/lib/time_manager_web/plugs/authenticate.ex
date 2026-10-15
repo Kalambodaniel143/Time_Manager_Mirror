@@ -1,4 +1,4 @@
-defmodule TimeManagerWeb.Plugs.Authenticate do
+  defmodule TimeManagerWeb.Plugs.Authenticate do
   @moduledoc """
   Authenticates every protected request.
 
