@@ -1,0 +1,48 @@
+{
+  "name": "time-manager-mobile",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "build:cordova": "vite build --mode cordova",
+    "preview": "vite preview",
+    "cordova": "cordova",
+    "android:build": "npm run build:cordova && cordova build android",
+    "android:run": "npm run build:cordova && cordova run android"
+  },
+  "dependencies": {
+    "@fontsource-variable/public-sans": "^5.3.0",
+    "lucide-vue-next": "^1.0.0",
+    "vue": "^3.5.42",
+    "vue-router": "^5.3.1"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^6.0.8",
+    "cordova": "^12.0.0",
+    "cordova-android": "^14.0.1",
+    "cordova-plugin-advanced-http": "^3.3.1",
+    "cordova-plugin-dialogs": "^2.0.2",
+    "cordova-plugin-file": "^8.1.3",
+    "cordova-plugin-network-information": "^3.1.0",
+    "cordova-plugin-vibration": "^3.1.1",
+    "vite": "^8.2.2"
+  },
+  "engines": {
+    "node": "^22.18.0 || >=24.12.0"
+  },
+  "cordova": {
+    "platforms": [
+      "android"
+    ],
+    "plugins": {
+      "cordova-plugin-network-information": {},
+      "cordova-plugin-vibration": {},
+      "cordova-plugin-dialogs": {},
+      "cordova-plugin-advanced-http": {
+        "ANDROIDBLACKLISTSECURESOCKETPROTOCOLS": "SSLv3,TLSv1"
+      }
+    }
+  }
+}

@@ -1,0 +1,9 @@
+node_modules/
+www/*
+!www/.gitkeep
+platforms/
+plugins/
+.env*
+!.env.example
+*.local
+android-env.ps1
