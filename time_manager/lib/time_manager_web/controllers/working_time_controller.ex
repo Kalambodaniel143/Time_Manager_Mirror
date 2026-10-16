@@ -1,0 +1,164 @@
+defmodule TimeManagerWeb.WorkingTimeController do
+  use TimeManagerWeb, :controller
+  use OpenApiSpex.ControllerSpecs
+
+  import TimeManagerWeb.Authz
+
+  alias TimeManager.Authorization
+  alias TimeManager.WorkingTimes
+  alias TimeManager.WorkingTimes.WorkingTime
+  alias TimeManagerWeb.Schemas.ErrorResponse
+  alias TimeManagerWeb.Schemas.ValidationErrorResponse
+  alias TimeManagerWeb.Schemas.{WorkingTimeRequest, WorkingTimeResponse, WorkingTimesResponse}
+
+  action_fallback TimeManagerWeb.FallbackController
+
+  tags(["workingtime"])
+
+  operation(:index,
+    summary: "List a user's working times",
+    parameters: [
+      userID: [in: :path, type: :integer, description: "User ID", example: 1],
+      start: [
+        in: :query,
+        type: :string,
+        required: false,
+        description: "Window start: include periods ending strictly after this UTC timestamp"
+      ],
+      end: [
+        in: :query,
+        type: :string,
+        required: false,
+        description:
+          "Window end: include periods starting on/before this UTC timestamp; periods are returned uncut"
+      ]
+    ],
+    responses: [
+      ok: {"Working times list", "application/json", WorkingTimesResponse},
+      forbidden: {"Outside the caller's scope", "application/json", ErrorResponse},
+      not_found: {"User not found", "application/json", ErrorResponse},
+      bad_request: {"Malformed start/end filter", "application/json", ErrorResponse}
+    ]
+  )
+
+  def index(conn, %{"userID" => user_id} = params) do
+    with {:ok, user_id} <- cast_id(user_id),
+         :ok <- authorize(Authorization.can_view?(current_user(conn), user_id)),
+         {:ok, page} <- TimeManager.Pagination.parse(params),
+         {:ok, working_times} <-
+           WorkingTimes.list_working_times(user_id, Map.put(params, "page", page)) do
+      conn
+      |> TimeManager.Pagination.header(working_times, page)
+      |> render(:index, working_times: working_times)
+    end
+  end
+
+  operation(:show,
+    summary: "Get one of a user's working times by ID",
+    parameters: [
+      userID: [in: :path, type: :integer, description: "User ID", example: 1],
+      id: [in: :path, type: :integer, description: "Working time ID", example: 1]
+    ],
+    responses: [
+      ok: {"Working time", "application/json", WorkingTimeResponse},
+      forbidden: {"Outside the caller's scope", "application/json", ErrorResponse},
+      not_found: {"Working time or user not found", "application/json", ErrorResponse}
+    ]
+  )
+
+  def show(conn, %{"userID" => user_id, "id" => id}) do
+    # get_working_time/2 also checks that the period belongs to :userID, so a
+    # visible user id in the URL cannot be used to read someone else's period.
+    with {:ok, user_id} <- cast_id(user_id),
+         :ok <- authorize(Authorization.can_view?(current_user(conn), user_id)),
+         {:ok, working_time} <- WorkingTimes.get_working_time(user_id, id) do
+      render(conn, :show, working_time: working_time)
+    end
+  end
+
+  operation(:create,
+    summary: "Create a working time for a user",
+    description:
+      "Managers for the members of their teams (never for themselves), administrators for anyone.",
+    parameters: [
+      userID: [in: :path, type: :integer, description: "User ID", example: 1]
+    ],
+    request_body: {"Working time attributes", "application/json", WorkingTimeRequest},
+    responses: [
+      created: {"Working time created", "application/json", WorkingTimeResponse},
+      forbidden: {"Not allowed", "application/json", ErrorResponse},
+      unprocessable_entity: {"Validation errors", "application/json", ValidationErrorResponse},
+      not_found: {"User not found", "application/json", ErrorResponse}
+    ]
+  )
+
+  def create(conn, %{"userID" => user_id} = params) do
+    with {:ok, user_id} <- cast_id(user_id),
+         :ok <- authorize(Authorization.can_edit_hours?(current_user(conn), user_id)),
+         {:ok, %WorkingTime{} = working_time} <-
+           WorkingTimes.create_working_time(
+             user_id,
+             working_time_params(params),
+             current_user(conn)
+           ) do
+      conn
+      |> put_status(:created)
+      |> put_resp_header("location", ~p"/api/workingtime/#{user_id}/#{working_time.id}")
+      |> render(:show, working_time: working_time)
+    end
+  end
+
+  operation(:update,
+    summary: "Update a working time",
+    parameters: [
+      id: [in: :path, type: :integer, description: "Working time ID", example: 1]
+    ],
+    request_body: {"Working time attributes", "application/json", WorkingTimeRequest},
+    responses: [
+      ok: {"Working time updated", "application/json", WorkingTimeResponse},
+      forbidden: {"Not allowed", "application/json", ErrorResponse},
+      not_found: {"Working time not found", "application/json", ErrorResponse},
+      unprocessable_entity: {"Validation errors", "application/json", ValidationErrorResponse}
+    ]
+  )
+
+  def update(conn, %{"id" => id} = params) do
+    # The URL only names the period: load it first to know whose hours they are.
+    with {:ok, working_time} <- WorkingTimes.get_working_time(id),
+         :ok <-
+           authorize(Authorization.can_edit_hours?(current_user(conn), working_time.user_id)),
+         {:ok, %WorkingTime{} = working_time} <-
+           WorkingTimes.update_working_time(
+             working_time,
+             working_time_params(params),
+             current_user(conn)
+           ) do
+      render(conn, :show, working_time: working_time)
+    end
+  end
+
+  operation(:delete,
+    summary: "Delete a working time",
+    parameters: [
+      id: [in: :path, type: :integer, description: "Working time ID", example: 1]
+    ],
+    responses: [
+      no_content: "Working time deleted",
+      forbidden: {"Not allowed", "application/json", ErrorResponse},
+      not_found: {"Working time not found", "application/json", ErrorResponse}
+    ]
+  )
+
+  def delete(conn, %{"id" => id}) do
+    with {:ok, working_time} <- WorkingTimes.get_working_time(id),
+         :ok <-
+           authorize(Authorization.can_edit_hours?(current_user(conn), working_time.user_id)),
+         {:ok, %WorkingTime{}} <-
+           WorkingTimes.delete_working_time(working_time, current_user(conn)) do
+      send_resp(conn, :no_content, "")
+    end
+  end
+
+  defp working_time_params(%{"workingtime" => %{} = working_time_params}), do: working_time_params
+  defp working_time_params(params), do: params
+end

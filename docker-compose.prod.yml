@@ -1,0 +1,54 @@
+# Configuration serveur HTTP. Ajouter un transport chiffré avant toute exposition publique.
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${PGUSER:?PGUSER requis}
+      POSTGRES_PASSWORD: ${PGPASSWORD:?PGPASSWORD requis}
+      POSTGRES_DB: ${PGDATABASE:?PGDATABASE requise}
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    networks: [database]
+
+  phoenix:
+    image: ${DOCKER_USERNAME:?DOCKER_USERNAME requis}/time-manager-backend:${IMAGE_TAG:?IMAGE_TAG requis}
+    restart: unless-stopped
+    depends_on: [db]
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL requise}
+      SECRET_KEY_BASE: ${SECRET_KEY_BASE:?SECRET_KEY_BASE requise}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET requis}
+      PHX_HOST: ${PHX_HOST:?PHX_HOST requis}
+      PUBLIC_PORT: ${PUBLIC_PORT:-80}
+      TRUSTED_PROXY_IP: 172.30.7.10
+      EMAIL_DELIVERY: resend
+      RESEND_API_KEY: ${RESEND_API_KEY:?RESEND_API_KEY requise}
+      RESEND_FROM: ${RESEND_FROM:?RESEND_FROM requis}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+    networks: [database, proxy, outbound]
+
+  dashboard:
+    image: ${DOCKER_USERNAME:?DOCKER_USERNAME requis}/time-manager-frontend:${IMAGE_TAG:?IMAGE_TAG requis}
+    restart: unless-stopped
+    depends_on: [phoenix]
+    ports:
+      - "${PUBLIC_PORT:-80}:80"
+    networks:
+      public:
+      proxy:
+        ipv4_address: 172.30.7.10
+
+volumes:
+  db_data:
+networks:
+  database:
+    internal: true
+  proxy:
+    internal: true
+    ipam:
+      config:
+        - subnet: 172.30.7.0/24
+  outbound:
+  public:

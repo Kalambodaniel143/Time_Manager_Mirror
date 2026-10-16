@@ -1,0 +1,40 @@
+:root {
+  --md-primary-fg-color: #24584f;
+  --md-primary-fg-color--light: #3d7469;
+  --md-primary-fg-color--dark: #19473f;
+  --md-accent-fg-color: #0d6b3b;
+  --md-default-bg-color: #ffffff;
+  --md-typeset-a-color: #24584f;
+}
+
+[data-md-color-scheme="slate"] {
+  --md-primary-fg-color: #24584f;
+  --md-accent-fg-color: #a7d5c2;
+}
+
+.md-header,
+.md-tabs {
+  background: #24584f;
+}
+
+.md-typeset h1,
+.md-typeset h2,
+.md-typeset h3 {
+  color: #24584f;
+  font-weight: 700;
+}
+
+[data-md-color-scheme="slate"] .md-typeset h1,
+[data-md-color-scheme="slate"] .md-typeset h2,
+[data-md-color-scheme="slate"] .md-typeset h3 {
+  color: #a7d5c2;
+}
+
+.md-typeset table:not([class]) th {
+  background: #edf4f1;
+  color: #19473f;
+}
+
+.md-typeset code {
+  border-radius: 0.25rem;
+}

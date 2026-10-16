@@ -1,0 +1,234 @@
+<template>
+  <div class="admin-users">
+    <PageHeader :eyebrow="$t(&quot;Administration&quot;)" :title="$t(&quot;Utilisateurs et rôles&quot;)" />
+
+    <div class="layout">
+      <section class="card accounts">
+        <header class="accounts-header">
+          <h2 class="card-title">{{ $t("Comptes") }}</h2>
+          <p class="card-subtitle">{{ $t("Le changement de rôle s’applique dès la requête suivante de la personne. Vous ne pouvez pas changer votre propre rôle.") }}</p>
+        </header>
+
+        <p v-if="error" class="field-error" role="alert">{{ $t(error) }}</p>
+        <div v-else-if="loading" class="skeleton table-skeleton"></div>
+
+        <div v-else class="table-scroll">
+        <table class="table">
+          <thead>
+            <tr>
+              <th scope="col">{{ $t("Identifiant") }}</th>
+              <th scope="col">{{ $t("E-mail") }}</th>
+              <th scope="col">{{ $t("Rôle") }}</th>
+              <th scope="col"><span class="sr-only">{{ $t("Actions") }}</span></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="user in users" :key="user.id">
+              <td>{{ user.username }}<span v-if="user.id === me.id" class="you">{{ $t("vous") }}</span></td>
+              <td class="email">{{ user.email }}</td>
+              <td>
+                <span v-if="user.role === 'administrator'" class="badge badge-accent">{{ $t("Super administrateur · compte manuel") }}</span>
+                <select v-else
+                  class="input select"
+                  :value="user.role"
+                  :disabled="user.id === me.id || busy === user.id"
+                  :aria-label="$t('Rôle de {name}', { name: user.username })"
+                  @change="changeRole(user, $event.target.value)"
+                >
+                  <option v-for="role in roles" :key="role" :value="role">{{ $t(labels[role]) }}</option>
+                </select>
+              </td>
+              <td class="actions">
+                <button
+                  v-if="user.role !== 'administrator'"
+                  class="btn btn-danger btn-sm"
+                  :class="{ 'is-armed': armed === user.id }"
+                  type="button"
+                  :disabled="user.id === me.id || busy === user.id"
+                  @click="armed === user.id ? remove(user) : (armed = user.id)"
+                >
+                  {{ $t(armed === user.id ? 'Confirmer' : 'Supprimer') }}
+                </button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+        </div>
+      </section>
+
+      <aside v-if="organization" class="card admission"><h2 class="card-title">{{ $t("Nouveaux employés") }}</h2><p>{{ $t("Les nouveaux comptes sont créés après acceptation d’une demande pour rejoindre Gotham City. Le super administrateur fournit le mot de passe à cette étape.") }}</p><RouterLink class="btn btn-primary" :to="{ name: 'organization' }">{{ $t("Examiner les demandes") }}</RouterLink></aside>
+      <aside v-else class="card admission"><h2 class="card-title">{{ $t("Compte sans organisation") }}</h2><p>{{ $t("Ce compte accède uniquement aux utilisateurs et équipes de son espace actuel. Pour traiter les demandes d’adhésion à Gotham City, son rattachement doit être effectué par l’équipe qui gère le serveur.") }}</p></aside>
+    </div>
+  </div>
+</template>
+
+<script>
+import PageHeader from '../components/ui/PageHeader.vue'
+import { listRoles, updateRole } from '../services/authService'
+import * as userService from '../services/userService'
+import { auth, ROLE_LABELS } from '../stores/auth'
+import { RouterLink } from 'vue-router'
+import { notify } from '../utils/toast'
+
+
+export default {
+  name: 'AdminUsers',
+
+  components: { PageHeader, RouterLink },
+
+  data() {
+    return {
+      users: [],
+      roles: ['employee', 'manager'],
+      labels: ROLE_LABELS,
+      loading: true,
+      error: '',
+      busy: null,
+      armed: null,
+    }
+  },
+
+  computed: {
+    organization() { return auth.organization },
+    me() {
+      return auth.user
+    },
+  },
+
+  async created() {
+    try {
+      const [users, roles] = await Promise.all([userService.listUsers(), listRoles()])
+      this.users = users || []
+      this.roles = (roles || []).map(role => role.name).filter(role => ['employee', 'manager'].includes(role))
+    } catch (error) {
+      this.error = error.message
+    } finally {
+      this.loading = false
+    }
+  },
+
+  methods: {
+    async changeRole(user, role) {
+      if (user.role === 'administrator' || !['employee', 'manager'].includes(role)) { notify('Le compte du super administrateur se gère manuellement.', 'error'); return }
+      this.busy = user.id
+      const previous = user.role
+
+      try {
+        Object.assign(user, await updateRole(user.id, role))
+        notify(`${user.username} est maintenant ${ROLE_LABELS[user.role].toLowerCase()}.`)
+      } catch (error) {
+        user.role = previous
+        notify(error.status === 409 ? 'Il doit rester au moins un administrateur.' : error.message, 'error')
+      } finally {
+        this.busy = null
+      }
+    },
+
+    async remove(user) {
+      if (user.role === 'administrator') { notify('Le compte du super administrateur se gère manuellement.', 'error'); return }
+      this.busy = user.id
+
+      try {
+        await userService.deleteUser(user.id)
+        this.users = this.users.filter((other) => other.id !== user.id)
+        notify(`Compte ${user.username} supprimé.`)
+      } catch (error) {
+        notify(error.status === 409 ? 'Il doit rester au moins un administrateur.' : error.message, 'error')
+      } finally {
+        this.busy = null
+        this.armed = null
+      }
+    },
+
+
+  },
+}
+</script>
+
+<style scoped>
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr);
+  gap: 24px;
+  align-items: start;
+}
+
+.accounts {
+  padding: 22px 22px 14px;
+}
+
+.accounts-header {
+  margin-bottom: 12px;
+}
+
+.layout > * {
+  min-width: 0;
+}
+
+.table-scroll {
+  position: relative;
+  overflow-x: auto;
+}
+
+.table {
+  width: 100%;
+  min-width: 560px;
+  border-collapse: collapse;
+  font-size: 15px;
+}
+
+.table th {
+  padding: 10px 8px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 700;
+  text-align: left;
+}
+
+.table td {
+  padding: 10px 8px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+
+.email {
+  overflow-wrap: anywhere;
+}
+
+.select {
+  padding: 6px 10px;
+}
+
+.actions {
+  text-align: right;
+}
+
+.you {
+  margin-left: 8px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.admission {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 22px;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+}
+
+@media (max-width: 900px) {
+  .layout {
+    grid-template-columns: 1fr;
+  }
+
+}
+</style>

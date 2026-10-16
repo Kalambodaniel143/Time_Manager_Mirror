@@ -1,0 +1,43 @@
+{
+  "runId": "tm-ds-2026-09-29",
+  "fileUrl": "https://www.figma.com/design/FMmaRuhSiaknwbn6wcuupZ",
+  "fileKey": "FMmaRuhSiaknwbn6wcuupZ",
+  "blocker": "Figma MCP Starter plan: 20 tool calls/month reached on 2026-09-29.",
+  "constraints": [
+    "Starter plan: 1 mode per variable collection -> three theme collections (Thème · Clair / Nuit / Contraste) with identical variable names. Components bind to Clair; Nuit/Contraste screens are produced by rebinding variables by name.",
+    "Variant values must not contain commas (Figma parses them as property separators): HourTag uses Type=Jour|Nuit|Heures sup|Récup|Astreinte|Congé while the visible label stays 'Nuit ×1,5' etc."
+  ],
+  "pages": { "Fondations": "0:1", "Composants": "4:2", "Écrans": "4:3" },
+  "collections": {
+    "Primitives": "VariableCollectionId:3:2",
+    "Thème · Clair": "VariableCollectionId:3:70",
+    "Thème · Nuit": "VariableCollectionId:3:121",
+    "Thème · Contraste": "VariableCollectionId:3:172",
+    "Espacement": "VariableCollectionId:3:223",
+    "Rayon": "VariableCollectionId:3:233"
+  },
+  "done": {
+    "foundationsDocFrame": "4:4",
+    "iconsWrapper (27 Lucide icons, components named Icône/<name>)": "5:2",
+    "HourTag (6 variants)": "6:75",
+    "Statut (4 variants)": "6:100",
+    "Bouton (Style=Primaire|Secondaire|Sur alerte|Lien x État=Défaut|Désactivé)": "7:86",
+    "Champ (Type=Texte|Heure|Zone de texte x État=Défaut|Focus)": "7:150",
+    "Logo (Fond=Clair|Bleu)": "7:160",
+    "Case à cocher (Cochée=Non|Oui)": "8:70",
+    "ClockButton (État=Arrivée|Départ)": "8:88",
+    "Alert (Type=Critique|Attention|Info)": "8:128",
+    "Encadré": "8:132",
+    "GuideStep": "8:143",
+    "WeekMeter": "10:90",
+    "ShiftCard": "10:135",
+    "Transparency": "10:157",
+    "Case planning (Type x Alerte)": "10:221"
+  },
+  "pending": [
+    "Phase 3d: Ligne de feuille, Élément de menu, Sélecteur, Barre latérale (3 rôles, logo decor moved clear of the name)",
+    "Phase 3e: visual review of molecules",
+    "Screens on page Écrans: Connexion, Aujourd'hui (+ GuideStep overlay), Mes heures, Mon planning, Mon équipe, Planning d'équipe, Paie du mois, Équipes et droits, Aujourd'hui mobile, plus Nuit and Contraste variants",
+    "Fixes to apply in screens: consistent Marie data (32 h both sides), Marie row = 'Départ non pointé' -> 'Valider 3 feuilles', separate Type/État columns in Mes heures, compact Nuit tag in Mon planning cells, reason under disabled Publier button, 'Employé' wording on login"
+  ]
+}
