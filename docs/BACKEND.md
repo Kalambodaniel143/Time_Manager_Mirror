@@ -4,7 +4,9 @@ Cette page explique le code présent dans `Theme_5_authentification_security/tim
 
 Le trajet général tient en quatre étapes : **le routeur choisit le chemin, le contrôleur contrôle la demande, le contexte applique la règle métier et Ecto parle à PostgreSQL**. Gardez ce fil en tête lorsque vous parcourez les sections détaillées.
 
-L'API couvre l'admission à Gotham City, les comptes, les équipes, les pointages, les heures, les corrections, les validations, les plannings, les échanges, les absences, la paie, les préférences et les notifications. Elle est écrite en **Elixir/Phoenix**, servie par **Bandit** et utilise **Ecto/PostgreSQL** pour les données.
+Pour une lecture pédagogique avec diagrammes, voir [Comprendre le backend : MVC, tables et sécurité](COMPRENDRE_BACKEND.md).
+
+## 1. Architecture du backend
 
 ## 1. Comment le backend est organisé
 

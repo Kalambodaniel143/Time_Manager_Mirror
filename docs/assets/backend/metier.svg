@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1050 1125" role="img" aria-labelledby="title"><title id="title">Temps et planning — relations principales</title><rect width="1050" height="100%" fill="#f8fafc"/><style>text{font-family:Arial,sans-serif;fill:#172554} .title{font-size:22px;font-weight:bold} .node{font-size:17px} .rel{font-size:15px}</style>
+<text x="30" y="35" class="title">Temps et planning — relations principales</text>
+<rect x="20" y="65" width="335" height="58" rx="8" fill="#dbeafe" stroke="#2563eb"/>
+<text x="187" y="100" text-anchor="middle" class="node">users</text>
+<rect x="690" y="65" width="335" height="58" rx="8" fill="#dbeafe" stroke="#2563eb"/>
+<text x="857" y="100" text-anchor="middle" class="node">clocks</text>
+<path d="M355 94 H680 l-10 -6 m10 6 l-10 6" fill="none" stroke="#475569" stroke-width="2"/>
+<text x="520" y="81" text-anchor="middle" class="rel">1 → 0..N</text>
+<rect x="20" y="170" width="335" height="58" rx="8" fill="#dbeafe" stroke="#2563eb"/>
+<text x="187" y="205" text-anchor="middle" class="node">users</text>
+<rect x="690" y="170" width="335" height="58" rx="8" fill="#dbeafe" stroke="#2563eb"/>
+<text x="857" y="205" text-anchor="middle" class="node">workingtime</text>
+<path d="M355 199 H680 l-10 -6 m10 6 l-10 6" fill="none" stroke="#475569" stroke-width="2"/>
+<text x="520" y="186" text-anchor="middle" class="rel">1 → 0..N</text>
+<rect x="20" y="275" width="335" height="58" rx="8" fill="#dbeafe" stroke="#2563eb"/>
+<text x="187" y="310" text-anchor="middle" class="node">users</text>
+<rect x="690" y="275" width="335" height="58" rx="8" fill="#dbeafe" stroke="#2563eb"/>
+<text x="857" y="310" text-anchor="middle" class="node">weekly_sheets</text>
+<path d="M355 304 H680 l-10 -6 m10 6 l-10 6" fill="none" stroke="#475569" stroke-width="2"/>
+<text x="520" y="291" text-anchor="middle" class="rel">1 → 0..N</text>
+<rect x="20" y="380" width="335" height="58" rx="8" fill="#dbeafe" stroke="#2563eb"/>
+<text x="187" y="415" text-anchor="middle" class="node">workingtime</text>
+<rect x="690" y="380" width="335" height="58" rx="8" fill="#dbeafe" stroke="#2563eb"/>
+<text x="857" y="415" text-anchor="middle" class="node">correction_requests</text>
+<path d="M355 409 H680 l-10 -6 m10 6 l-10 6" fill="none" stroke="#475569" stroke-width="2"/>
+<text x="520" y="396" text-anchor="middle" class="rel">0..1 ← N demandes</text>
+<rect x="20" y="485" width="335" height="58" rx="8" fill="#dbeafe" stroke="#2563eb"/>
+<text x="187" y="520" text-anchor="middle" class="node">teams</text>
+<rect x="690" y="485" width="335" height="58" rx="8" fill="#dbeafe" stroke="#2563eb"/>
+<text x="857" y="520" text-anchor="middle" class="node">workforce_plans</text>
+<path d="M355 514 H680 l-10 -6 m10 6 l-10 6" fill="none" stroke="#475569" stroke-width="2"/>
+<text x="520" y="501" text-anchor="middle" class="rel">1 → 0..N</text>
+<rect x="20" y="590" width="335" height="58" rx="8" fill="#dbeafe" stroke="#2563eb"/>
+<text x="187" y="625" text-anchor="middle" class="node">workforce_plans</text>
+<rect x="690" y="590" width="335" height="58" rx="8" fill="#dbeafe" stroke="#2563eb"/>
+<text x="857" y="625" text-anchor="middle" class="node">planned_shifts</text>
+<path d="M355 619 H680 l-10 -6 m10 6 l-10 6" fill="none" stroke="#475569" stroke-width="2"/>
+<text x="520" y="606" text-anchor="middle" class="rel">1 → 0..N</text>
+<rect x="20" y="695" width="335" height="58" rx="8" fill="#dbeafe" stroke="#2563eb"/>
+<text x="187" y="730" text-anchor="middle" class="node">users</text>
+<rect x="690" y="695" width="335" height="58" rx="8" fill="#dbeafe" stroke="#2563eb"/>
+<text x="857" y="730" text-anchor="middle" class="node">planned_shifts</text>
+<path d="M355 724 H680 l-10 -6 m10 6 l-10 6" fill="none" stroke="#475569" stroke-width="2"/>
+<text x="520" y="711" text-anchor="middle" class="rel">1 → 0..N</text>
+<rect x="20" y="800" width="335" height="58" rx="8" fill="#dbeafe" stroke="#2563eb"/>
+<text x="187" y="835" text-anchor="middle" class="node">planned_shifts</text>
+<rect x="690" y="800" width="335" height="58" rx="8" fill="#dbeafe" stroke="#2563eb"/>
+<text x="857" y="835" text-anchor="middle" class="node">shift_swaps</text>
+<path d="M355 829 H680 l-10 -6 m10 6 l-10 6" fill="none" stroke="#475569" stroke-width="2"/>
+<text x="520" y="816" text-anchor="middle" class="rel">0..1 ← N échanges (par FK)</text>
+<rect x="20" y="905" width="335" height="58" rx="8" fill="#dbeafe" stroke="#2563eb"/>
+<text x="187" y="940" text-anchor="middle" class="node">users</text>
+<rect x="690" y="905" width="335" height="58" rx="8" fill="#dbeafe" stroke="#2563eb"/>
+<text x="857" y="940" text-anchor="middle" class="node">absence_requests</text>
+<path d="M355 934 H680 l-10 -6 m10 6 l-10 6" fill="none" stroke="#475569" stroke-width="2"/>
+<text x="520" y="921" text-anchor="middle" class="rel">1 → 0..N</text>
+<rect x="20" y="1010" width="335" height="58" rx="8" fill="#dbeafe" stroke="#2563eb"/>
+<text x="187" y="1045" text-anchor="middle" class="node">users</text>
+<rect x="690" y="1010" width="335" height="58" rx="8" fill="#dbeafe" stroke="#2563eb"/>
+<text x="857" y="1045" text-anchor="middle" class="node">payroll_profiles</text>
+<path d="M355 1039 H680 l-10 -6 m10 6 l-10 6" fill="none" stroke="#475569" stroke-width="2"/>
+<text x="520" y="1026" text-anchor="middle" class="rel">1 → 0..1</text></svg>
