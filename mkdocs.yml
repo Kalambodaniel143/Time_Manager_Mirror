@@ -3,6 +3,7 @@ site_description: Documentation du projet Time Manager
 
 nav:
   - Accueil: index.md
+  - Démo: DEMO.md
   - Aide et FAQ: FAQ.md
   - DevOps: DEVOPS.md
   - Docker et environnements: DOCKER_ENVIRONNEMENTS.md

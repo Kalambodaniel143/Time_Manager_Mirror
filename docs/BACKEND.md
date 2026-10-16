@@ -4,6 +4,8 @@ Documentation du code de `Theme_5_authentification_security/time_manager`, revue
 
 API HTTP en **Elixir/Phoenix**, servie par **Bandit**, avec **Ecto/PostgreSQL** pour la persistance : admission Gotham City, comptes, équipes, pointages, heures, corrections, validations, plannings, échanges, absences, paie, préférences et notifications.
 
+Pour une lecture pédagogique avec diagrammes, voir [Comprendre le backend : MVC, tables et sécurité](COMPRENDRE_BACKEND.md).
+
 ## 1. Architecture du backend
 
 ### 1.1 Pattern utilisé
