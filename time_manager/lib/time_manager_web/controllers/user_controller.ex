@@ -238,8 +238,7 @@ defmodule TimeManagerWeb.UserController do
           delete_resp_cookie(conn, Authenticate.cookie_name(),
             path: "/",
             http_only: true,
-            same_site: "Strict",
-            secure: Application.get_env(:time_manager, :auth_cookie_secure, false)
+            same_site: "Strict"
           )
         else
           conn

@@ -10,11 +10,11 @@ defmodule TimeManagerWeb.Plugs.TrustedProxy do
     if trusted && normalize_ip(conn.remote_ip) == normalize_ip(trusted) do
       with [address] <- get_req_header(conn, "x-real-ip"),
            {:ok, ip} <- :inet.parse_address(String.to_charlist(address)),
-           [scheme] when scheme in ["http", "https"] <- get_req_header(conn, "x-forwarded-proto") do
+           ["http"] <- get_req_header(conn, "x-forwarded-proto") do
         %{
           conn
           | remote_ip: normalize_ip(ip),
-            scheme: if(scheme == "https", do: :https, else: :http)
+            scheme: :http
         }
       else
         _ -> conn |> send_resp(400, "Invalid proxy headers") |> halt()

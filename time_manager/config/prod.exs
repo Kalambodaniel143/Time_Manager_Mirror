@@ -1,6 +1,6 @@
 import Config
 
-config :time_manager, dev_routes: false, secure_session_cookie: true
+config :time_manager, dev_routes: false
 config :time_manager, TimeManagerWeb.Endpoint, code_reloader: false, debug_errors: false
 
 # Note we also include the path to a cache manifest
@@ -9,9 +9,6 @@ config :time_manager, TimeManagerWeb.Endpoint, code_reloader: false, debug_error
 # which you should run before starting your production server.
 config :time_manager, TimeManagerWeb.Endpoint,
   cache_static_manifest: "priv/static/cache_manifest.json"
-
-# Le contrôle HTTPS suit la validation du proxy dans l’endpoint.
-config :time_manager, :require_https, true
 
 # Configure Swoosh API Client
 config :swoosh, api_client: Swoosh.ApiClient.Req

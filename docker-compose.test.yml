@@ -17,6 +17,7 @@ services:
     environment:
       MIX_ENV: test
       PGHOST: test-db
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET requis pour les tests}
     depends_on:
       test-db:
         condition: service_healthy
